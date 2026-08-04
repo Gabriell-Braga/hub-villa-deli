@@ -1,0 +1,217 @@
+name = "hub-logistico"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# ===========================================================================
+# AMBIENTES
+#
+#   npx wrangler dev                      -> dev  (este bloco [vars])
+#   npx wrangler dev --env hml            -> hml
+#   npx wrangler deploy --env hml         -> publica o worker de homologação
+#   npx wrangler deploy --env producao    -> publica o de produção
+#
+# Cada ambiente tem seus PRÓPRIOS segredos:
+#   npx wrangler secret put UBER_CLIENT_ID --env hml
+#   npx wrangler secret put UBER_CLIENT_ID --env producao
+#
+# Em dev os segredos ficam em worker/.dev.vars (git-ignorado).
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# D1 — estado dos pedidos (ver schema.sql para o porquê de não ser KV).
+# Crie com:  npx wrangler d1 create hub-logistico
+# ---------------------------------------------------------------------------
+[[d1_databases]]
+binding = "DB"
+database_name = "hub-logistico"
+database_id = "PREENCHER_COM_O_ID_DO_D1"
+
+# ---------------------------------------------------------------------------
+# KV — só cache (token OAuth2 + geocodificação).
+# Crie com:  npx wrangler kv namespace create HUB_KV
+# ---------------------------------------------------------------------------
+[[kv_namespaces]]
+binding = "HUB_KV"
+id = "PREENCHER_COM_O_ID_DO_KV"          # produção
+preview_id = "PREENCHER_COM_O_PREVIEW_ID" # wrangler dev
+
+# Limpeza diária dos pedidos antigos (D1 não expira sozinho como o KV).
+[triggers]
+crons = ["0 4 * * *"]
+
+# ===========================================================================
+# VARIÁVEIS — DEV (padrão do `npx wrangler dev`)
+# Nada sensível aqui. Segredos vão em .dev.vars / wrangler secret.
+# ===========================================================================
+[vars]
+AMBIENTE = "dev"
+
+# --- TRAVA DE PROVEDORES ---------------------------------------------------
+# Quem entra na cotação e pode receber despacho. Lista separada por vírgula.
+#   "uber"                    -> só Uber Direct
+#   "uber,motoboy"            -> Uber + motoboy próprio   (configuração atual)
+#   "uber,ifood,99,motoboy"   -> todos
+# Vazio = usa o padrão de src/config/provedores.ts.
+PROVEDORES_ATIVOS = "uber,motoboy"
+
+# Origens liberadas no CORS (separadas por vírgula).
+PAINEL_ORIGIN = "http://localhost:3000"
+
+# --- Restaurante (origem das entregas) -------------------------------------
+# Coordenada da PORTA da loja, informada pelo cliente em 04/08/2026. É o centro
+# de todos os anéis de preço do motoboy próprio e o ponto de coleta do Uber.
+RESTAURANTE_NOME = "Villa Deli"
+RESTAURANTE_CEP = "34006-086"
+RESTAURANTE_LAT = "-19.978452"
+RESTAURANTE_LNG = "-43.932128"
+RESTAURANTE_TELEFONE = "PREENCHER_TELEFONE_DA_LOJA"
+
+# --- Cardápio Web ----------------------------------------------------------
+# CARDAPIO_WEB_HEADER: nome do header que o Cardápio Web usa para assinar o
+# webhook. O valor do segredo em si vai em WEBHOOK_SECRET.
+CARDAPIO_WEB_HEADER = "x-webhook-secret"
+CARDAPIO_WEB_BASE_URL = ""
+CARDAPIO_WEB_MERCHANT_ID = "14875"
+
+# --- Uber Direct: PRODUÇÃO -------------------------------------------------
+UBER_BASE_URL = "https://api.uber.com"
+UBER_AUTH_URL = "https://auth.uber.com/oauth/v2/token"
+# Escopos OAuth2. Pedir um escopo que a aplicacao NAO tem derruba o token
+# inteiro (invalid_scope). Quando o Uber liberar entregas para a sua
+# aplicacao, troque para: "direct.organizations eats.deliveries"
+UBER_SCOPE = "direct.organizations"
+UBER_CUSTOMER_ID = "551fca94-17d0-4acf-a3f8-05d93a0abe6a"
+
+# --- Uber Direct: HOMOLOGAÇÃO ----------------------------------------------
+# Usados sempre que AMBIENTE != "producao". CONFIRME o host de sandbox com o
+# seu gerente de conta Uber — ele varia por contrato.
+UBER_BASE_URL_HML = "https://sandbox-api.uber.com"
+UBER_CUSTOMER_ID_HML = "551fca94-17d0-4acf-a3f8-05d93a0abe6a"
+
+# --- iFood / 99 (desligados na trava por enquanto) -------------------------
+IFOOD_BASE_URL = "https://merchant-api.ifood.com.br"
+IFOOD_BASE_URL_HML = "https://merchant-api.ifood.com.br"
+IFOOD_MERCHANT_ID = ""
+NOVA99_BASE_URL = "https://api.99app.com"
+NOVA99_BASE_URL_HML = "https://api.99app.com"
+NOVA99_AUTH_URL = "https://api.99app.com/oauth/token"
+
+# --- Motoboy próprio -------------------------------------------------------
+# A tabela de preço por faixa de raio fica em src/config/faixas-motoboy.ts
+# (espelha as "Regiões" do Cardápio Web). Não há variável de ambiente aqui.
+
+
+# ===========================================================================
+# HOMOLOGAÇÃO  —  npx wrangler dev --env hml  |  deploy --env hml
+# ===========================================================================
+[env.hml]
+name = "hub-logistico-hml"
+
+[[env.hml.d1_databases]]
+binding = "DB"
+database_name = "hub-logistico-hml"
+database_id = "PREENCHER_COM_O_ID_DO_D1_HML"
+
+[[env.hml.kv_namespaces]]
+binding = "HUB_KV"
+id = "PREENCHER_COM_O_ID_DO_KV_HML"
+
+[env.hml.vars]
+AMBIENTE = "hml"
+PROVEDORES_ATIVOS = "uber,motoboy"
+PAINEL_ORIGIN = "https://hml-painel.seudominio.com.br"
+
+RESTAURANTE_NOME = "Villa Deli"
+RESTAURANTE_CEP = "34006-086"
+RESTAURANTE_LAT = "-19.978452"
+RESTAURANTE_LNG = "-43.932128"
+RESTAURANTE_TELEFONE = "PREENCHER_TELEFONE_DA_LOJA"
+
+CARDAPIO_WEB_HEADER = "x-webhook-secret"
+CARDAPIO_WEB_BASE_URL = ""
+CARDAPIO_WEB_MERCHANT_ID = "14875"
+
+UBER_BASE_URL = "https://api.uber.com"
+UBER_AUTH_URL = "https://auth.uber.com/oauth/v2/token"
+# Escopos OAuth2. Pedir um escopo que a aplicacao NAO tem derruba o token
+# inteiro (invalid_scope). Quando o Uber liberar entregas para a sua
+# aplicacao, troque para: "direct.organizations eats.deliveries"
+UBER_SCOPE = "direct.organizations"
+UBER_CUSTOMER_ID = "551fca94-17d0-4acf-a3f8-05d93a0abe6a"
+UBER_BASE_URL_HML = "https://sandbox-api.uber.com"
+UBER_CUSTOMER_ID_HML = "551fca94-17d0-4acf-a3f8-05d93a0abe6a"
+
+IFOOD_BASE_URL = "https://merchant-api.ifood.com.br"
+IFOOD_BASE_URL_HML = "https://merchant-api.ifood.com.br"
+IFOOD_MERCHANT_ID = ""
+NOVA99_BASE_URL = "https://api.99app.com"
+NOVA99_BASE_URL_HML = "https://api.99app.com"
+NOVA99_AUTH_URL = "https://api.99app.com/oauth/token"
+
+
+# ===========================================================================
+# PRODUÇÃO  —  npx wrangler deploy --env producao
+#
+# Só publique aqui depois que a tela de Configurações do painel estiver toda
+# verde em HML. Corrida criada neste ambiente é cobrada de verdade.
+# ===========================================================================
+[env.producao]
+name = "hub-logistico"
+
+[[env.producao.d1_databases]]
+binding = "DB"
+database_name = "hub-logistico"
+database_id = "PREENCHER_COM_O_ID_DO_D1"
+
+[[env.producao.kv_namespaces]]
+binding = "HUB_KV"
+id = "PREENCHER_COM_O_ID_DO_KV"
+
+[env.producao.triggers]
+crons = ["0 4 * * *"]
+
+[env.producao.vars]
+AMBIENTE = "producao"
+PROVEDORES_ATIVOS = "uber,motoboy"
+PAINEL_ORIGIN = "https://painel.seudominio.com.br"
+
+RESTAURANTE_NOME = "Villa Deli"
+RESTAURANTE_CEP = "34006-086"
+RESTAURANTE_LAT = "-19.978452"
+RESTAURANTE_LNG = "-43.932128"
+RESTAURANTE_TELEFONE = "PREENCHER_TELEFONE_DA_LOJA"
+
+CARDAPIO_WEB_HEADER = "x-webhook-secret"
+CARDAPIO_WEB_BASE_URL = ""
+CARDAPIO_WEB_MERCHANT_ID = "14875"
+
+UBER_BASE_URL = "https://api.uber.com"
+UBER_AUTH_URL = "https://auth.uber.com/oauth/v2/token"
+# Escopos OAuth2. Pedir um escopo que a aplicacao NAO tem derruba o token
+# inteiro (invalid_scope). Quando o Uber liberar entregas para a sua
+# aplicacao, troque para: "direct.organizations eats.deliveries"
+UBER_SCOPE = "direct.organizations"
+UBER_CUSTOMER_ID = "551fca94-17d0-4acf-a3f8-05d93a0abe6a"
+UBER_BASE_URL_HML = "https://sandbox-api.uber.com"
+UBER_CUSTOMER_ID_HML = "551fca94-17d0-4acf-a3f8-05d93a0abe6a"
+
+IFOOD_BASE_URL = "https://merchant-api.ifood.com.br"
+IFOOD_BASE_URL_HML = "https://merchant-api.ifood.com.br"
+IFOOD_MERCHANT_ID = ""
+NOVA99_BASE_URL = "https://api.99app.com"
+NOVA99_BASE_URL_HML = "https://api.99app.com"
+NOVA99_AUTH_URL = "https://api.99app.com/oauth/token"
+
+# ---------------------------------------------------------------------------
+# SEGREDOS — NUNCA neste arquivo. Ver CREDENCIAIS.md na raiz do projeto.
+#
+#   npx wrangler secret put WEBHOOK_SECRET      --env hml
+#   npx wrangler secret put JWT_SECRET          --env hml
+#   npx wrangler secret put UBER_CLIENT_ID      --env hml
+#   npx wrangler secret put UBER_CLIENT_SECRET  --env hml
+#   npx wrangler secret put CARDAPIO_WEB_TOKEN  --env hml   # opcional
+#   npx wrangler secret put GOOGLE_MAPS_API_KEY --env hml   # opcional
+#
+# Repita com --env producao. Em dev, tudo isso vai em worker/.dev.vars.
+# ---------------------------------------------------------------------------

@@ -1,0 +1,561 @@
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import type {
+  Cotacao,
+  Env,
+  Papel,
+  Pedido,
+  ProviderId,
+  ResultadoDespacho,
+  TipoTokenSenha,
+  UsuarioSessao,
+} from "./types";
+import {
+  salvarPedidoNovo,
+  obterPedido,
+  salvarCotacoes,
+  obterCotacoes,
+  obterDespacho,
+  reservarDespacho,
+  liberarDespacho,
+  concluirDespacho,
+  limparPedidosAntigos,
+  registrarDelivery,
+  listarPedidos,
+  buscarUsuarioPorEmail,
+  buscarUsuarioPorId,
+  listarUsuarios,
+  criarUsuario,
+  atualizarUsuario,
+  contarAdminsAtivos,
+  salvarTokenSenha,
+  lerTokenSenha,
+  consumirTokenEDefinirSenha,
+  invalidarTokensDoUsuario,
+  limparTokensAntigos,
+} from "./lib/store";
+import {
+  entregarLink,
+  gerarTokenCru,
+  hashToken,
+  montarLink,
+  validadeHoras,
+} from "./lib/tokens-senha";
+import { gerarHash } from "./lib/senha";
+import { garantirCoordenadas } from "./lib/geocode";
+import { provedoresAtivos, provedorAtivo, nomeProvedor } from "./config/provedores";
+import { tokenDoRequest, validarToken } from "./lib/auth";
+import { conferirSenha } from "./lib/senha";
+import { emitirToken, exigirAdmin, exigirLogin, VALIDADE_SEGUNDOS } from "./lib/sessao";
+import { calcularEstatisticas } from "./lib/estatisticas";
+import { rodarDiagnostico } from "./lib/diagnostico";
+import { ambiente } from "./config/ambiente";
+
+type Contexto = {
+  Bindings: Env;
+  Variables: { usuario: UsuarioSessao };
+};
+
+const app = new Hono<Contexto>();
+
+// ---------------------------------------------------------------------------
+// CORS — restrito. PAINEL_ORIGIN no wrangler.toml define quem pode chamar.
+// O painel Next.js chama o Worker pelo servidor (route handler), não pelo
+// browser, então na prática o CORS aqui é só uma segunda linha de defesa.
+// ---------------------------------------------------------------------------
+app.use("/api/*", (c, next) => {
+  const permitido = c.env.PAINEL_ORIGIN?.split(",").map((s) => s.trim()) ?? [];
+  return cors({
+    origin: (origem) => (permitido.includes(origem) ? origem : null),
+    allowHeaders: ["Content-Type", "Authorization"],
+    allowMethods: ["GET", "POST", "OPTIONS"],
+  })(c, next);
+});
+
+// ---------------------------------------------------------------------------
+// Rotas do painel exigem JWT de atendente logado.
+// O webhook NÃO entra aqui — ele é máquina-a-máquina e usa WEBHOOK_SECRET.
+// ---------------------------------------------------------------------------
+app.use("/api/cotacao/*", exigirLogin);
+app.use("/api/despachar", exigirLogin);
+app.use("/api/pedidos", exigirLogin);
+app.use("/api/estatisticas", exigirLogin);
+app.use("/api/auth/eu", exigirLogin);
+
+// Diagnóstico expõe QUAIS credenciais faltam — só admin.
+app.use("/api/diagnostico", exigirLogin, exigirAdmin);
+
+// Gestão de usuários — só admin.
+app.use("/api/usuarios", exigirLogin, exigirAdmin);
+app.use("/api/usuarios/*", exigirLogin, exigirAdmin);
+
+// Healthcheck — público de propósito, não devolve nada sensível.
+app.get("/", (c) =>
+  c.json({
+    ok: true,
+    service: "hub-logistico",
+    ambiente: ambiente(c.env),
+    provedoresAtivos: provedoresAtivos(c.env).map((p) => p.id),
+  })
+);
+
+// ---------------------------------------------------------------------------
+// 0) Autenticação
+//    POST /api/auth/login  { email, senha }  ->  { token, usuario }
+//
+// O Worker é a autoridade de identidade: ele valida a senha contra o D1 e
+// emite o JWT. O NextAuth do painel só guarda o token na sessão.
+// ---------------------------------------------------------------------------
+app.post("/api/auth/login", async (c) => {
+  const body = await c.req
+    .json<{ email?: string; senha?: string }>()
+    .catch(() => null);
+
+  const email = body?.email?.trim().toLowerCase();
+  const senha = body?.senha;
+
+  if (!email || !senha) {
+    return c.json({ erro: "e-mail e senha são obrigatórios" }, 400);
+  }
+
+  const usuario = await buscarUsuarioPorEmail(c.env, email);
+
+  // Mesma mensagem para todos os casos — inexistente, inativo, sem senha
+  // definida ou senha errada. Distinguir entrega ao atacante uma lista de
+  // e-mails válidos do restaurante.
+  //
+  // `senhaHash` nulo = usuário criado pelo admin que ainda não definiu senha.
+  // Ele precisa usar o link de acesso, não o login.
+  const podeTentar = !!usuario && usuario.ativo && !!usuario.senhaHash;
+
+  const senhaOk = podeTentar
+    ? await conferirSenha(senha, usuario!.senhaHash!)
+    : // Gasta o mesmo tempo de qualquer jeito, para não vazar por timing.
+      await conferirSenha(senha, "pbkdf2$100000$AAAAAAAAAAAAAAAAAAAAAA==$AAAA");
+
+  if (!podeTentar || !senhaOk) {
+    return c.json({ erro: "e-mail ou senha inválidos" }, 401);
+  }
+
+  const token = await emitirToken(c.env, usuario);
+
+  return c.json({
+    token,
+    expiraEmSegundos: VALIDADE_SEGUNDOS,
+    usuario: {
+      id: usuario.id,
+      nome: usuario.nome,
+      email: usuario.email,
+      papel: usuario.papel,
+    },
+  });
+});
+
+/** Confere se a sessão ainda vale (o painel usa para revalidar). */
+app.get("/api/auth/eu", (c) => c.json({ usuario: c.get("usuario") }));
+
+// ---------------------------------------------------------------------------
+// 0b) Definição e recuperação de senha — rotas PÚBLICAS
+//
+// O usuário criado pelo admin nasce SEM senha e define a dele por aqui. É o
+// mesmo caminho do "esqueci minha senha": muda só a validade do link.
+// Ninguém além do dono jamais conhece a senha, nem quem cadastrou.
+// ---------------------------------------------------------------------------
+
+/** Gera o token, salva o hash e devolve o link pronto. */
+async function emitirLinkDeAcesso(
+  env: Env,
+  usuario: { id: string; email: string },
+  tipo: TipoTokenSenha
+): Promise<{ link: string; expiraEm: string; enviadoPorEmail: boolean }> {
+  const token = gerarTokenCru();
+  const expiraEm = new Date(
+    Date.now() + validadeHoras(tipo) * 3600_000
+  ).toISOString();
+
+  await salvarTokenSenha(env, await hashToken(token), usuario.id, tipo, expiraEm);
+
+  const link = montarLink(env, token);
+  const { enviadoPorEmail } = await entregarLink(env, usuario.email, link, tipo);
+
+  return { link, expiraEm, enviadoPorEmail };
+}
+
+/**
+ * POST /api/auth/esqueci-senha  { email }
+ *
+ * Responde 200 SEMPRE, exista o e-mail ou não. Dizer "esse e-mail não está
+ * cadastrado" entrega ao atacante uma lista de contas válidas do restaurante.
+ */
+app.post("/api/auth/esqueci-senha", async (c) => {
+  const body = await c.req.json<{ email?: string }>().catch(() => null);
+  const email = body?.email?.trim().toLowerCase();
+
+  const resposta = {
+    ok: true,
+    mensagem:
+      "Se este e-mail estiver cadastrado, o link de acesso foi gerado. Procure o administrador do restaurante para recebê-lo.",
+  };
+
+  if (!email) return c.json(resposta);
+
+  const usuario = await buscarUsuarioPorEmail(c.env, email);
+  if (!usuario || !usuario.ativo) return c.json(resposta);
+
+  await emitirLinkDeAcesso(c.env, usuario, "recuperacao");
+  return c.json(resposta);
+});
+
+/** GET /api/auth/token/:token — a tela de definir senha usa para saber de quem é. */
+app.get("/api/auth/token/:token", async (c) => {
+  const info = await lerTokenSenha(c.env, await hashToken(c.req.param("token")));
+
+  if (!info) {
+    return c.json({ erro: "Link inválido ou expirado." }, 404);
+  }
+
+  return c.json({ nome: info.nome, email: info.email, tipo: info.tipo });
+});
+
+/** POST /api/auth/definir-senha  { token, senha } */
+app.post("/api/auth/definir-senha", async (c) => {
+  const body = await c.req
+    .json<{ token?: string; senha?: string }>()
+    .catch(() => null);
+
+  const token = body?.token?.trim();
+  const senha = body?.senha ?? "";
+
+  if (!token) return c.json({ erro: "Link inválido." }, 400);
+  if (senha.length < 8) {
+    return c.json({ erro: "A senha precisa ter pelo menos 8 caracteres." }, 400);
+  }
+
+  const ok = await consumirTokenEDefinirSenha(
+    c.env,
+    await hashToken(token),
+    await gerarHash(senha)
+  );
+
+  if (!ok) {
+    return c.json(
+      { erro: "Link inválido, expirado ou já utilizado. Peça um novo." },
+      400
+    );
+  }
+
+  return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// 0c) Gestão de usuários — só admin
+// ---------------------------------------------------------------------------
+
+app.get("/api/usuarios", async (c) => {
+  return c.json({ usuarios: await listarUsuarios(c.env) });
+});
+
+app.post("/api/usuarios", async (c) => {
+  const body = await c.req
+    .json<{ nome?: string; email?: string; papel?: Papel }>()
+    .catch(() => null);
+
+  const nome = body?.nome?.trim();
+  const email = body?.email?.trim().toLowerCase();
+  const papel: Papel = body?.papel === "admin" ? "admin" : "atendente";
+
+  if (!nome || !email) {
+    return c.json({ erro: "Nome e e-mail são obrigatórios." }, 400);
+  }
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    return c.json({ erro: "E-mail inválido." }, 400);
+  }
+
+  const usuario = await criarUsuario(c.env, { nome, email, papel });
+  if (!usuario) {
+    return c.json({ erro: "Já existe um usuário com esse e-mail." }, 409);
+  }
+
+  // Convite emitido junto com a criação: não existe estado "usuário criado sem
+  // como entrar".
+  const acesso = await emitirLinkDeAcesso(c.env, usuario, "convite");
+
+  return c.json({ ok: true, usuario, ...acesso }, 201);
+});
+
+app.patch("/api/usuarios/:id", async (c) => {
+  const id = c.req.param("id");
+  const eu = c.get("usuario");
+
+  const body = await c.req
+    .json<{ nome?: string; papel?: Papel; ativo?: boolean }>()
+    .catch(() => null);
+  if (!body) return c.json({ erro: "Dados inválidos." }, 400);
+
+  const alvo = await buscarUsuarioPorId(c.env, id);
+  if (!alvo) return c.json({ erro: "Usuário não encontrado." }, 404);
+
+  // Trava contra tiro no pé: o admin logado não se desativa nem se rebaixa.
+  // Sem isso, um clique errado tranca o próprio dono para fora do painel.
+  if (id === eu.sub && (body.ativo === false || body.papel === "atendente")) {
+    return c.json(
+      { erro: "Você não pode desativar nem rebaixar a própria conta." },
+      400
+    );
+  }
+
+  // Trava contra ficar sem dono: o último admin ativo não pode sair.
+  const perdendoAdmin =
+    alvo.papel === "admin" && (body.ativo === false || body.papel === "atendente");
+  if (perdendoAdmin && (await contarAdminsAtivos(c.env)) <= 1) {
+    return c.json(
+      { erro: "É preciso manter pelo menos um administrador ativo." },
+      400
+    );
+  }
+
+  const alterado = await atualizarUsuario(c.env, id, {
+    nome: body.nome,
+    papel: body.papel,
+    ativo: body.ativo,
+  });
+  if (!alterado) return c.json({ erro: "Nada para alterar." }, 400);
+
+  // Desativou? Os links de acesso pendentes morrem junto.
+  if (body.ativo === false) await invalidarTokensDoUsuario(c.env, id);
+
+  return c.json({ ok: true });
+});
+
+/** Gera um link novo — para reenviar convite ou resetar a senha de alguém. */
+app.post("/api/usuarios/:id/link-acesso", async (c) => {
+  const alvo = await buscarUsuarioPorId(c.env, c.req.param("id"));
+  if (!alvo) return c.json({ erro: "Usuário não encontrado." }, 404);
+
+  const acesso = await emitirLinkDeAcesso(c.env, alvo, "recuperacao");
+  return c.json({ ok: true, ...acesso });
+});
+
+// ---------------------------------------------------------------------------
+// 1) Webhook de entrada do Cardápio Web
+//    POST /api/webhook/cardapio-web
+// ---------------------------------------------------------------------------
+app.post("/api/webhook/cardapio-web", async (c) => {
+  const env = c.env;
+
+  // O nome do header varia por plataforma. Aceita também Authorization: Bearer.
+  const header = env.CARDAPIO_WEB_HEADER || "x-webhook-secret";
+  const auth = validarToken(
+    env.WEBHOOK_SECRET,
+    tokenDoRequest(c.req.raw.headers, header),
+    "WEBHOOK_SECRET"
+  );
+  if (!auth.ok) return c.json({ erro: auth.erro }, auth.status);
+
+  const body = await c.req.json<Partial<Pedido>>().catch(() => null);
+  if (!body?.cliente?.nome || !body?.cliente?.telefone || !body?.endereco?.cep) {
+    return c.json(
+      {
+        erro: "payload inválido: cliente.nome, cliente.telefone e endereco.cep são obrigatórios",
+      },
+      400
+    );
+  }
+
+  // Resolve lat/lng (ViaCEP + geocoder, com cache) se o Cardápio Web só mandou
+  // o CEP. Necessário para o cálculo de raio do motoboy próprio.
+  const endereco = await garantirCoordenadas(env, body.endereco);
+
+  const pedido: Pedido = {
+    id: body.id || crypto.randomUUID(),
+    criadoEm: new Date().toISOString(),
+    cliente: body.cliente,
+    endereco,
+    itens: body.itens ?? [],
+    total: body.total ?? 0,
+    observacao: body.observacao,
+    status: "recebido",
+  };
+
+  // false = webhook repetido (retry do Cardápio Web). Responde 200 mesmo assim,
+  // senão o Cardápio Web fica reenviando pra sempre.
+  const novo = await salvarPedidoNovo(env, pedido);
+
+  return c.json({ ok: true, idPedido: pedido.id, novo });
+});
+
+// ---------------------------------------------------------------------------
+// 2) Listagem de pedidos
+//    GET /api/pedidos?aba=abertos|historico&limite=50
+// ---------------------------------------------------------------------------
+app.get("/api/pedidos", async (c) => {
+  const aba = c.req.query("aba") === "historico" ? "historico" : "abertos";
+  const limite = Number(c.req.query("limite") ?? 50);
+
+  const pedidos = await listarPedidos(c.env, {
+    abertos: aba === "abertos",
+    limite: Number.isFinite(limite) ? limite : 50,
+  });
+
+  return c.json({ aba, pedidos });
+});
+
+// ---------------------------------------------------------------------------
+// 3) Cotação simultânea nos provedores LIGADOS
+//    GET /api/cotacao/:idPedido
+// ---------------------------------------------------------------------------
+app.get("/api/cotacao/:idPedido", async (c) => {
+  const env = c.env;
+  const idPedido = c.req.param("idPedido");
+
+  const pedido = await obterPedido(env, idPedido);
+  if (!pedido) return c.json({ erro: "pedido não encontrado" }, 404);
+
+  const ativos = provedoresAtivos(env);
+  if (ativos.length === 0) {
+    return c.json(
+      { erro: "Nenhuma transportadora ativa — veja em Configurações." },
+      503
+    );
+  }
+
+  // Fetch paralelo. allSettled para que a falha de UM provedor não derrube a
+  // cotação dos demais — o painel mostra o que respondeu.
+  const resultados = await Promise.allSettled(
+    ativos.map((p) => p.cotar(env, pedido))
+  );
+
+  const cotacoes: Cotacao[] = resultados.map((r, i) => {
+    const p = ativos[i];
+    if (r.status === "fulfilled") return r.value;
+    return {
+      provider: p.id,
+      nome: p.nome,
+      disponivel: false,
+      preco: null,
+      moeda: "BRL",
+      etaMinutos: null,
+      quoteId: null,
+      expiraEm: null,
+      erro: r.reason instanceof Error ? r.reason.message : "falha na cotação",
+    };
+  });
+
+  // Ordena: disponíveis primeiro, mais barato no topo.
+  cotacoes.sort((a, b) => {
+    if (a.disponivel !== b.disponivel) return a.disponivel ? -1 : 1;
+    return (a.preco ?? Infinity) - (b.preco ?? Infinity);
+  });
+
+  await salvarCotacoes(env, idPedido, cotacoes);
+
+  const maisBarato = cotacoes.find((x) => x.disponivel)?.provider ?? null;
+  const despacho = await obterDespacho(env, idPedido);
+
+  return c.json({ idPedido, pedido, maisBarato, cotacoes, despacho });
+});
+
+// ---------------------------------------------------------------------------
+// 4) Despacho — cria a corrida no provedor escolhido
+//    POST /api/despachar  { idPedido, provider }
+// ---------------------------------------------------------------------------
+app.post("/api/despachar", async (c) => {
+  const env = c.env;
+  const atendente = c.get("usuario");
+
+  const body = await c.req
+    .json<{ idPedido?: string; provider?: ProviderId }>()
+    .catch(() => null);
+
+  const idPedido = body?.idPedido;
+  const provider = body?.provider;
+  if (!idPedido || !provider) {
+    return c.json({ erro: "idPedido e provider são obrigatórios" }, 400);
+  }
+
+  // Trava 1 — provedor desligado não despacha, nem via chamada direta na API.
+  const prov = provedorAtivo(env, provider);
+  if (!prov) {
+    return c.json(
+      { erro: `provedor "${nomeProvedor(provider as ProviderId)}" está desativado` },
+      403
+    );
+  }
+
+  const pedido = await obterPedido(env, idPedido);
+  if (!pedido) return c.json({ erro: "pedido não encontrado" }, 404);
+
+  // Trava 2 — já despachado? Devolve o resultado antigo em vez de cobrar outra
+  // corrida. Cliques repetidos e F5 viram no-op.
+  const jaFeito = await obterDespacho(env, idPedido);
+  if (jaFeito) {
+    return c.json({ ok: true, jaDespachado: true, ...jaFeito });
+  }
+
+  const cotacoes = await obterCotacoes(env, idPedido);
+  const cotacao = cotacoes?.find((x) => x.provider === provider);
+  if (!cotacao || !cotacao.disponivel) {
+    return c.json({ erro: "cotação inexistente — cote novamente" }, 409);
+  }
+
+  // Trava 3 — cotação vencida. Uber/iFood expiram em minutos; sem esta checagem
+  // o erro só aparecia depois de bater no parceiro.
+  if (cotacao.expiraEm && Date.parse(cotacao.expiraEm) <= Date.now()) {
+    return c.json({ erro: "cotação expirada — clique em Recotar" }, 409);
+  }
+
+  // Trava 4 — reserva atômica. Dois cliques simultâneos: só um passa daqui.
+  if (!(await reservarDespacho(env, idPedido))) {
+    const concorrente = await obterDespacho(env, idPedido);
+    if (concorrente) return c.json({ ok: true, jaDespachado: true, ...concorrente });
+    return c.json({ erro: "despacho já em andamento para este pedido" }, 409);
+  }
+
+  try {
+    const resultado: ResultadoDespacho = await prov.despachar(env, pedido, cotacao);
+
+    await concluirDespacho(env, idPedido, resultado);
+    // Histórico para o relatório. Guarda quem clicou.
+    await registrarDelivery(env, pedido, cotacao, resultado, atendente.email);
+
+    return c.json({ ok: true, ...resultado });
+  } catch (e) {
+    // Parceiro recusou: solta a trava para o atendente poder tentar de novo.
+    await liberarDespacho(env, idPedido);
+    return c.json({ erro: e instanceof Error ? e.message : "falha ao despachar" }, 502);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 5) Estatísticas — tela de Relatórios
+//    GET /api/estatisticas?dias=30
+// ---------------------------------------------------------------------------
+app.get("/api/estatisticas", async (c) => {
+  const dias = Number(c.req.query("dias") ?? 30);
+  const janela = Number.isFinite(dias) ? Math.min(Math.max(dias, 1), 365) : 30;
+
+  const estatisticas = await calcularEstatisticas(c.env, janela);
+  return c.json(estatisticas);
+});
+
+// ---------------------------------------------------------------------------
+// 6) Diagnóstico de configuração — tela de Configurações (admin)
+//    GET /api/diagnostico
+//
+// Testa de verdade o que dá para testar sem gastar dinheiro: conexão com D1/KV,
+// segredos preenchidos e autenticação OAuth2 nos parceiros ligados.
+// ---------------------------------------------------------------------------
+app.get("/api/diagnostico", async (c) => {
+  return c.json(await rodarDiagnostico(c.env));
+});
+
+export default {
+  fetch: app.fetch,
+
+  // Cron diário (wrangler.toml). O D1 não expira sozinho como o KV fazia.
+  async scheduled(_evt: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(
+      Promise.all([limparPedidosAntigos(env, 30), limparTokensAntigos(env)])
+    );
+  },
+};

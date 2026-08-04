@@ -1,0 +1,16 @@
+node_modules/
+
+# Segredos — NUNCA commitar
+.dev.vars
+.env
+.env.local
+.env*.local
+
+# Build / cache
+.next/
+.wrangler/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+.DS_Store

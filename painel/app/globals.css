@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Fallback das cores da marca. Os valores reais são injetados no <body> pelo
+   app/layout.tsx a partir de config/marca.ts. Estes aqui só evitam que a tela
+   fique sem cor caso algum trecho renderize fora do layout raiz. */
+:root {
+  --marca-primaria: #1c1c1c;
+  --marca-primaria-hover: #000000;
+  --marca-contraste: #ffffff;
+  --marca-suave: #f3f4f6;
+  --marca-suave-texto: #111827;
+}
+
+/* Foco visível e na cor da marca — acessibilidade sem depender de cada
+   componente lembrar de estilizar. */
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--marca-primaria);
+  outline-offset: 2px;
+}

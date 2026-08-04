@@ -1,0 +1,38 @@
+# ===========================================================================
+# SEGREDOS DE DESENVOLVIMENTO (wrangler dev)
+#
+# Copie para worker/.dev.vars — esse arquivo é git-ignorado.
+# Em HML/produção NÃO se usa este arquivo: lá é `wrangler secret put --env ...`.
+# Ver CREDENCIAIS.md na raiz do projeto.
+# ===========================================================================
+
+# --- Obrigatórios ----------------------------------------------------------
+# Sem eles as rotas recusam tudo (falha fechada, de propósito).
+
+# O MESMO valor que você cadastrar no webhook do Cardápio Web.
+WEBHOOK_SECRET=dev-webhook-123
+
+# Assina o JWT de sessão dos atendentes.
+# Em produção gere um valor longo:  openssl rand -base64 48
+JWT_SECRET=dev-jwt-secret-troque-em-producao-1234567890
+
+# --- Uber Direct -----------------------------------------------------------
+# Onde pegar: developer.uber.com > sua aplicação Direct > Credentials.
+# Em dev/HML use as credenciais de SANDBOX; o customer_id de sandbox vai em
+# UBER_CUSTOMER_ID_HML, no wrangler.toml (não é segredo).
+UBER_CLIENT_ID=
+UBER_CLIENT_SECRET=
+
+# --- Cardápio Web ----------------------------------------------------------
+# Só necessário se o Hub for CHAMAR a API deles (hoje só recebemos webhook).
+CARDAPIO_WEB_TOKEN=
+
+# --- Só quando ligar os outros provedores ----------------------------------
+IFOOD_CLIENT_ID=
+IFOOD_CLIENT_SECRET=
+NOVA99_CLIENT_ID=
+NOVA99_CLIENT_SECRET=
+
+# --- Opcional --------------------------------------------------------------
+# Vazio = geocodifica pelo Nominatim/OpenStreetMap (grátis, mais impreciso).
+GOOGLE_MAPS_API_KEY=

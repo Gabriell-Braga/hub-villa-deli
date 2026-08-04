@@ -1,0 +1,44 @@
+LOGO DO RESTAURANTE
+===================
+
+ARTE OFICIAL
+------------
+Salve o logo do cliente NESTA PASTA como logo.png e troque, no
+painel/.env.local:
+
+    NEXT_PUBLIC_MARCA_LOGO=/marca/logo.png
+
+Ja existe um logo.svg nesta pasta: e uma APROXIMACAO do logo do Villa Deli,
+feita a mao para o painel nao ficar sem marca. A tipografia original e
+customizada e nao bate 100%. Substitua assim que tiver o arquivo oficial.
+
+Recomendações:
+  - PNG ou SVG com fundo transparente (ou o próprio fundo da marca)
+  - Quadrado, no mínimo 256x256 px
+  - O painel recorta em círculo, então logos circulares ficam perfeitos
+
+Se o arquivo NÃO existir, o painel desenha automaticamente um monograma com
+as iniciais do nome, nas cores da marca. Nada quebra.
+
+Para usar outro nome de arquivo, defina no painel/.env.local:
+
+    NEXT_PUBLIC_MARCA_LOGO=/marca/villa-deli.svg
+
+Tudo o mais (nome, tagline, cores) fica em painel/config/marca.ts e pode ser
+sobrescrito por variáveis de ambiente. Ver CREDENCIAIS.md na raiz do projeto.
+
+
+FAVICON (icone da aba do navegador)
+-----------------------------------
+favicon.svg nesta pasta. E derivado do logo, com duas diferencas que importam:
+
+  - fundo proprio (creme atras das letras vazadas), para nao sumir em aba
+    escura
+  - recortado em circulo
+
+O logo.svg NAO serve como favicon: as letras dele sao vazadas e assumem a cor
+do fundo, entao em modo escuro ficariam invisiveis.
+
+Para apontar outro arquivo, no painel/.env.local:
+
+    NEXT_PUBLIC_MARCA_FAVICON=/marca/outro-icone.svg
