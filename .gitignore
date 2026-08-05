@@ -2,6 +2,7 @@ node_modules/
 
 # Segredos — NUNCA commitar
 .dev.vars
+.dev.vars.*
 .env
 .env.local
 .env*.local

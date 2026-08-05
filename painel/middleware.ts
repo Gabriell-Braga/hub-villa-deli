@@ -31,5 +31,6 @@ export const config = {
     "/api/diagnostico",
     "/api/usuarios/:path*",
     "/api/usuarios",
+    "/api/modo",
   ],
 };

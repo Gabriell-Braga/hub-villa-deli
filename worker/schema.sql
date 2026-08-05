@@ -69,11 +69,52 @@ CREATE TABLE IF NOT EXISTS deliveries (
   cliente_nome          TEXT,
   bairro                TEXT,
   valor_pedido          REAL,
-  despachado_por        TEXT    -- e-mail do atendente que clicou
+  despachado_por        TEXT,   -- e-mail do atendente que clicou
+
+  -- Estado ao vivo, alimentado pelos webhooks do parceiro. `valor_pago` e
+  -- `data_criacao` NÃO mudam: são o registro contábil.
+  status_ao_vivo        TEXT,
+  status_atualizado_em  TEXT,
+  dropoff_eta           TEXT,
+  courier_nome          TEXT,
+  courier_telefone      TEXT,
+  courier_veiculo       TEXT,
+  courier_lat           REAL,
+  courier_lng           REAL,
+  -- false = evento de teste (credenciais de sandbox)
+  live_mode             INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_deliveries_data       ON deliveries (data_criacao);
 CREATE INDEX IF NOT EXISTS idx_deliveries_plataforma ON deliveries (plataforma_escolhida, data_criacao);
+CREATE INDEX IF NOT EXISTS idx_deliveries_externo    ON deliveries (delivery_id_externo);
+
+
+-- ---------------------------------------------------------------------------
+-- 5) EVENTOS_ENTREGA — trilha dos webhooks recebidos dos parceiros.
+--
+-- A PRIMARY KEY é o id do evento no parceiro: é o que garante idempotência.
+-- A Uber reenvia o mesmo evento até 3 vezes se não receber 2xx em tempo, e sem
+-- isto um "delivered" repetido sobrescreveria um "canceled" posterior.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS eventos_entrega (
+  id                   TEXT PRIMARY KEY,
+  provider             TEXT NOT NULL,
+  -- event.delivery_status | event.courier_update | event.refund_request | ...
+  kind                 TEXT NOT NULL,
+  status               TEXT,
+  delivery_id_externo  TEXT,
+  id_pedido            TEXT,
+  criado_em_parceiro   TEXT,
+  recebido_em          TEXT NOT NULL,
+  live_mode            INTEGER,
+  -- JSON cru, para auditoria e para depurar campo que ainda não mapeamos
+  payload              TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_eventos_delivery ON eventos_entrega (delivery_id_externo);
+CREATE INDEX IF NOT EXISTS idx_eventos_pedido   ON eventos_entrega (id_pedido);
+CREATE INDEX IF NOT EXISTS idx_eventos_recebido ON eventos_entrega (recebido_em);
 
 
 -- ---------------------------------------------------------------------------
@@ -120,3 +161,19 @@ CREATE TABLE IF NOT EXISTS tokens_senha (
 
 CREATE INDEX IF NOT EXISTS idx_tokens_usuario ON tokens_senha (usuario_id);
 CREATE INDEX IF NOT EXISTS idx_tokens_expira  ON tokens_senha (expira_em);
+
+
+-- ---------------------------------------------------------------------------
+-- 6) CONFIG — chave/valor ajustável em tempo de execução, sem deploy.
+--
+-- Hoje guarda o MODO DE OPERAÇÃO (teste | producao), trocado pela tela de
+-- Configurações. Fica no D1 e não no KV porque a leitura precisa ser exata:
+-- o KV é eventualmente consistente, e segundos de atraso numa troca de modo
+-- podem virar uma corrida cobrada de verdade quando se achava estar em teste.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS config (
+  chave           TEXT PRIMARY KEY,
+  valor           TEXT NOT NULL,
+  atualizado_em   TEXT NOT NULL,
+  atualizado_por  TEXT
+);

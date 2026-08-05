@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
+import AvisoModo from "./AvisoModo";
 
 // ---------------------------------------------------------------------------
 // Casca das telas internas.
@@ -36,6 +37,7 @@ export default function Shell({
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
+        <AvisoModo ehAdmin={papel === "admin"} />
         <Header onAbrirMenu={() => setMenuAberto(true)} />
 
         <main className="flex-1 p-4 sm:p-6 md:overflow-y-auto">{children}</main>

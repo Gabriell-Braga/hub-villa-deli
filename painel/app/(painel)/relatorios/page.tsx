@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Estatisticas } from "@/lib/tipos";
-import { COR_PROVEDOR, EMOJI_PROVEDOR } from "@/lib/tipos";
+import { COR_PROVEDOR } from "@/lib/tipos";
+import LogoProvedor from "@/components/LogoProvedor";
 import { brl } from "@/lib/formato";
 import StatCard from "@/components/StatCard";
 import { Skeleton, SkeletonGraficoBarras } from "@/components/Skeleton";
@@ -127,7 +128,12 @@ export default function PaginaRelatorios() {
           {dados.porPlataforma.map((p) => (
             <StatCard
               key={p.provider}
-              rotulo={`${EMOJI_PROVEDOR[p.provider]} ${p.nome}`}
+              rotulo={
+                <>
+                  <LogoProvedor provider={p.provider} tamanho={18} />
+                  {p.nome}
+                </>
+              }
               valor={brl(p.gastoTotal)}
               detalhe={`${p.entregas} entregas · média ${brl(p.custoMedio)}`}
               cor={COR_PROVEDOR[p.provider]}

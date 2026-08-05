@@ -1,4 +1,4 @@
-import type { Cotacao, Env, Pedido, ResultadoDespacho } from "../types";
+import type { Cotacao, Env, ModoOperacao, Pedido, ResultadoDespacho } from "../types";
 import { get99Token } from "./tokens";
 
 // ---------------------------------------------------------------------------
@@ -7,7 +7,11 @@ import { get99Token } from "./tokens";
 // Confirme os paths exatos no contrato corporativo da 99.
 // ---------------------------------------------------------------------------
 
-export async function cotar99(env: Env, pedido: Pedido): Promise<Cotacao> {
+export async function cotar99(
+  env: Env,
+  pedido: Pedido,
+  modo: ModoOperacao
+): Promise<Cotacao> {
   const base: Cotacao = {
     provider: "99",
     nome: "99 Entregas",
@@ -19,7 +23,7 @@ export async function cotar99(env: Env, pedido: Pedido): Promise<Cotacao> {
     expiraEm: null,
   };
 
-  const token = await get99Token(env);
+  const token = await get99Token(env, modo);
 
   const res = await fetch(`${env.NOVA99_BASE_URL}/delivery/v1/quotes`, {
     method: "POST",
@@ -65,9 +69,10 @@ export async function cotar99(env: Env, pedido: Pedido): Promise<Cotacao> {
 export async function despachar99(
   env: Env,
   pedido: Pedido,
-  cotacao: Cotacao
+  cotacao: Cotacao,
+  modo: ModoOperacao
 ): Promise<ResultadoDespacho> {
-  const token = await get99Token(env);
+  const token = await get99Token(env, modo);
 
   const res = await fetch(`${env.NOVA99_BASE_URL}/delivery/v1/orders`, {
     method: "POST",

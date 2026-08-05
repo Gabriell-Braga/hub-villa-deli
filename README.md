@@ -238,8 +238,8 @@ Cada ambiente tem banco, KV e **segredos próprios**
 (`wrangler secret put NOME --env hml`). O prefixo do cache no KV inclui o
 ambiente, então um token de sandbox nunca é reaproveitado em produção.
 
-Enquanto `AMBIENTE != "producao"`, o Uber usa `UBER_BASE_URL_HML` e
-`UBER_CUSTOMER_ID_HML` — ver
+Quais credenciais do Uber estão valendo é decidido pelo **modo de operação**
+(teste × produção), trocado na tela de Configurações sem deploy — ver
 [`worker/src/config/ambiente.ts`](worker/src/config/ambiente.ts).
 
 ## Tela de Configurações (diagnóstico)
@@ -278,6 +278,7 @@ Variables**. Vazio = usa o padrão de `src/config/provedores.ts`.
 | `GET /api/cotacao/:id` | JWT | Cota em paralelo nos provedores ligados |
 | `POST /api/despachar` | JWT | Cria a corrida e grava em `deliveries` |
 | `GET /api/estatisticas?dias=30` | JWT | Agregações do relatório |
+| `POST /api/webhook/uber` | assinatura HMAC | Status da entrega e posição do entregador |
 | `GET /api/diagnostico` | JWT + admin | Testa credenciais e integrações |
 | `GET/POST /api/usuarios` | JWT + admin | Lista e cria atendentes |
 | `PATCH /api/usuarios/:id` | JWT + admin | Ativa/desativa, troca permissão |

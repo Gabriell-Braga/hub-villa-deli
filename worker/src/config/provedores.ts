@@ -1,4 +1,11 @@
-import type { Cotacao, Env, Pedido, ProviderId, ResultadoDespacho } from "../types";
+import type {
+  Cotacao,
+  Env,
+  ModoOperacao,
+  Pedido,
+  ProviderId,
+  ResultadoDespacho,
+} from "../types";
 import { cotarUber, despacharUber } from "../services/uber";
 import { cotarIfood, despacharIfood } from "../services/ifood";
 import { cotar99, despachar99 } from "../services/noventa99";
@@ -27,11 +34,12 @@ export interface Provedor {
   nome: string;
   /** Padrão de fábrica. Só vale quando PROVEDORES_ATIVOS está vazio. */
   ativo: boolean;
-  cotar: (env: Env, pedido: Pedido) => Promise<Cotacao>;
+  cotar: (env: Env, pedido: Pedido, modo: ModoOperacao) => Promise<Cotacao>;
   despachar: (
     env: Env,
     pedido: Pedido,
-    cotacao: Cotacao
+    cotacao: Cotacao,
+    modo: ModoOperacao
   ) => Promise<ResultadoDespacho>;
 }
 

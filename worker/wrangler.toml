@@ -65,7 +65,9 @@ RESTAURANTE_NOME = "Villa Deli"
 RESTAURANTE_CEP = "34006-086"
 RESTAURANTE_LAT = "-19.978452"
 RESTAURANTE_LNG = "-43.932128"
-RESTAURANTE_TELEFONE = "PREENCHER_TELEFONE_DA_LOJA"
+# Formato E.164 obrigatório: o Uber recusa a cotação sem código de país, e é
+# o número que o entregador liga na coleta.
+RESTAURANTE_TELEFONE = "+5531984428765"
 
 # --- Cardápio Web ----------------------------------------------------------
 # CARDAPIO_WEB_HEADER: nome do header que o Cardápio Web usa para assinar o
@@ -83,18 +85,21 @@ UBER_AUTH_URL = "https://auth.uber.com/oauth/v2/token"
 UBER_SCOPE = "direct.organizations"
 UBER_CUSTOMER_ID = "551fca94-17d0-4acf-a3f8-05d93a0abe6a"
 
-# --- Uber Direct: HOMOLOGAÇÃO ----------------------------------------------
-# Usados sempre que AMBIENTE != "producao". CONFIRME o host de sandbox com o
-# seu gerente de conta Uber — ele varia por contrato.
-UBER_BASE_URL_HML = "https://sandbox-api.uber.com"
-UBER_CUSTOMER_ID_HML = "551fca94-17d0-4acf-a3f8-05d93a0abe6a"
+# --- Uber Direct: TESTE (sandbox) ------------------------------------------
+# Usados quando o MODO DE OPERAÇÃO é "teste" — trocado na tela de
+# Configurações do painel, sem deploy. CONFIRME o host de sandbox com o seu
+# gerente de conta Uber: ele varia por contrato.
+# A conta de teste tem o produto de entregas liberado; a de produção ainda não.
+UBER_SCOPE_TESTE = "direct.organizations eats.deliveries"
+UBER_BASE_URL_TESTE = "https://sandbox-api.uber.com"
+UBER_CUSTOMER_ID_TESTE = "c1cc78e9-6147-5db8-82be-1b0f45446e09"
 
 # --- iFood / 99 (desligados na trava por enquanto) -------------------------
 IFOOD_BASE_URL = "https://merchant-api.ifood.com.br"
-IFOOD_BASE_URL_HML = "https://merchant-api.ifood.com.br"
+IFOOD_BASE_URL_TESTE = "https://merchant-api.ifood.com.br"
 IFOOD_MERCHANT_ID = ""
 NOVA99_BASE_URL = "https://api.99app.com"
-NOVA99_BASE_URL_HML = "https://api.99app.com"
+NOVA99_BASE_URL_TESTE = "https://api.99app.com"
 NOVA99_AUTH_URL = "https://api.99app.com/oauth/token"
 
 # --- Motoboy próprio -------------------------------------------------------
@@ -126,7 +131,7 @@ RESTAURANTE_NOME = "Villa Deli"
 RESTAURANTE_CEP = "34006-086"
 RESTAURANTE_LAT = "-19.978452"
 RESTAURANTE_LNG = "-43.932128"
-RESTAURANTE_TELEFONE = "PREENCHER_TELEFONE_DA_LOJA"
+RESTAURANTE_TELEFONE = "+5531984428765"
 
 CARDAPIO_WEB_HEADER = "x-webhook-secret"
 CARDAPIO_WEB_BASE_URL = ""
@@ -139,14 +144,16 @@ UBER_AUTH_URL = "https://auth.uber.com/oauth/v2/token"
 # aplicacao, troque para: "direct.organizations eats.deliveries"
 UBER_SCOPE = "direct.organizations"
 UBER_CUSTOMER_ID = "551fca94-17d0-4acf-a3f8-05d93a0abe6a"
-UBER_BASE_URL_HML = "https://sandbox-api.uber.com"
-UBER_CUSTOMER_ID_HML = "551fca94-17d0-4acf-a3f8-05d93a0abe6a"
+# A conta de teste tem o produto de entregas liberado; a de produção ainda não.
+UBER_SCOPE_TESTE = "direct.organizations eats.deliveries"
+UBER_BASE_URL_TESTE = "https://sandbox-api.uber.com"
+UBER_CUSTOMER_ID_TESTE = "c1cc78e9-6147-5db8-82be-1b0f45446e09"
 
 IFOOD_BASE_URL = "https://merchant-api.ifood.com.br"
-IFOOD_BASE_URL_HML = "https://merchant-api.ifood.com.br"
+IFOOD_BASE_URL_TESTE = "https://merchant-api.ifood.com.br"
 IFOOD_MERCHANT_ID = ""
 NOVA99_BASE_URL = "https://api.99app.com"
-NOVA99_BASE_URL_HML = "https://api.99app.com"
+NOVA99_BASE_URL_TESTE = "https://api.99app.com"
 NOVA99_AUTH_URL = "https://api.99app.com/oauth/token"
 
 
@@ -180,7 +187,7 @@ RESTAURANTE_NOME = "Villa Deli"
 RESTAURANTE_CEP = "34006-086"
 RESTAURANTE_LAT = "-19.978452"
 RESTAURANTE_LNG = "-43.932128"
-RESTAURANTE_TELEFONE = "PREENCHER_TELEFONE_DA_LOJA"
+RESTAURANTE_TELEFONE = "+5531984428765"
 
 CARDAPIO_WEB_HEADER = "x-webhook-secret"
 CARDAPIO_WEB_BASE_URL = ""
@@ -193,14 +200,16 @@ UBER_AUTH_URL = "https://auth.uber.com/oauth/v2/token"
 # aplicacao, troque para: "direct.organizations eats.deliveries"
 UBER_SCOPE = "direct.organizations"
 UBER_CUSTOMER_ID = "551fca94-17d0-4acf-a3f8-05d93a0abe6a"
-UBER_BASE_URL_HML = "https://sandbox-api.uber.com"
-UBER_CUSTOMER_ID_HML = "551fca94-17d0-4acf-a3f8-05d93a0abe6a"
+# A conta de teste tem o produto de entregas liberado; a de produção ainda não.
+UBER_SCOPE_TESTE = "direct.organizations eats.deliveries"
+UBER_BASE_URL_TESTE = "https://sandbox-api.uber.com"
+UBER_CUSTOMER_ID_TESTE = "c1cc78e9-6147-5db8-82be-1b0f45446e09"
 
 IFOOD_BASE_URL = "https://merchant-api.ifood.com.br"
-IFOOD_BASE_URL_HML = "https://merchant-api.ifood.com.br"
+IFOOD_BASE_URL_TESTE = "https://merchant-api.ifood.com.br"
 IFOOD_MERCHANT_ID = ""
 NOVA99_BASE_URL = "https://api.99app.com"
-NOVA99_BASE_URL_HML = "https://api.99app.com"
+NOVA99_BASE_URL_TESTE = "https://api.99app.com"
 NOVA99_AUTH_URL = "https://api.99app.com/oauth/token"
 
 # ---------------------------------------------------------------------------

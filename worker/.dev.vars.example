@@ -16,12 +16,33 @@ WEBHOOK_SECRET=dev-webhook-123
 # Em produção gere um valor longo:  openssl rand -base64 48
 JWT_SECRET=dev-jwt-secret-troque-em-producao-1234567890
 
-# --- Uber Direct -----------------------------------------------------------
-# Onde pegar: developer.uber.com > sua aplicação Direct > Credentials.
-# Em dev/HML use as credenciais de SANDBOX; o customer_id de sandbox vai em
-# UBER_CUSTOMER_ID_HML, no wrangler.toml (não é segredo).
+
+# ===========================================================================
+# UBER DIRECT — dois conjuntos separados
+#
+# O MODO DE OPERAÇÃO (teste | produção) decide qual conjunto é usado, e é
+# trocado na tela de Configurações do painel, sem deploy.
+#
+# Os Customer ID (que não são segredo) ficam no wrangler.toml:
+#   UBER_CUSTOMER_ID_TESTE  -> conta de sandbox
+#   UBER_CUSTOMER_ID        -> conta real
+# ===========================================================================
+
+# --- TESTE (sandbox) — nada aqui gera cobrança -----------------------------
+# developer.uber.com > sua aplicação Direct > Credentials (ambiente de teste)
+UBER_CLIENT_ID_TESTE=
+UBER_CLIENT_SECRET_TESTE=
+# Signing key do webhook de teste. Dashboard > Developer > Webhooks, menu de
+# três pontos do endpoint. É DIFERENTE do Client Secret.
+UBER_WEBHOOK_SECRET_TESTE=dev-uber-webhook-signing-key
+
+# --- PRODUÇÃO — corrida criada com estas credenciais é cobrada -------------
+# Deixe vazio enquanto estiver só testando: sem elas, o painel nem oferece a
+# troca para o modo produção.
 UBER_CLIENT_ID=
 UBER_CLIENT_SECRET=
+UBER_WEBHOOK_SECRET=
+
 
 # --- Cardápio Web ----------------------------------------------------------
 # Só necessário se o Hub for CHAMAR a API deles (hoje só recebemos webhook).

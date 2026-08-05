@@ -1,5 +1,10 @@
 import type { Env } from "../types";
-import { ambiente, uberCustomerId, uberUrls } from "../config/ambiente";
+import {
+  ambiente,
+  credenciaisUber,
+  testeUsandoCredencialDeProducao,
+} from "../config/ambiente";
+import { modoAtual, podeUsarProducao } from "../config/modo";
 import { provedoresAtivos } from "../config/provedores";
 import { getUberToken } from "../services/tokens";
 
@@ -43,18 +48,35 @@ const preenchido = (v: string | undefined) =>
 export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
   const itens: ItemDiagnostico[] = [];
   const amb = ambiente(env);
+  const modo = await modoAtual(env);
+  const cred = credenciaisUber(env, modo);
   const ativos = provedoresAtivos(env).map((p) => p.id);
 
-  // --- Ambiente -------------------------------------------------------------
+  // --- Modo de operação -----------------------------------------------------
+  // É o que decide se a corrida é cobrada. Primeiro item da lista de propósito.
   itens.push({
-    chave: "ambiente",
-    titulo: "Ambiente",
+    chave: "modo",
+    titulo: "Modo de operação",
     status: "ok",
     detalhe:
-      amb === "producao"
-        ? "Produção — as entregas despachadas aqui são cobradas de verdade."
-        : "Ambiente de teste — nenhuma entrega é cobrada.",
+      modo === "producao"
+        ? "PRODUÇÃO — as entregas despachadas são reais e cobradas."
+        : podeUsarProducao(env)
+          ? "Teste — nenhuma entrega é cobrada. Troque para produção quando validar."
+          : "Teste — este ambiente não pode operar em produção.",
   });
+
+  if (modo === "teste" && testeUsandoCredencialDeProducao(env)) {
+    itens.push({
+      chave: "credencial_teste",
+      titulo: "Credenciais de teste",
+      status: "aviso",
+      detalhe:
+        "O modo teste está usando as credenciais de produção — não há credenciais de teste cadastradas.",
+      comoResolver:
+        "Peça as credenciais de sandbox ao Uber e envie ao suporte, para que teste e produção fiquem separados.",
+    });
+  }
 
   // --- Infra ----------------------------------------------------------------
   try {
@@ -130,6 +152,24 @@ export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
       "Informe ao suporte o endereço exato da loja, com a localização no mapa.",
   });
 
+  // O Uber recusa a cotação inteira se o telefone da coleta não for válido —
+  // e a mensagem dele não diz qual campo, então vale checar aqui.
+  const tel = (env.RESTAURANTE_TELEFONE ?? "").trim();
+  // E.164 com o "+" obrigatório. Um número local como "(31) 3333-4444" é
+  // recusado de propósito: sem código de país o Uber devolve
+  // "pickup phone number is not valid" e a cotação inteira morre.
+  const telOk = /^\+[1-9]\d{9,14}$/.test(tel.replace(/[\s()-]/g, ""));
+
+  itens.push({
+    chave: "telefone",
+    titulo: "Telefone da loja",
+    status: telOk ? "ok" : "erro",
+    detalhe: telOk
+      ? tel
+      : "Telefone inválido ou não cadastrado. O Uber recusa toda cotação sem ele — é o número que o entregador liga na coleta.",
+    comoResolver: "Informe ao suporte o telefone de contato da loja, com DDD.",
+  });
+
   // --- Cardápio Web ---------------------------------------------------------
   itens.push({
     chave: "cardapio_web",
@@ -142,7 +182,7 @@ export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
   });
 
   // --- Uber Direct ----------------------------------------------------------
-  const customerId = uberCustomerId(env);
+  const customerId = cred.customerId;
 
   if (!ativos.includes("uber")) {
     itens.push({
@@ -154,8 +194,8 @@ export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
   } else {
     // Nomes como o Uber os chama no portal dele — é onde o lojista vai olhar.
     const faltando: string[] = [];
-    if (!preenchido(env.UBER_CLIENT_ID)) faltando.push("Client ID");
-    if (!preenchido(env.UBER_CLIENT_SECRET)) faltando.push("Client Secret");
+    if (!preenchido(cred.clientId)) faltando.push("Client ID");
+    if (!preenchido(cred.clientSecret)) faltando.push("Client Secret");
     if (!preenchido(customerId)) faltando.push("Customer ID");
 
     if (faltando.length > 0) {
@@ -177,10 +217,10 @@ export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
       // e mesmo assim não ter liberação para o produto de entregas. Sem esta
       // checagem, isso só apareceria no primeiro pedido real.
       try {
-        const token = await getUberToken(env);
+        const token = await getUberToken(env, modo);
 
         const res = await fetch(
-          `${uberUrls(env).base}/v1/customers/${customerId}/deliveries`,
+          `${cred.baseUrl}/v1/customers/${customerId}/deliveries`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
 
@@ -189,10 +229,11 @@ export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
             chave: "uber",
             titulo: "Uber Direct",
             status: "ok",
+            // O que importa aqui é o MODO (qual credencial), não o ambiente.
             detalhe:
-              amb === "producao"
-                ? "Conectado — pronto para despachar entregas reais."
-                : "Conectado ao ambiente de teste do Uber.",
+              modo === "producao"
+                ? "Conectado à conta real — pronto para despachar entregas cobradas."
+                : "Conectado à conta de teste do Uber.",
           });
         } else if (res.status === 401 || res.status === 403) {
           itens.push({
@@ -233,6 +274,20 @@ export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
         });
       }
     }
+  }
+
+  // --- Webhook de status da entrega -----------------------------------------
+  if (ativos.includes("uber")) {
+    itens.push({
+      chave: "uber_webhook",
+      titulo: "Acompanhamento da entrega",
+      status: preenchido(cred.webhookSecret) ? "ok" : "aviso",
+      detalhe: preenchido(cred.webhookSecret)
+        ? "Configurado — o painel recebe status e localização do entregador."
+        : "Sem chave de assinatura. O despacho funciona, mas o painel não recebe atualização de status nem a posição do entregador.",
+      comoResolver:
+        "No painel do Uber Direct, cadastre a URL de webhook do Hub e envie a chave de assinatura ao suporte.",
+    });
   }
 
   // --- Provedores ativos ----------------------------------------------------

@@ -45,12 +45,52 @@ export interface PedidoDetalhe {
   observacao?: string;
 }
 
+/** Estado ao vivo da entrega, alimentado pelos webhooks do parceiro. */
+export interface EntregaAoVivo {
+  provider: ProviderId;
+  deliveryIdExterno: string | null;
+  status: string | null;
+  statusAtualizadoEm: string | null;
+  trackingUrl: string | null;
+  dropoffEta: string | null;
+  courierNome: string | null;
+  courierTelefone: string | null;
+  courierVeiculo: string | null;
+  /** false = evento de teste (credenciais de sandbox). */
+  liveMode: boolean | null;
+}
+
+/** Status do Uber Direct em português, na ordem do ciclo de vida. */
+export const ROTULO_STATUS_ENTREGA: Record<string, string> = {
+  pending: "Procurando entregador",
+  pickup: "A caminho da loja",
+  pickup_complete: "Pedido coletado",
+  dropoff: "Saiu para entrega",
+  delivered: "Entregue",
+  canceled: "Cancelada",
+  returned: "Devolvida",
+  shopping_completed: "Compras concluídas",
+  acionado: "Acionado",
+};
+
+/** Cor do selo por status. */
+export const COR_STATUS_ENTREGA: Record<string, string> = {
+  pending: "bg-amber-50 text-amber-700 ring-amber-200",
+  pickup: "bg-blue-50 text-blue-700 ring-blue-200",
+  pickup_complete: "bg-blue-50 text-blue-700 ring-blue-200",
+  dropoff: "bg-indigo-50 text-indigo-700 ring-indigo-200",
+  delivered: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  canceled: "bg-red-50 text-red-700 ring-red-200",
+  returned: "bg-red-50 text-red-700 ring-red-200",
+};
+
 export interface CotacaoResponse {
   idPedido: string;
   pedido: PedidoDetalhe;
   maisBarato: ProviderId | null;
   cotacoes: Cotacao[];
   despacho: Despacho | null;
+  entrega: EntregaAoVivo | null;
 }
 
 export interface PedidoResumo {
@@ -91,13 +131,6 @@ export const ROTULO_PROVEDOR: Record<ProviderId, string> = {
   ifood: "iFood Entrega Fácil",
   "99": "99 Entregas",
   motoboy: "Motoboy Próprio",
-};
-
-export const EMOJI_PROVEDOR: Record<ProviderId, string> = {
-  uber: "🚗",
-  ifood: "🍔",
-  "99": "🛵",
-  motoboy: "🏍️",
 };
 
 /** Cores por plataforma — usadas nos gráficos e badges. */

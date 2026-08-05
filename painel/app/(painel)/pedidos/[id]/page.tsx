@@ -2,9 +2,15 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import type { CotacaoResponse, Despacho, ProviderId } from "@/lib/tipos";
-import { EMOJI_PROVEDOR } from "@/lib/tipos";
-import { brlOuGratis, dataHora } from "@/lib/formato";
+import type {
+  CotacaoResponse,
+  Despacho,
+  EntregaAoVivo,
+  ProviderId,
+} from "@/lib/tipos";
+import { COR_STATUS_ENTREGA, ROTULO_STATUS_ENTREGA } from "@/lib/tipos";
+import LogoProvedor from "@/components/LogoProvedor";
+import { brlOuGratis, dataHora, hora } from "@/lib/formato";
 import {
   Skeleton,
   SkeletonCartoesCotacao,
@@ -21,6 +27,7 @@ export default function PaginaCotacao({ params }: { params: { id: string } }) {
   const [despachando, setDespachando] = useState<ProviderId | null>(null);
   const [aviso, setAviso] = useState<Aviso | null>(null);
   const [despacho, setDespacho] = useState<Despacho | null>(null);
+  const [entrega, setEntrega] = useState<EntregaAoVivo | null>(null);
 
   const cotar = useCallback(async () => {
     setCarregando(true);
@@ -37,6 +44,7 @@ export default function PaginaCotacao({ params }: { params: { id: string } }) {
 
       setDados(json);
       if (json.despacho) setDespacho(json.despacho);
+      setEntrega(json.entrega ?? null);
     } catch {
       setDados(null);
       setAviso({ tipo: "erro", texto: "Não foi possível falar com o servidor." });
@@ -81,6 +89,20 @@ export default function PaginaCotacao({ params }: { params: { id: string } }) {
   useEffect(() => {
     cotar();
   }, [cotar]);
+
+  // Depois de despachado, o status muda por webhook — sem aviso ao painel.
+  // Enquanto a entrega não termina, revalida a cada 20 s.
+  useEffect(() => {
+    if (!despacho) return;
+    const terminou =
+      entrega?.status === "delivered" ||
+      entrega?.status === "canceled" ||
+      entrega?.status === "returned";
+    if (terminou) return;
+
+    const t = setInterval(cotar, 20_000);
+    return () => clearInterval(t);
+  }, [despacho, entrega?.status, cotar]);
 
   const travado = despacho !== null;
   const pedido = dados?.pedido;
@@ -131,18 +153,71 @@ export default function PaginaCotacao({ params }: { params: { id: string } }) {
 
       {despacho && (
         <div className="mb-6 rounded-xl border border-emerald-200 bg-white p-5">
-          <p className="font-semibold text-emerald-700">
-            ✅ Entrega despachada — {despacho.status}
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-semibold text-emerald-700">✅ Entrega despachada</p>
+
+            {/* Status ao vivo vem dos webhooks do parceiro. Sem webhook
+                configurado, `entrega.status` fica no valor do despacho. */}
+            {entrega?.status && (
+              <span
+                className={`rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
+                  COR_STATUS_ENTREGA[entrega.status] ??
+                  "bg-gray-100 text-gray-700 ring-gray-300"
+                }`}
+              >
+                {ROTULO_STATUS_ENTREGA[entrega.status] ?? entrega.status}
+              </span>
+            )}
+
+            {/* Aviso que evita confundir simulação com corrida real. */}
+            {entrega?.liveMode === false && (
+              <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-200">
+                Ambiente de teste
+              </span>
+            )}
+          </div>
+
+          {entrega?.courierNome && (
+            <p className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-gray-700">
+              <LogoProvedor provider={despacho.provider} tamanho={20} />
+              {entrega.courierNome}
+              {entrega.courierVeiculo && ` · ${entrega.courierVeiculo}`}
+              {entrega.courierTelefone && (
+                <>
+                  {" · "}
+                  <a
+                    href={`tel:${entrega.courierTelefone}`}
+                    className="font-medium text-emerald-700 underline"
+                  >
+                    {entrega.courierTelefone}
+                  </a>
+                </>
+              )}
+            </p>
+          )}
+
+          {entrega?.dropoffEta && (
+            <p className="mt-1 text-sm text-gray-500">
+              Previsão de entrega: {hora(entrega.dropoffEta)}
+            </p>
+          )}
+
           <p className="mt-1 text-sm text-gray-500">
             Código da entrega{" "}
             {/* IDs de parceiro são longos e sem espaço: sem break-all eles
                 empurram a largura da página no celular. */}
             <span className="break-all font-mono">{despacho.deliveryId}</span>
           </p>
-          {despacho.trackingUrl && (
+
+          {entrega?.statusAtualizadoEm && (
+            <p className="mt-1 text-xs text-gray-400">
+              Atualizado às {hora(entrega.statusAtualizadoEm)}
+            </p>
+          )}
+          {/* O tracking_url pode chegar/mudar pelo webhook — o do webhook vence. */}
+          {(entrega?.trackingUrl ?? despacho.trackingUrl) && (
             <a
-              href={despacho.trackingUrl}
+              href={entrega?.trackingUrl ?? despacho.trackingUrl ?? "#"}
               target="_blank"
               rel="noreferrer"
               className="mt-3 block rounded-lg bg-emerald-600 px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-emerald-700 sm:inline-block sm:py-2"
@@ -168,16 +243,22 @@ export default function PaginaCotacao({ params }: { params: { id: string } }) {
                 const barato = dados?.maisBarato === c.provider && !travado;
 
                 return (
+                  // flex-col + o mt-auto no rodapé mantêm o botão na mesma
+                  // altura em todos os cards. Sem isso, um provedor que tem
+                  // linha de detalhe (o motoboy mostra a faixa de raio) empurra
+                  // o próprio botão para baixo e a fileira fica desalinhada.
                   <div
                     key={c.provider}
-                    className={`rounded-xl border bg-white p-5 transition ${
+                    className={`flex flex-col rounded-xl border bg-white p-5 transition ${
                       barato ? "border-[var(--marca-primaria)] ring-2 ring-gray-200" : "border-gray-200"
                     } ${!c.disponivel || travado ? "opacity-70" : ""}`}
                   >
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xl">{EMOJI_PROVEDOR[c.provider]}</span>
-                        <span className="font-medium text-gray-900">{c.nome}</span>
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <LogoProvedor provider={c.provider} tamanho={28} />
+                        <span className="truncate font-medium text-gray-900">
+                          {c.nome}
+                        </span>
                       </div>
                       {barato && (
                         <span className="rounded-full bg-[var(--marca-primaria)] px-2 py-0.5 text-xs font-semibold text-[var(--marca-contraste)]">
@@ -201,17 +282,19 @@ export default function PaginaCotacao({ params }: { params: { id: string } }) {
                           <p className="mt-1 text-xs text-gray-400">{c.detalhe}</p>
                         )}
 
-                        <button
-                          onClick={() => despachar(c.provider, c.nome)}
-                          disabled={despachando !== null || travado}
-                          className="mt-4 w-full rounded-lg bg-[var(--marca-primaria)] py-2.5 text-sm font-semibold text-[var(--marca-contraste)] transition hover:bg-[var(--marca-primaria-hover)] disabled:opacity-50"
-                        >
-                          {despachando === c.provider
-                            ? "Despachando..."
-                            : travado
-                            ? "Já despachado"
-                            : "Despachar"}
-                        </button>
+                        <div className="mt-auto pt-4">
+                          <button
+                            onClick={() => despachar(c.provider, c.nome)}
+                            disabled={despachando !== null || travado}
+                            className="w-full rounded-lg bg-[var(--marca-primaria)] py-2.5 text-sm font-semibold text-[var(--marca-contraste)] transition hover:bg-[var(--marca-primaria-hover)] disabled:opacity-50"
+                          >
+                            {despachando === c.provider
+                              ? "Despachando..."
+                              : travado
+                              ? "Já despachado"
+                              : "Despachar"}
+                          </button>
+                        </div>
                       </>
                     ) : (
                       <p className="mt-4 text-sm text-red-600">

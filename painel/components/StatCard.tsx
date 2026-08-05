@@ -7,7 +7,8 @@ export default function StatCard({
   cor,
   carregando,
 }: {
-  rotulo: string;
+  /** Aceita nó, não só texto, para caber a marca do parceiro ao lado do nome. */
+  rotulo: React.ReactNode;
   valor: string;
   detalhe?: string;
   /** Cor da barrinha lateral. Use a cor da plataforma quando fizer sentido. */
@@ -24,7 +25,9 @@ export default function StatCard({
         />
       )}
 
-      <p className="text-sm font-medium text-gray-500">{rotulo}</p>
+      <div className="flex items-center gap-2 text-sm font-medium text-gray-500">
+        {rotulo}
+      </div>
 
       {carregando ? (
         <div

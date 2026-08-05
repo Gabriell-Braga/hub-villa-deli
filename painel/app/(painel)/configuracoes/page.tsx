@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { MARCA } from "@/config/marca";
 import Logo from "@/components/Logo";
 import { SkeletonDiagnostico } from "@/components/Skeleton";
+import SeletorModo from "@/components/SeletorModo";
 
 // ---------------------------------------------------------------------------
 // Tela de Configurações / Diagnóstico.
@@ -91,6 +92,10 @@ export default function PaginaConfiguracoes() {
           {carregando ? "Verificando..." : "Verificar agora"}
         </button>
       </header>
+
+      {/* Modo de operação — primeiro de propósito: é o que decide se a
+          entrega é cobrada de verdade. */}
+      <SeletorModo aoTrocar={verificar} />
 
       {/* Identidade do cliente */}
       <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5">

@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import type { PedidoResumo, StatusPedido } from "@/lib/tipos";
-import { EMOJI_PROVEDOR, ROTULO_PROVEDOR } from "@/lib/tipos";
+import { ROTULO_PROVEDOR } from "@/lib/tipos";
+import LogoProvedor from "./LogoProvedor";
 import { brlOuGratis, dataHora, desde } from "@/lib/formato";
 import { SkeletonListaPedidos } from "./Skeleton";
 
@@ -52,8 +53,8 @@ function Valor({ p }: { p: PedidoResumo }) {
         <p className="font-semibold text-gray-900">
           {brlOuGratis(p.despacho.valorPago)}
         </p>
-        <p className="text-xs text-gray-400">
-          {EMOJI_PROVEDOR[p.despacho.provider]}{" "}
+        <p className="flex items-center justify-end gap-1.5 text-xs text-gray-400">
+          <LogoProvedor provider={p.despacho.provider} tamanho={14} />
           {ROTULO_PROVEDOR[p.despacho.provider]}
         </p>
       </div>

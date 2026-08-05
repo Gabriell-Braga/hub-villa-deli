@@ -1,7 +1,7 @@
-import type { Cotacao, Env, Pedido, ResultadoDespacho } from "../types";
+import type { Cotacao, Env, ModoOperacao, Pedido, ResultadoDespacho } from "../types";
 import { getUberToken } from "./tokens";
 import { enderecoFormatado } from "../lib/geo";
-import { uberCustomerId, uberUrls } from "../config/ambiente";
+import { credenciaisUber } from "../config/ambiente";
 
 // ---------------------------------------------------------------------------
 // Uber Direct B2B
@@ -20,7 +20,12 @@ function pickupPayload(env: Env) {
   };
 }
 
-export async function cotarUber(env: Env, pedido: Pedido): Promise<Cotacao> {
+export async function cotarUber(
+  env: Env,
+  pedido: Pedido,
+  modo: ModoOperacao
+): Promise<Cotacao> {
+  const cred = credenciaisUber(env, modo);
   const base: Cotacao = {
     provider: "uber",
     nome: "Uber Direct",
@@ -32,9 +37,9 @@ export async function cotarUber(env: Env, pedido: Pedido): Promise<Cotacao> {
     expiraEm: null,
   };
 
-  const token = await getUberToken(env);
+  const token = await getUberToken(env, modo);
   const res = await fetch(
-    `${uberUrls(env).base}/v1/customers/${uberCustomerId(env)}/delivery_quotes`,
+    `${cred.baseUrl}/v1/customers/${cred.customerId}/delivery_quotes`,
     {
       method: "POST",
       headers: {
@@ -78,11 +83,13 @@ export async function cotarUber(env: Env, pedido: Pedido): Promise<Cotacao> {
 export async function despacharUber(
   env: Env,
   pedido: Pedido,
-  cotacao: Cotacao
+  cotacao: Cotacao,
+  modo: ModoOperacao
 ): Promise<ResultadoDespacho> {
-  const token = await getUberToken(env);
+  const cred = credenciaisUber(env, modo);
+  const token = await getUberToken(env, modo);
   const res = await fetch(
-    `${uberUrls(env).base}/v1/customers/${uberCustomerId(env)}/deliveries`,
+    `${cred.baseUrl}/v1/customers/${cred.customerId}/deliveries`,
     {
       method: "POST",
       headers: {

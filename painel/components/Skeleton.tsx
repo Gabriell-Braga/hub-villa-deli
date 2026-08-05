@@ -106,8 +106,9 @@ export function SkeletonCartoesCotacao({ cartoes = 2 }: { cartoes?: number }) {
     <div className="grid gap-4 sm:grid-cols-2">
       {Array.from({ length: cartoes }, (_, i) => (
         <Cartao key={i}>
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-6 w-6 rounded-full" />
+          {/* Quadrado arredondado, igual à marca do provedor no card real. */}
+          <div className="flex items-center gap-2.5">
+            <Skeleton className="h-7 w-7 rounded-lg" />
             <Skeleton className="h-4 w-28" />
           </div>
           <div className="mt-4 flex items-end justify-between">

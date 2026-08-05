@@ -33,7 +33,10 @@ import {
   consumirTokenEDefinirSenha,
   invalidarTokensDoUsuario,
   limparTokensAntigos,
+  obterEntregaAoVivo,
 } from "./lib/store";
+import { assinaturaValida } from "./lib/assinatura";
+import { processarWebhookUber } from "./services/uber-webhook";
 import {
   entregarLink,
   gerarTokenCru,
@@ -49,7 +52,8 @@ import { conferirSenha } from "./lib/senha";
 import { emitirToken, exigirAdmin, exigirLogin, VALIDADE_SEGUNDOS } from "./lib/sessao";
 import { calcularEstatisticas } from "./lib/estatisticas";
 import { rodarDiagnostico } from "./lib/diagnostico";
-import { ambiente } from "./config/ambiente";
+import { ambiente, credenciaisUber } from "./config/ambiente";
+import { definirModo, modoAtual, podeUsarProducao, quemTrocouModo } from "./config/modo";
 
 type Contexto = {
   Bindings: Env;
@@ -88,6 +92,10 @@ app.use("/api/diagnostico", exigirLogin, exigirAdmin);
 // Gestão de usuários — só admin.
 app.use("/api/usuarios", exigirLogin, exigirAdmin);
 app.use("/api/usuarios/*", exigirLogin, exigirAdmin);
+
+// Modo de operação: ler exige login; TROCAR exige admin.
+app.use("/api/modo", exigirLogin);
+app.use("/api/modo/trocar", exigirLogin, exigirAdmin);
 
 // Healthcheck — público de propósito, não devolve nada sensível.
 app.get("/", (c) =>
@@ -385,6 +393,77 @@ app.post("/api/webhook/cardapio-web", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// 1b) Webhook do Uber Direct — status da entrega e posição do entregador
+//     POST /api/webhook/uber
+//
+// Configurar em direct.uber.com > Developer > Webhooks, apontando para esta
+// URL e marcando os eventos delivery_status e courier_update. A signing key
+// que eles geram vai no segredo UBER_WEBHOOK_SECRET.
+//
+// Autenticação é por ASSINATURA, não por login: a Uber calcula HMAC-SHA256 do
+// corpo cru com a signing key e manda em x-uber-signature.
+//
+// Responder 2xx sempre que o evento tiver sido recebido, mesmo que não haja
+// nada a fazer com ele. Um 4xx faz a Uber reenviar 3 vezes à toa; um 5xx
+// também. Só devolvemos erro quando a assinatura não confere.
+// ---------------------------------------------------------------------------
+app.post("/api/webhook/uber", async (c) => {
+  // CORPO CRU, antes de qualquer parse: a assinatura é sobre estes bytes
+  // exatos. Reserializar o JSON muda espaçamento e quebra o hash.
+  const corpoBruto = await c.req.text();
+
+  const recebida =
+    c.req.header("x-uber-signature") ?? c.req.header("x-postmates-signature");
+
+  // Aceita a chave dos DOIS modos. Uma entrega criada em teste continua
+  // mandando eventos depois de virar a chave para produção — validar só contra
+  // o modo atual descartaria esses eventos e a entrega ficaria congelada no
+  // painel. Ambas as chaves são nossas, então não afrouxa a segurança.
+  const chaves = [
+    credenciaisUber(c.env, await modoAtual(c.env)).webhookSecret,
+    c.env.UBER_WEBHOOK_SECRET,
+    c.env.UBER_WEBHOOK_SECRET_TESTE,
+  ].filter((k): k is string => !!k && k.trim() !== "");
+
+  if (chaves.length === 0) {
+    // Falha fechada. Sem a signing key não há como distinguir um evento real
+    // de alguém forjando "entrega concluída".
+    console.warn("[uber-webhook] nenhuma signing key configurada");
+    return c.json({ erro: "webhook não configurado" }, 500);
+  }
+
+  let autenticado = false;
+  for (const chave of chaves) {
+    if (await assinaturaValida(chave, corpoBruto, recebida ?? null)) {
+      autenticado = true;
+      break;
+    }
+  }
+
+  if (!autenticado) {
+    console.warn("[uber-webhook] assinatura inválida");
+    return c.json({ erro: "assinatura inválida" }, 401);
+  }
+
+  try {
+    const r = await processarWebhookUber(c.env, corpoBruto);
+    if (!r.ok) {
+      // Payload malformado: registrar e aceitar. Reenviar não vai consertar.
+      console.warn(`[uber-webhook] ${r.motivo}`);
+      return c.json({ ok: true, ignorado: r.motivo });
+    }
+    return c.json({ ok: true, duplicado: r.duplicado, detalhe: r.detalhe });
+  } catch (e) {
+    // Aqui sim vale 500: foi falha nossa, e o reenvio da Uber tem chance de
+    // funcionar depois.
+    console.error(
+      `[uber-webhook] falha ao processar: ${e instanceof Error ? e.message : e}`
+    );
+    return c.json({ erro: "falha ao processar" }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // 2) Listagem de pedidos
 //    GET /api/pedidos?aba=abertos|historico&limite=50
 // ---------------------------------------------------------------------------
@@ -421,8 +500,11 @@ app.get("/api/cotacao/:idPedido", async (c) => {
 
   // Fetch paralelo. allSettled para que a falha de UM provedor não derrube a
   // cotação dos demais — o painel mostra o que respondeu.
+  // O modo decide QUAIS credenciais do parceiro serão usadas.
+  const modo = await modoAtual(env);
+
   const resultados = await Promise.allSettled(
-    ativos.map((p) => p.cotar(env, pedido))
+    ativos.map((p) => p.cotar(env, pedido, modo))
   );
 
   const cotacoes: Cotacao[] = resultados.map((r, i) => {
@@ -451,8 +533,10 @@ app.get("/api/cotacao/:idPedido", async (c) => {
 
   const maisBarato = cotacoes.find((x) => x.disponivel)?.provider ?? null;
   const despacho = await obterDespacho(env, idPedido);
+  // Estado ao vivo vindo dos webhooks do parceiro (entregador, ETA, status).
+  const entrega = await obterEntregaAoVivo(env, idPedido);
 
-  return c.json({ idPedido, pedido, maisBarato, cotacoes, despacho });
+  return c.json({ idPedido, pedido, maisBarato, cotacoes, despacho, entrega });
 });
 
 // ---------------------------------------------------------------------------
@@ -512,7 +596,13 @@ app.post("/api/despachar", async (c) => {
   }
 
   try {
-    const resultado: ResultadoDespacho = await prov.despachar(env, pedido, cotacao);
+    const modo = await modoAtual(env);
+    const resultado: ResultadoDespacho = await prov.despachar(
+      env,
+      pedido,
+      cotacao,
+      modo
+    );
 
     await concluirDespacho(env, idPedido, resultado);
     // Histórico para o relatório. Guarda quem clicou.
@@ -536,6 +626,66 @@ app.get("/api/estatisticas", async (c) => {
 
   const estatisticas = await calcularEstatisticas(c.env, janela);
   return c.json(estatisticas);
+});
+
+// ---------------------------------------------------------------------------
+// 5b) MODO DE OPERAÇÃO — teste × produção
+//     GET  /api/modo          (qualquer usuário logado — o painel usa no aviso)
+//     POST /api/modo/trocar   { modo }  (admin)
+//
+// Decide QUAIS credenciais do parceiro são usadas. Em teste nada é cobrado.
+// Ver config/modo.ts para a trava que impede dev/hml de operar em produção.
+// ---------------------------------------------------------------------------
+app.get("/api/modo", async (c) => {
+  const modo = await modoAtual(c.env);
+  const cred = credenciaisUber(c.env, modo);
+
+  return c.json({
+    modo,
+    ambiente: ambiente(c.env),
+    /** false = este Worker está travado em teste e nem oferece a troca. */
+    podeTrocarParaProducao: podeUsarProducao(c.env),
+    ultimaTroca: await quemTrocouModo(c.env),
+    uber: {
+      // Só o suficiente para o admin conferir que trocou de conta mesmo.
+      // Nunca o secret.
+      baseUrl: cred.baseUrl,
+      customerId: cred.customerId ? `…${cred.customerId.slice(-6)}` : null,
+      clientIdConfigurado: !!cred.clientId,
+      webhookConfigurado: !!cred.webhookSecret,
+    },
+  });
+});
+
+app.post("/api/modo/trocar", async (c) => {
+  const body = await c.req.json<{ modo?: string }>().catch(() => null);
+  const alvo = body?.modo;
+
+  if (alvo !== "teste" && alvo !== "producao") {
+    return c.json({ erro: 'modo deve ser "teste" ou "producao"' }, 400);
+  }
+
+  // Não deixa virar a chave para produção sem as credenciais reais no lugar:
+  // o resultado seria toda cotação falhando com o restaurante achando que
+  // está no ar.
+  if (alvo === "producao") {
+    const cred = credenciaisUber(c.env, "producao");
+    if (!cred.clientId || !cred.clientSecret || !cred.customerId) {
+      return c.json(
+        {
+          erro:
+            "Faltam credenciais de produção do Uber. Cadastre-as antes de trocar de modo.",
+        },
+        400
+      );
+    }
+  }
+
+  const r = await definirModo(c.env, alvo, c.get("usuario").email);
+  if (!r.ok) return c.json({ erro: r.erro }, 400);
+
+  console.log(`[modo] ${c.get("usuario").email} trocou para ${alvo}`);
+  return c.json({ ok: true, modo: alvo });
 });
 
 // ---------------------------------------------------------------------------

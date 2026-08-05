@@ -1,4 +1,4 @@
-import type { Cotacao, Env, Pedido, ResultadoDespacho } from "../types";
+import type { Cotacao, Env, ModoOperacao, Pedido, ResultadoDespacho } from "../types";
 import { getIfoodToken } from "./tokens";
 
 // ---------------------------------------------------------------------------
@@ -10,7 +10,11 @@ import { getIfoodToken } from "./tokens";
 // (auth -> cotação -> criação) está correta; só os nomes de rota podem variar.
 // ---------------------------------------------------------------------------
 
-export async function cotarIfood(env: Env, pedido: Pedido): Promise<Cotacao> {
+export async function cotarIfood(
+  env: Env,
+  pedido: Pedido,
+  modo: ModoOperacao
+): Promise<Cotacao> {
   const base: Cotacao = {
     provider: "ifood",
     nome: "iFood Entrega Fácil",
@@ -22,7 +26,7 @@ export async function cotarIfood(env: Env, pedido: Pedido): Promise<Cotacao> {
     expiraEm: null,
   };
 
-  const token = await getIfoodToken(env);
+  const token = await getIfoodToken(env, modo);
 
   const res = await fetch(
     `${env.IFOOD_BASE_URL}/logistics/v1.0/merchants/${env.IFOOD_MERCHANT_ID}/deliveries/quotations`,
@@ -76,9 +80,10 @@ export async function cotarIfood(env: Env, pedido: Pedido): Promise<Cotacao> {
 export async function despacharIfood(
   env: Env,
   pedido: Pedido,
-  cotacao: Cotacao
+  cotacao: Cotacao,
+  modo: ModoOperacao
 ): Promise<ResultadoDespacho> {
-  const token = await getIfoodToken(env);
+  const token = await getIfoodToken(env, modo);
 
   const res = await fetch(
     `${env.IFOOD_BASE_URL}/logistics/v1.0/merchants/${env.IFOOD_MERCHANT_ID}/deliveries`,

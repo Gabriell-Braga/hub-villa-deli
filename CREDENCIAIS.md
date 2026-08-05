@@ -25,41 +25,85 @@ No portal `developer.uber.com`, na sua aplicação Direct, você tem **dois
 conjuntos**: sandbox e produção. Eles não se misturam — client_id de sandbox
 não funciona em produção e vice-versa.
 
-| Valor do portal | Onde colocar |
-|---|---|
-| Client ID | segredo `UBER_CLIENT_ID` |
-| Client Secret | segredo `UBER_CLIENT_SECRET` |
-| Customer ID (sandbox) | `UBER_CUSTOMER_ID_HML` no `wrangler.toml` |
-| Customer ID (produção) | `UBER_CUSTOMER_ID` no `wrangler.toml` |
+São **dois conjuntos completos e independentes**. Quem escolhe qual está valendo
+é o **modo de operação**, trocado na tela de Configurações do painel — sem
+deploy. Ver [Modo de operação](#modo-de-operação-teste--produção).
 
-O Customer ID **não é segredo** (vai na URL de toda requisição), por isso mora
-no `wrangler.toml`. Client ID e Secret são segredos.
+| Valor do portal | Modo TESTE | Modo PRODUÇÃO | É segredo? |
+|---|---|---|---|
+| Client ID | `UBER_CLIENT_ID_TESTE` | `UBER_CLIENT_ID` | ✅ |
+| Client Secret | `UBER_CLIENT_SECRET_TESTE` | `UBER_CLIENT_SECRET` | ✅ |
+| Signing key do webhook | `UBER_WEBHOOK_SECRET_TESTE` | `UBER_WEBHOOK_SECRET` | ✅ |
+| Customer ID | `UBER_CUSTOMER_ID_TESTE` | `UBER_CUSTOMER_ID` | ❌ |
+| Host da API | `UBER_BASE_URL_TESTE` | `UBER_BASE_URL` | ❌ |
 
-**Desenvolvimento** — edite `worker/.dev.vars`:
+Os dois últimos **não são segredo** (vão na URL de toda requisição), por isso
+moram no `wrangler.toml`. Os três primeiros nunca entram em arquivo versionado.
+
+> Se as credenciais de teste estiverem vazias, o modo teste cai nas de
+> produção — e o diagnóstico avisa em amarelo. É proposital, para não quebrar
+> quem só tem um par, mas significa que "teste" está usando a conta real.
+
+> A **signing key do webhook é diferente do Client Secret.** Ela fica em
+> direct.uber.com → Developer → Webhooks → menu de três pontos do endpoint.
+> Confundir as duas faz todo webhook ser rejeitado com 401.
+
+## Modo de operação: teste × produção
+
+Não confunda com **ambiente** — são coisas diferentes:
+
+| | O que é | Como muda |
+|---|---|---|
+| **Ambiente** (`dev`/`hml`/`producao`) | qual Worker está rodando | deploy |
+| **Modo** (`teste`/`producao`) | quais credenciais do parceiro usar | botão no painel |
+
+O Worker de produção **começa sempre em modo teste**, mesmo recém-publicado.
+Isso é de propósito: o primeiro deploy não pode sair cobrando corrida antes de
+alguém conferir. Um admin vira a chave em **Configurações** quando validar.
+
+Travas em volta disso:
+
+- **Só admin** troca o modo (atendente recebe 403).
+- **Ir para produção exige digitar `PRODUCAO`** — não é um clique.
+- **Dev e HML são travados em teste**, mesmo se alguém gravar outra coisa no
+  banco. Ambiente de teste jamais gasta dinheiro.
+- **Sem credenciais reais cadastradas, a troca é recusada** — senão o
+  restaurante iria para produção com toda cotação falhando.
+- **Faixa amarela permanente no topo do painel** enquanto estiver em teste.
+- **Voltar para teste é imediato**, sem confirmação: parar de gastar nunca deve
+  ter atrito.
+- O cache de token OAuth2 é separado por modo. Sem isso, virar a chave
+  reaproveitaria o token do sandbox contra a API real.
+
+### Credenciais de TESTE — passo a passo
+
+Com as credenciais de sandbox em mãos, para rodar na sua máquina:
+
+1. Abra `worker/.dev.vars` (git-ignorado) e preencha o bloco de teste:
+
+```bash
+UBER_CLIENT_ID_TESTE=<client id de teste>
+UBER_CLIENT_SECRET_TESTE=<client secret de teste>
+UBER_WEBHOOK_SECRET_TESTE=<signing key do webhook de teste>
 ```
-UBER_CLIENT_ID=<client id de sandbox>
-UBER_CLIENT_SECRET=<client secret de sandbox>
-```
-e o customer id de sandbox no `wrangler.toml`, bloco `[vars]`:
+
+2. Em `worker/wrangler.toml`, bloco `[vars]`, ponha o customer id de teste:
+
 ```toml
-UBER_CUSTOMER_ID_HML = "<customer id de sandbox>"
+UBER_CUSTOMER_ID_TESTE = "<customer id de teste>"
 ```
 
-**Homologação:**
-```bash
-cd worker
-npx wrangler secret put UBER_CLIENT_ID     --env hml
-npx wrangler secret put UBER_CLIENT_SECRET --env hml
-# e edite [env.hml.vars] no wrangler.toml:
-#   UBER_CUSTOMER_ID_HML = "<customer id de sandbox>"
-```
+3. Reinicie o `npm run dev` do worker (o `.dev.vars` só é lido no boot).
 
-**Produção:**
+4. Entre no painel como admin → **Configurações** → *Verificar agora*.
+   O item "Uber Direct" diz exatamente o que ainda falta.
+
+Para **homologação na Cloudflare**, os mesmos três segredos vão por comando:
+
 ```bash
-npx wrangler secret put UBER_CLIENT_ID     --env producao
-npx wrangler secret put UBER_CLIENT_SECRET --env producao
-# e em [env.producao.vars]:
-#   UBER_CUSTOMER_ID = "<customer id de produção>"
+npx wrangler secret put UBER_CLIENT_ID_TESTE      --env hml
+npx wrangler secret put UBER_CLIENT_SECRET_TESTE  --env hml
+npx wrangler secret put UBER_WEBHOOK_SECRET_TESTE --env hml
 ```
 
 ### Escopo OAuth2 — atenção
@@ -95,14 +139,56 @@ resultado, então não é questão de ambiente.
 Direct/Deliveries nessa aplicação. Nada muda no código quando isso acontecer —
 só o `UBER_SCOPE` acima. A tela de Configurações detecta e vira verde sozinha.
 
-> **Confirme também o host de sandbox** (`UBER_BASE_URL_HML`) com o gerente de
+> **Confirme também o host de sandbox** (`UBER_BASE_URL_TESTE`) com o gerente de
 > conta. `https://sandbox-api.uber.com` responde e é reconhecido pelo Uber, mas
 > não deu para validar se é o sandbox correto do seu contrato enquanto a
 > permissão de entregas não sai.
 
-Como o código escolhe: enquanto `AMBIENTE != "producao"`, ele usa
-`UBER_BASE_URL_HML` + `UBER_CUSTOMER_ID_HML`. Ver
-[`worker/src/config/ambiente.ts`](worker/src/config/ambiente.ts).
+Como o código escolhe: o **modo de operação** resolve o conjunto inteiro de
+credenciais em [`worker/src/config/ambiente.ts`](worker/src/config/ambiente.ts)
+(função `credenciaisUber`).
+
+### Webhook do Uber Direct (status da entrega)
+
+Sem isso o despacho funciona, mas o painel nunca sabe se o entregador chegou.
+Com isso, o atendente vê o status ao vivo, o nome e o telefone do entregador e a
+previsão de entrega.
+
+**Onde cadastrar:** direct.uber.com → Developer → Webhooks → novo endpoint.
+
+| Campo | Valor |
+|---|---|
+| URL | `https://SEU-WORKER.workers.dev/api/webhook/uber` |
+| Eventos | `delivery_status` e `courier_update` |
+| Signing key | copie e guarde em `UBER_WEBHOOK_SECRET` |
+
+**Em desenvolvimento a Uber não alcança `localhost`.** Duas saídas:
+
+- Exponha com `npx ngrok http 8787` e cadastre a URL do ngrok.
+- Ou simule sem depender deles:
+
+```bash
+cd worker
+node scripts/simular-webhook-uber.mjs <delivery_id> pickup
+node scripts/simular-webhook-uber.mjs <delivery_id> delivered
+node scripts/simular-webhook-uber.mjs <delivery_id> courier
+```
+
+O script assina igual ao Uber (HMAC-SHA256 do corpo cru, header
+`x-uber-signature`), então exercita o caminho real, inclusive a verificação.
+
+**Como o Hub trata os eventos:**
+
+- **Assinatura obrigatória.** Sem a signing key configurada, a rota recusa tudo
+  — senão qualquer um poderia forjar "entrega concluída".
+- **Idempotente.** A Uber reenvia o mesmo evento até 3 vezes (10s, 30s, 60s,
+  120s) se não receber 2xx. O `id` do evento é chave primária: reenvio vira
+  no-op. Sem isso, um `delivered` repetido sobrescreveria um `canceled` posterior.
+- **Sempre 2xx quando o evento foi recebido**, mesmo sem nada a fazer com ele.
+  Um 4xx só faria a Uber reenviar à toa. A única resposta de erro é 401, quando
+  a assinatura não confere.
+- **`live_mode: false`** (credenciais de teste) fica gravado e o painel mostra o
+  selo "Ambiente de teste" — para ninguém confundir simulação com corrida real.
 
 ---
 

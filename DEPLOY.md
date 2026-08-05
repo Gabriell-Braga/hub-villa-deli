@@ -65,8 +65,9 @@ Cada ambiente tem os seus. Nenhum vai para o `wrangler.toml`.
 ```bash
 npx wrangler secret put WEBHOOK_SECRET     --env hml   # o mesmo do Cardápio Web
 npx wrangler secret put JWT_SECRET         --env hml   # openssl rand -base64 48
-npx wrangler secret put UBER_CLIENT_ID     --env hml
-npx wrangler secret put UBER_CLIENT_SECRET --env hml
+npx wrangler secret put UBER_CLIENT_ID_TESTE      --env hml
+npx wrangler secret put UBER_CLIENT_SECRET_TESTE  --env hml
+npx wrangler secret put UBER_WEBHOOK_SECRET_TESTE --env hml
 ```
 
 `JWT_SECRET` **precisa ser diferente** entre HML e produção — senão um token de
@@ -256,6 +257,11 @@ próprios (`hub-logistico`, `HUB_KV`) e **segredos diferentes**. Mais:
 ```toml
 # [env.producao.vars]
 UBER_SCOPE = "direct.organizations eats.deliveries"   # depois da liberação
+
+# E os segredos de PRODUÇÃO (conjunto separado do de teste):
+#   npx wrangler secret put UBER_CLIENT_ID      --env producao
+#   npx wrangler secret put UBER_CLIENT_SECRET  --env producao
+#   npx wrangler secret put UBER_WEBHOOK_SECRET --env producao
 PAINEL_ORIGIN = "https://painel.villadeli.com.br"
 ```
 
@@ -269,6 +275,8 @@ Checklist final:
 - [ ] `seed.sql` **não** rodado em produção
 - [ ] Tabela de raio do motoboy conferida contra as Regiões do Cardápio Web
 - [ ] Configurações 100% verde antes do primeiro pedido real
+- [ ] Só então trocar o **modo de operação** para produção, na tela de
+      Configurações (o Worker sobe em modo teste de propósito)
 
 ---
 

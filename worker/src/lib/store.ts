@@ -1,7 +1,11 @@
 import type {
   Cotacao,
+  EntregaAoVivo,
   Env,
+  EstadoEntrega,
+  EventoEntrega,
   Papel,
+  ProviderId,
   Pedido,
   PedidoResumo,
   ResultadoDespacho,
@@ -199,6 +203,143 @@ export async function registrarDelivery(
       despachadoPor
     )
     .run();
+}
+
+// ---------------------------------------------------------------------------
+// WEBHOOKS DE ENTREGA
+// ---------------------------------------------------------------------------
+
+/**
+ * Arquiva o evento recebido. O INSERT OR IGNORE contra a PRIMARY KEY é a trava
+ * de idempotência: a Uber reenvia o mesmo evento até 3 vezes, e reaplicar um
+ * "delivered" por cima de um "canceled" posterior inverteria a realidade.
+ *
+ * Devolve `novo: false` quando é reenvio, e o pedido dono da entrega (se ela
+ * nasceu neste Hub).
+ */
+export async function registrarEvento(
+  env: Env,
+  e: EventoEntrega
+): Promise<{ novo: boolean; idPedido: string | null }> {
+  let idPedido: string | null = null;
+
+  if (e.deliveryIdExterno) {
+    const l = await env.DB.prepare(
+      `SELECT id_pedido FROM deliveries WHERE delivery_id_externo = ?1`
+    )
+      .bind(e.deliveryIdExterno)
+      .first<{ id_pedido: string }>();
+    idPedido = l?.id_pedido ?? null;
+  }
+
+  const r = await env.DB.prepare(
+    `INSERT OR IGNORE INTO eventos_entrega
+       (id, provider, kind, status, delivery_id_externo, id_pedido,
+        criado_em_parceiro, recebido_em, live_mode, payload)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`
+  )
+    .bind(
+      e.id,
+      e.provider,
+      e.kind,
+      e.status,
+      e.deliveryIdExterno,
+      idPedido,
+      e.criadoEmParceiro,
+      new Date().toISOString(),
+      e.liveMode === null ? null : e.liveMode ? 1 : 0,
+      e.payload
+    )
+    .run();
+
+  return { novo: (r.meta.changes ?? 0) > 0, idPedido };
+}
+
+/**
+ * Aplica o estado ao vivo na entrega.
+ *
+ * COALESCE em cada campo de propósito: o courier_update não repete o status, e
+ * o delivery_status nem sempre traz a posição do entregador. Sem COALESCE, um
+ * evento sobrescreveria com NULL o que o outro acabou de preencher.
+ *
+ * `valor_pago` e `data_criacao` nunca são tocados — são o registro contábil.
+ */
+export async function aplicarEstadoEntrega(
+  env: Env,
+  deliveryIdExterno: string,
+  s: EstadoEntrega
+): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE deliveries SET
+       status_ao_vivo       = COALESCE(?2,  status_ao_vivo),
+       status               = COALESCE(?2,  status),
+       status_atualizado_em = ?10,
+       tracking_url         = COALESCE(?3,  tracking_url),
+       dropoff_eta          = COALESCE(?4,  dropoff_eta),
+       courier_nome         = COALESCE(?5,  courier_nome),
+       courier_telefone     = COALESCE(?6,  courier_telefone),
+       courier_veiculo      = COALESCE(?7,  courier_veiculo),
+       courier_lat          = COALESCE(?8,  courier_lat),
+       courier_lng          = COALESCE(?9,  courier_lng),
+       live_mode            = COALESCE(?11, live_mode)
+     WHERE delivery_id_externo = ?1`
+  )
+    .bind(
+      deliveryIdExterno,
+      s.status,
+      s.trackingUrl,
+      s.dropoffEta,
+      s.courierNome,
+      s.courierTelefone,
+      s.courierVeiculo,
+      s.courierLat,
+      s.courierLng,
+      new Date().toISOString(),
+      s.liveMode === null ? null : s.liveMode ? 1 : 0
+    )
+    .run();
+}
+
+/** Estado ao vivo para o painel mostrar no detalhe do pedido. */
+export async function obterEntregaAoVivo(
+  env: Env,
+  idPedido: string
+): Promise<EntregaAoVivo | null> {
+  const l = await env.DB.prepare(
+    `SELECT plataforma_escolhida, delivery_id_externo, status, status_ao_vivo,
+            status_atualizado_em, tracking_url, dropoff_eta,
+            courier_nome, courier_telefone, courier_veiculo, live_mode
+       FROM deliveries WHERE id_pedido = ?1`
+  )
+    .bind(idPedido)
+    .first<{
+      plataforma_escolhida: string;
+      delivery_id_externo: string | null;
+      status: string | null;
+      status_ao_vivo: string | null;
+      status_atualizado_em: string | null;
+      tracking_url: string | null;
+      dropoff_eta: string | null;
+      courier_nome: string | null;
+      courier_telefone: string | null;
+      courier_veiculo: string | null;
+      live_mode: number | null;
+    }>();
+
+  if (!l) return null;
+
+  return {
+    provider: l.plataforma_escolhida as ProviderId,
+    deliveryIdExterno: l.delivery_id_externo,
+    status: l.status_ao_vivo ?? l.status,
+    statusAtualizadoEm: l.status_atualizado_em,
+    trackingUrl: l.tracking_url,
+    dropoffEta: l.dropoff_eta,
+    courierNome: l.courier_nome,
+    courierTelefone: l.courier_telefone,
+    courierVeiculo: l.courier_veiculo,
+    liveMode: l.live_mode === null ? null : l.live_mode === 1,
+  };
 }
 
 // ---------------------------------------------------------------------------

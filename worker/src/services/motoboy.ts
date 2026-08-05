@@ -1,4 +1,4 @@
-import type { Cotacao, Env, Pedido, ResultadoDespacho } from "../types";
+import type { Cotacao, Env, ModoOperacao, Pedido, ResultadoDespacho } from "../types";
 import { distanciaKm } from "../lib/geo";
 import {
   ETA_BASE_MIN,
@@ -15,7 +15,11 @@ import {
 // A distância é em LINHA RETA (Haversine) porque é assim que o Cardápio Web
 // desenha os anéis no mapa — usar distância de rota daria outro valor.
 // ---------------------------------------------------------------------------
-export async function cotarMotoboy(env: Env, pedido: Pedido): Promise<Cotacao> {
+export async function cotarMotoboy(
+  env: Env,
+  pedido: Pedido,
+  _modo?: ModoOperacao // motoboy nao usa credencial de parceiro
+): Promise<Cotacao> {
   const base: Cotacao = {
     provider: "motoboy",
     nome: "Motoboy Próprio",
@@ -75,7 +79,8 @@ export async function cotarMotoboy(env: Env, pedido: Pedido): Promise<Cotacao> {
 export async function despacharMotoboy(
   _env: Env,
   pedido: Pedido,
-  _cotacao?: Cotacao // assinatura uniforme com os demais provedores
+  _cotacao?: Cotacao, // assinatura uniforme com os demais provedores
+  _modo?: ModoOperacao
 ): Promise<ResultadoDespacho> {
   // Aqui você notificaria seu motoboy (WhatsApp, painel interno, etc.).
   // Como é operação manual, apenas registramos e devolvemos um "tracking" interno.

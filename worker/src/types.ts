@@ -33,16 +33,18 @@ export interface Env {
   NOVA99_BASE_URL: string;
   NOVA99_AUTH_URL: string;
 
-  // Base URLs — homologação/sandbox (usadas quando AMBIENTE != "producao")
-  UBER_BASE_URL_HML: string;
-  IFOOD_BASE_URL_HML: string;
-  NOVA99_BASE_URL_HML: string;
+  // Base URLs — sandbox, usadas no MODO teste (ver config/modo.ts)
+  UBER_BASE_URL_TESTE: string;
+  IFOOD_BASE_URL_TESTE: string;
+  NOVA99_BASE_URL_TESTE: string;
 
   // IDs (o customer_id do Uber é diferente entre sandbox e produção)
   UBER_CUSTOMER_ID: string;
-  UBER_CUSTOMER_ID_HML: string;
+  UBER_CUSTOMER_ID_TESTE: string;
   /** Escopos OAuth2 pedidos ao Uber, separados por espaço. */
   UBER_SCOPE: string;
+  /** Escopos da conta de TESTE — podem diferir dos de produção. */
+  UBER_SCOPE_TESTE: string;
   IFOOD_MERCHANT_ID: string;
 
   // Cardápio Web — quem manda o pedido para cá.
@@ -68,6 +70,14 @@ export interface Env {
   JWT_SECRET: string;
   /** Token para o Hub chamar a API do Cardápio Web (opcional hoje). */
   CARDAPIO_WEB_TOKEN: string;
+  /** Signing key do webhook do Uber Direct (Dashboard > Developer > Webhooks). */
+  UBER_WEBHOOK_SECRET: string;
+
+  // --- Credenciais de TESTE (sandbox) ---------------------------------------
+  // Conjunto completo e separado. Usadas quando o modo de operação é "teste".
+  UBER_CLIENT_ID_TESTE: string;
+  UBER_CLIENT_SECRET_TESTE: string;
+  UBER_WEBHOOK_SECRET_TESTE: string;
 
   // Geocodificação (opcional). Sem chave, usa Nominatim/OpenStreetMap grátis.
   GOOGLE_MAPS_API_KEY: string;
@@ -159,6 +169,63 @@ export interface UsuarioListado extends Usuario {
 }
 
 export type TipoTokenSenha = "convite" | "recuperacao";
+
+/** Quais credenciais do parceiro usar. Ver config/modo.ts. */
+export type ModoOperacao = "teste" | "producao";
+
+// ---------------------------------------------------------------------------
+// Webhooks de entrega
+// ---------------------------------------------------------------------------
+
+/** Status documentados do Uber Direct. */
+export type StatusEntregaUber =
+  | "pending"
+  | "pickup"
+  | "pickup_complete"
+  | "dropoff"
+  | "delivered"
+  | "canceled"
+  | "returned"
+  | "shopping_completed";
+
+export interface EventoEntrega {
+  /** id do evento no parceiro — é a chave de idempotência. */
+  id: string;
+  provider: ProviderId;
+  kind: string;
+  status: string | null;
+  deliveryIdExterno: string | null;
+  criadoEmParceiro: string | null;
+  liveMode: boolean | null;
+  payload: string;
+}
+
+/** Campos que um webhook pode atualizar na entrega. Tudo opcional. */
+export interface EstadoEntrega {
+  status: string | null;
+  trackingUrl: string | null;
+  dropoffEta: string | null;
+  courierNome: string | null;
+  courierTelefone: string | null;
+  courierVeiculo: string | null;
+  courierLat: number | null;
+  courierLng: number | null;
+  liveMode: boolean | null;
+}
+
+/** Estado ao vivo devolvido ao painel. */
+export interface EntregaAoVivo {
+  provider: ProviderId;
+  deliveryIdExterno: string | null;
+  status: string | null;
+  statusAtualizadoEm: string | null;
+  trackingUrl: string | null;
+  dropoffEta: string | null;
+  courierNome: string | null;
+  courierTelefone: string | null;
+  courierVeiculo: string | null;
+  liveMode: boolean | null;
+}
 
 /** Conteúdo do JWT. `sub` é o id do usuário (convenção JWT). */
 export interface UsuarioSessao {
