@@ -14,7 +14,11 @@ import { getToken } from "next-auth/jwt";
 //   NEXTAUTH_SECRET=<valor longo e aleatório>
 // ---------------------------------------------------------------------------
 
-const API = process.env.HUB_API_URL ?? "http://localhost:8787";
+// A barra final é removida de propósito. Colar a URL do Worker terminando em
+// "/" é fácil demais, e o resultado vira ".../api//auth/login" — barra dupla,
+// que o Hono não casa com rota nenhuma e devolve 404. O sintoma é o painel
+// recusando todo login sem dizer por quê.
+const API = (process.env.HUB_API_URL ?? "http://localhost:8787").replace(/\/+$/, "");
 
 /**
  * Chamada SEM sessão, para as rotas públicas do Worker (esqueci-senha,

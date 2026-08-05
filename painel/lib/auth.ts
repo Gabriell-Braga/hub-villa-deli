@@ -15,7 +15,9 @@ import CredentialsProvider from "next-auth/providers/credentials";
 // autoriza despachar corrida paga nunca chega ao JavaScript do cliente.
 // ---------------------------------------------------------------------------
 
-const API = process.env.HUB_API_URL ?? "http://localhost:8787";
+// Sem a barra final — ver o comentário em lib/hub.ts. Colar a URL do Worker
+// com "/" no fim gera barra dupla e faz todo login falhar com 404.
+const API = (process.env.HUB_API_URL ?? "http://localhost:8787").replace(/\/+$/, "");
 
 /** 8 h — mesma validade do JWT emitido pelo Worker, para os dois vencerem juntos. */
 const DURACAO_SESSAO = 60 * 60 * 8;
