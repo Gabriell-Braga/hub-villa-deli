@@ -125,7 +125,7 @@ id = "f9bcfa095d4849158d18df35f5225614"
 [env.hml.vars]
 AMBIENTE = "hml"
 PROVEDORES_ATIVOS = "uber,motoboy"
-PAINEL_ORIGIN = "https://hml-painel.seudominio.com.br"
+PAINEL_ORIGIN = "https://hub-cardapio-web.vercel.app"
 
 RESTAURANTE_NOME = "Villa Deli"
 RESTAURANTE_CEP = "34006-086"
