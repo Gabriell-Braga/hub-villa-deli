@@ -8,9 +8,9 @@ import type {
   EntregaAoVivo,
   ProviderId,
 } from "@/lib/tipos";
-import { COR_STATUS_ENTREGA, ROTULO_STATUS_ENTREGA } from "@/lib/tipos";
 import LogoProvedor from "@/components/LogoProvedor";
-import { brlOuGratis, dataHora, hora } from "@/lib/formato";
+import CardEntrega from "@/components/CardEntrega";
+import { brlOuGratis, dataHora } from "@/lib/formato";
 import {
   Skeleton,
   SkeletonCartoesCotacao,
@@ -205,111 +205,12 @@ export default function PaginaCotacao({
       )}
 
       {despacho && (
-        <div className="mb-6 rounded-xl border border-emerald-200 bg-white p-5">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="font-semibold text-emerald-700">✅ Entrega despachada</p>
-
-            {/* Status ao vivo vem dos webhooks do parceiro. Sem webhook
-                configurado, `entrega.status` fica no valor do despacho. */}
-            {entrega?.status && (
-              <span
-                className={`rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
-                  COR_STATUS_ENTREGA[entrega.status] ??
-                  "bg-gray-100 text-gray-700 ring-gray-300"
-                }`}
-              >
-                {ROTULO_STATUS_ENTREGA[entrega.status] ?? entrega.status}
-              </span>
-            )}
-
-            {/* Aviso que evita confundir simulação com corrida real. */}
-            {entrega?.liveMode === false && (
-              <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-200">
-                Ambiente de teste
-              </span>
-            )}
-          </div>
-
-          {entrega?.courierNome && (
-            <p className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-gray-700">
-              <LogoProvedor provider={despacho.provider} tamanho={20} />
-              {entrega.courierNome}
-              {entrega.courierVeiculo && ` · ${entrega.courierVeiculo}`}
-              {entrega.courierTelefone && (
-                <>
-                  {" · "}
-                  <a
-                    href={`tel:${entrega.courierTelefone}`}
-                    className="font-medium text-emerald-700 underline"
-                  >
-                    {entrega.courierTelefone}
-                  </a>
-                </>
-              )}
-            </p>
-          )}
-
-          {entrega?.dropoffEta && (
-            <p className="mt-1 text-sm text-gray-500">
-              Previsão de entrega: {hora(entrega.dropoffEta)}
-            </p>
-          )}
-
-          <p className="mt-1 text-sm text-gray-500">
-            Código da entrega{" "}
-            {/* IDs de parceiro são longos e sem espaço: sem break-all eles
-                empurram a largura da página no celular. */}
-            <span className="break-all font-mono">{despacho.deliveryId}</span>
-          </p>
-
-          {entrega?.statusAtualizadoEm && (
-            <p className="mt-1 text-xs text-gray-400">
-              Atualizado às {hora(entrega.statusAtualizadoEm)}
-            </p>
-          )}
-
-          {/* Confirmação manual — só para o motoboy próprio.
-              Ele não tem webhook: sem isto o status fica "Acionado" para
-              sempre e o histórico nunca mostra o que aconteceu. Nas
-              transportadoras parceiras o status vem delas, e deixar alguém
-              escrever à mão criaria um dado que discorda da fonte. */}
-          {despacho.provider === "motoboy" &&
-            entrega?.status !== "delivered" &&
-            entrega?.status !== "canceled" && (
-              <div className="mt-4 border-t border-gray-100 pt-4">
-                <p className="text-sm text-gray-600">
-                  O motoboy já entregou este pedido?
-                </p>
-                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                  <button
-                    onClick={() => concluir("delivered")}
-                    disabled={concluindo}
-                    className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50 sm:py-2"
-                  >
-                    {concluindo ? "Salvando..." : "Marcar como entregue"}
-                  </button>
-                  <button
-                    onClick={() => concluir("canceled")}
-                    disabled={concluindo}
-                    className="rounded-lg border border-red-200 px-4 py-2.5 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-50 sm:py-2"
-                  >
-                    Cancelar entrega
-                  </button>
-                </div>
-              </div>
-            )}
-          {/* O tracking_url pode chegar/mudar pelo webhook — o do webhook vence. */}
-          {(entrega?.trackingUrl ?? despacho.trackingUrl) && (
-            <a
-              href={entrega?.trackingUrl ?? despacho.trackingUrl ?? "#"}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-3 block rounded-lg bg-emerald-600 px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-emerald-700 sm:inline-block sm:py-2"
-            >
-              Acompanhar entrega
-            </a>
-          )}
-        </div>
+        <CardEntrega
+          despacho={despacho}
+          entrega={entrega}
+          concluindo={concluindo}
+          onConcluir={concluir}
+        />
       )}
 
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
