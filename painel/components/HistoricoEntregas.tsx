@@ -67,6 +67,16 @@ const ATALHOS = [
   { rotulo: "30 dias", dias: 29 },
 ];
 
+/**
+ * Qual atalho corresponde ao período atual — para destacar o botão certo.
+ * Comparar as datas (em vez de guardar o atalho escolhido) faz o destaque
+ * continuar correto quando o usuário mexe nos campos De/Até na mão.
+ */
+function atalhoAtivo(de: string, ate: string): number | null {
+  if (!de || !ate || ate !== diaSP(0)) return null;
+  return ATALHOS.find((a) => diaSP(a.dias) === de)?.dias ?? null;
+}
+
 const campo =
   "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none transition focus:border-[var(--marca-primaria)] focus:ring-2 focus:ring-gray-200";
 
@@ -115,31 +125,40 @@ export default function HistoricoEntregas() {
 
   const temFiltro = Object.values(f).some(Boolean);
 
+  const ativo = atalhoAtivo(f.de, f.ate);
+
   return (
     <>
-      {/* ---------------- Filtros ---------------- */}
-      <section className="mb-5 rounded-xl border border-gray-200 bg-white p-4 sm:p-5">
-        <div className="flex flex-wrap gap-2">
+      {/* Cabeçalho com o seletor de período à direita, igual ao de Relatórios. */}
+      <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900">Histórico</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Entregas despachadas, com a transportadora e o frete pago. Filtre e
+            exporte para o Excel.
+          </p>
+        </div>
+
+        <div className="flex w-full rounded-lg border border-gray-200 bg-white p-1 sm:w-auto">
           {ATALHOS.map((a) => (
             <button
               key={a.rotulo}
               onClick={() => periodo(a.dias)}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50"
+              className={`flex-1 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition sm:flex-none sm:py-1.5 ${
+                ativo === a.dias
+                  ? "bg-[var(--marca-primaria)] text-[var(--marca-contraste)]"
+                  : "text-gray-600 hover:bg-gray-50"
+              }`}
             >
               {a.rotulo}
             </button>
           ))}
-          {temFiltro && (
-            <button
-              onClick={() => setF(VAZIO)}
-              className="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 underline-offset-2 transition hover:text-gray-900 hover:underline"
-            >
-              Limpar filtros
-            </button>
-          )}
         </div>
+      </header>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      {/* ---------------- Filtros ---------------- */}
+      <section className="mb-5 rounded-xl border border-gray-200 bg-white p-4 sm:p-5">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div>
             <label className="block text-xs font-medium text-gray-500" htmlFor="de">
               De
@@ -224,6 +243,15 @@ export default function HistoricoEntregas() {
             />
           </div>
         </div>
+
+        {temFiltro && (
+          <button
+            onClick={() => setF(VAZIO)}
+            className="mt-3 text-xs font-medium text-gray-500 underline-offset-2 transition hover:text-gray-900 hover:underline"
+          >
+            Limpar filtros
+          </button>
+        )}
       </section>
 
       {/* ---------------- Resumo + exportar ---------------- */}
