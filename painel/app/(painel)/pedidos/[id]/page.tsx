@@ -10,14 +10,13 @@ import type {
 } from "@/lib/tipos";
 import LogoProvedor from "@/components/LogoProvedor";
 import CardEntrega from "@/components/CardEntrega";
+import { useToast } from "@/components/Toast";
 import { brlOuGratis, dataHora } from "@/lib/formato";
 import {
   Skeleton,
   SkeletonCartoesCotacao,
   SkeletonResumoPedido,
 } from "@/components/Skeleton";
-
-type Aviso = { tipo: "ok" | "erro"; texto: string };
 
 // De onde o atendente veio, para o botão Voltar devolver ao lugar certo.
 //
@@ -43,21 +42,25 @@ export default function PaginaCotacao({
   const [dados, setDados] = useState<CotacaoResponse | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [despachando, setDespachando] = useState<ProviderId | null>(null);
-  const [aviso, setAviso] = useState<Aviso | null>(null);
+  // Erro de CARREGAMENTO fica inline: some junto com o toast e a pessoa
+  // ficaria sem entender por que a tela está vazia. Resultado de AÇÃO vai
+  // para o toast.
+  const [erroCarregar, setErroCarregar] = useState<string | null>(null);
+  const toast = useToast();
   const [despacho, setDespacho] = useState<Despacho | null>(null);
   const [entrega, setEntrega] = useState<EntregaAoVivo | null>(null);
   const [concluindo, setConcluindo] = useState(false);
 
   const cotar = useCallback(async () => {
     setCarregando(true);
-    setAviso(null);
+    setErroCarregar(null);
     try {
       const res = await fetch(`/api/cotacao/${encodeURIComponent(idPedido)}`);
       const json = await res.json();
 
       if (!res.ok) {
         setDados(null);
-        setAviso({ tipo: "erro", texto: json.erro ?? `Erro ${res.status} ao cotar.` });
+        setErroCarregar(json.erro ?? `Erro ${res.status} ao cotar.`);
         return;
       }
 
@@ -66,7 +69,7 @@ export default function PaginaCotacao({
       setEntrega(json.entrega ?? null);
     } catch {
       setDados(null);
-      setAviso({ tipo: "erro", texto: "Não foi possível falar com o servidor." });
+      setErroCarregar("Não foi possível falar com o servidor.");
     } finally {
       setCarregando(false);
     }
@@ -74,7 +77,6 @@ export default function PaginaCotacao({
 
   async function despachar(provider: ProviderId, nome: string) {
     setDespachando(provider);
-    setAviso(null);
     try {
       const res = await fetch("/api/despachar", {
         method: "POST",
@@ -84,22 +86,18 @@ export default function PaginaCotacao({
       const json = await res.json();
 
       if (!res.ok || !json.ok) {
-        setAviso({
-          tipo: "erro",
-          texto: json.erro ?? `Falha ao despachar (${res.status}).`,
-        });
+        toast.erro(json.erro ?? `Falha ao despachar (${res.status}).`);
         return;
       }
 
       setDespacho(json);
-      setAviso({
-        tipo: "ok",
-        texto: json.jaDespachado
+      toast.sucesso(
+        json.jaDespachado
           ? "Este pedido já havia sido despachado — nenhuma corrida nova foi criada."
-          : `Despachado via ${nome}.`,
-      });
+          : `Despachado via ${nome}.`
+      );
     } catch {
-      setAviso({ tipo: "erro", texto: "Erro de rede ao despachar." });
+      toast.erro("Erro de rede ao despachar.");
     } finally {
       setDespachando(null);
     }
@@ -107,7 +105,6 @@ export default function PaginaCotacao({
 
   async function concluir(status: "delivered" | "canceled") {
     setConcluindo(true);
-    setAviso(null);
     try {
       const res = await fetch(
         `/api/entrega/${encodeURIComponent(idPedido)}/concluir`,
@@ -120,20 +117,18 @@ export default function PaginaCotacao({
       const json = await res.json();
 
       if (!res.ok) {
-        setAviso({ tipo: "erro", texto: json.erro ?? "Não foi possível salvar." });
+        toast.erro(json.erro ?? "Não foi possível salvar.");
         return;
       }
 
-      setAviso({
-        tipo: "ok",
-        texto:
-          status === "delivered"
-            ? "Entrega confirmada. Já aparece no histórico."
-            : "Entrega marcada como cancelada.",
-      });
+      toast.sucesso(
+        status === "delivered"
+          ? "Entrega confirmada. Já aparece no histórico."
+          : "Entrega marcada como cancelada."
+      );
       await cotar();
     } catch {
-      setAviso({ tipo: "erro", texto: "Erro de rede ao salvar." });
+      toast.erro("Erro de rede ao salvar.");
     } finally {
       setConcluindo(false);
     }
@@ -191,16 +186,12 @@ export default function PaginaCotacao({
         </button>
       </header>
 
-      {aviso && (
+      {erroCarregar && (
         <div
           role="alert"
-          className={`mb-4 rounded-xl border p-4 text-sm ${
-            aviso.tipo === "ok"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-              : "border-red-200 bg-red-50 text-red-700"
-          }`}
+          className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
         >
-          {aviso.texto}
+          {erroCarregar}
         </div>
       )}
 
@@ -292,7 +283,7 @@ export default function PaginaCotacao({
             </div>
           )}
 
-          {!carregando && (dados?.cotacoes?.length ?? 0) === 0 && !aviso && (
+          {!carregando && (dados?.cotacoes?.length ?? 0) === 0 && !erroCarregar && (
             <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
               Nenhuma cotação. Confira se o pedido chegou pelo webhook e se há
               provedor ativo.

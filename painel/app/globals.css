@@ -13,6 +13,19 @@
   --marca-suave-texto: #111827;
 }
 
+/* Entrada dos toasts. Fica no CSS porque o Tailwind não tem keyframe próprio
+   e escrever isso em classe arbitrária ficaria ilegível. */
+@keyframes subir {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Foco visível e na cor da marca — acessibilidade sem depender de cada
    componente lembrar de estilizar. */
 :where(a, button, input, select, textarea):focus-visible {

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { SkeletonUsuarios } from "@/components/Skeleton";
+import { useToast } from "@/components/Toast";
 
 // ---------------------------------------------------------------------------
 // Gestão de atendentes.
@@ -25,8 +26,6 @@ interface Usuario {
   semSenha: boolean;
   linkPendenteAte: string | null;
 }
-
-type Aviso = { tipo: "ok" | "erro"; texto: string };
 
 function CaixaLink({
   link,
@@ -99,7 +98,7 @@ export default function PaginaUsuarios() {
 
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [carregando, setCarregando] = useState(true);
-  const [aviso, setAviso] = useState<Aviso | null>(null);
+  const toast = useToast();
   const [link, setLink] = useState<{
     url: string;
     nome: string;
@@ -118,16 +117,16 @@ export default function PaginaUsuarios() {
       const res = await fetch("/api/usuarios");
       const json = await res.json();
       if (!res.ok) {
-        setAviso({ tipo: "erro", texto: json.erro ?? "Erro ao carregar." });
+        toast.erro(json.erro ?? "Erro ao carregar.");
         return;
       }
       setUsuarios(json.usuarios ?? []);
     } catch {
-      setAviso({ tipo: "erro", texto: "Não foi possível falar com o servidor." });
+      toast.erro("Não foi possível falar com o servidor.");
     } finally {
       setCarregando(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     carregar();
@@ -136,7 +135,6 @@ export default function PaginaUsuarios() {
   async function criar(e: React.FormEvent) {
     e.preventDefault();
     setSalvando(true);
-    setAviso(null);
 
     try {
       const res = await fetch("/api/usuarios", {
@@ -147,19 +145,19 @@ export default function PaginaUsuarios() {
       const json = await res.json();
 
       if (!res.ok) {
-        setAviso({ tipo: "erro", texto: json.erro ?? "Não foi possível criar." });
+        toast.erro(json.erro ?? "Não foi possível criar.");
         return;
       }
 
       setLink({ url: json.link, nome: json.usuario.nome, expiraEm: json.expiraEm });
-      setAviso({ tipo: "ok", texto: `${json.usuario.nome} foi cadastrado.` });
+      toast.sucesso(`${json.usuario.nome} foi cadastrado.`);
       setNome("");
       setEmail("");
       setPapel("atendente");
       setFormAberto(false);
       carregar();
     } catch {
-      setAviso({ tipo: "erro", texto: "Erro de rede." });
+      toast.erro("Erro de rede.");
     } finally {
       setSalvando(false);
     }
@@ -167,7 +165,6 @@ export default function PaginaUsuarios() {
 
   async function alternarAtivo(u: Usuario) {
     setOcupado(u.id);
-    setAviso(null);
     try {
       const res = await fetch(`/api/usuarios/${u.id}`, {
         method: "PATCH",
@@ -176,7 +173,7 @@ export default function PaginaUsuarios() {
       });
       const json = await res.json();
       if (!res.ok) {
-        setAviso({ tipo: "erro", texto: json.erro ?? "Não foi possível alterar." });
+        toast.erro(json.erro ?? "Não foi possível alterar.");
         return;
       }
       carregar();
@@ -187,7 +184,6 @@ export default function PaginaUsuarios() {
 
   async function trocarPapel(u: Usuario) {
     setOcupado(u.id);
-    setAviso(null);
     try {
       const res = await fetch(`/api/usuarios/${u.id}`, {
         method: "PATCH",
@@ -198,7 +194,7 @@ export default function PaginaUsuarios() {
       });
       const json = await res.json();
       if (!res.ok) {
-        setAviso({ tipo: "erro", texto: json.erro ?? "Não foi possível alterar." });
+        toast.erro(json.erro ?? "Não foi possível alterar.");
         return;
       }
       carregar();
@@ -209,14 +205,13 @@ export default function PaginaUsuarios() {
 
   async function gerarLink(u: Usuario) {
     setOcupado(u.id);
-    setAviso(null);
     try {
       const res = await fetch(`/api/usuarios/${u.id}/link-acesso`, {
         method: "POST",
       });
       const json = await res.json();
       if (!res.ok) {
-        setAviso({ tipo: "erro", texto: json.erro ?? "Não foi possível gerar." });
+        toast.erro(json.erro ?? "Não foi possível gerar.");
         return;
       }
       setLink({ url: json.link, nome: u.nome, expiraEm: json.expiraEm });
@@ -244,19 +239,9 @@ export default function PaginaUsuarios() {
         </button>
       </header>
 
-      {aviso && (
-        <div
-          role="alert"
-          className={`mb-5 rounded-xl border p-4 text-sm ${
-            aviso.tipo === "ok"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-              : "border-red-200 bg-red-50 text-red-700"
-          }`}
-        >
-          {aviso.texto}
-        </div>
-      )}
-
+      {/* A caixa do link continua inline, não vira toast: ela tem um campo
+          para copiar e some sozinha em segundos se fosse toast — o admin
+          perderia o link antes de repassar. */}
       {link && <CaixaLink link={link} aoFechar={() => setLink(null)} />}
 
       {formAberto && (

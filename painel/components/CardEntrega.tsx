@@ -28,6 +28,10 @@ const ETAPAS = [
   { rotulo: "Entregue", status: ["delivered"] },
 ];
 
+/** Base comum dos botões do card, para todos terem a mesma altura. */
+const BOTAO =
+  "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition";
+
 // Ícones em SVG, não emoji: emoji muda de desenho conforme o sistema
 // operacional, não herda a cor do texto e destoa num painel de operação.
 const icone = (d: string, className: string) => (
@@ -197,9 +201,11 @@ export default function CardEntrega({
               )}
               {entrega.courierTelefone && (
                 <dd className="mt-2">
+                  {/* Mesma altura do "Acompanhar entrega" (BOTAO): dois botões
+                      vizinhos com alturas diferentes ficam desalinhados. */}
                   <a
                     href={`tel:${entrega.courierTelefone}`}
-                    className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                    className={`${BOTAO} border border-gray-200 bg-white text-gray-700 hover:bg-gray-50`}
                   >
                     <IconeTelefone className="h-4 w-4 text-gray-400" />
                     {telefone(entrega.courierTelefone)}
@@ -225,13 +231,15 @@ export default function CardEntrega({
           )}
         </dl>
 
-        {/* Ações */}
-        {link && !cancelado && (
+        {/* Rastreio só enquanto a entrega está em andamento: depois de
+            entregue ou cancelada não há o que acompanhar, e o botão verde
+            grande sugeria que ainda havia. */}
+        {link && !cancelado && !entregue && (
           <a
             href={link}
             target="_blank"
             rel="noreferrer"
-            className="mt-5 block rounded-lg bg-emerald-600 px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-emerald-700 sm:inline-block"
+            className={`${BOTAO} mt-5 bg-emerald-600 text-white hover:bg-emerald-700`}
           >
             Acompanhar entrega
           </a>
@@ -251,14 +259,14 @@ export default function CardEntrega({
               <button
                 onClick={() => onConcluir("delivered")}
                 disabled={concluindo}
-                className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50 sm:py-2"
+                className={`${BOTAO} bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50`}
               >
                 {concluindo ? "Salvando..." : "Marcar como entregue"}
               </button>
               <button
                 onClick={() => onConcluir("canceled")}
                 disabled={concluindo}
-                className="rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-50 sm:py-2"
+                className={`${BOTAO} border border-red-200 bg-white text-red-700 hover:bg-red-50 disabled:opacity-50`}
               >
                 Cancelar entrega
               </button>
