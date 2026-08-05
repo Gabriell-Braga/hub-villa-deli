@@ -200,6 +200,25 @@ export async function despacharUber(
           name: i.nome,
           quantity: i.quantidade,
         })),
+
+        // ENTREGADOR SIMULADO — só em modo teste.
+        //
+        // O "robocourier" da Uber NÃO é automático: sem este bloco a entrega
+        // de sandbox fica parada em `pending` para sempre, nenhum webhook é
+        // disparado, e parece que a integração quebrou.
+        //
+        // Com mode "auto" ele percorre os status de 30 em 30 segundos —
+        // atribuído, a caminho, coletado, saiu, entregue — em ~2min30, e
+        // dispara delivery_status e courier_update normalmente.
+        //
+        // Em produção este campo NUNCA vai: lá o entregador é de verdade.
+        ...(modo === "teste"
+          ? {
+              test_specifications: {
+                robo_courier_specification: { mode: "auto" },
+              },
+            }
+          : {}),
       }),
     }
   );
