@@ -136,7 +136,9 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
         {pedidos.map((p) => (
           <li key={p.id}>
             <Link
-              href={`/pedidos/${encodeURIComponent(p.id)}`}
+              // `de` carrega de qual tela veio, para o botão Voltar do detalhe
+              // devolver o atendente ao lugar certo.
+              href={`/pedidos/${encodeURIComponent(p.id)}?de=${aba}`}
               className="block rounded-xl border border-gray-200 bg-white p-4 transition active:bg-gray-50"
             >
               <div className="flex items-start justify-between gap-3">
@@ -221,7 +223,9 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
 
                   <td className="px-5 py-3 text-right">
                     <Link
-                      href={`/pedidos/${encodeURIComponent(p.id)}`}
+                      // `de` carrega de qual tela veio, para o botão Voltar do detalhe
+              // devolver o atendente ao lugar certo.
+              href={`/pedidos/${encodeURIComponent(p.id)}?de=${aba}`}
                       className="inline-block whitespace-nowrap rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-100"
                     >
                       {aba === "abertos" ? "Cotar" : "Ver"}

@@ -19,8 +19,26 @@ import {
 
 type Aviso = { tipo: "ok" | "erro"; texto: string };
 
-export default function PaginaCotacao({ params }: { params: { id: string } }) {
+// De onde o atendente veio, para o botão Voltar devolver ao lugar certo.
+//
+// A origem vem na URL (`?de=`) e não de router.back(): o histórico do
+// navegador quebra quando a pessoa recarrega a página, abre o link direto ou
+// chega por um atalho — e aí "voltar" jogaria para fora do painel.
+const ORIGENS = {
+  historico: { href: "/historico", rotulo: "Voltar para o histórico" },
+  abertos: { href: "/pedidos", rotulo: "Voltar para a fila" },
+} as const;
+
+export default function PaginaCotacao({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams: { de?: string };
+}) {
   const idPedido = decodeURIComponent(params.id);
+  const voltar =
+    searchParams.de === "historico" ? ORIGENS.historico : ORIGENS.abertos;
 
   const [dados, setDados] = useState<CotacaoResponse | null>(null);
   const [carregando, setCarregando] = useState(true);
@@ -110,10 +128,10 @@ export default function PaginaCotacao({ params }: { params: { id: string } }) {
   return (
     <div className="mx-auto max-w-5xl">
       <Link
-        href="/pedidos"
+        href={voltar.href}
         className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition hover:text-gray-900"
       >
-        ← Voltar para a fila
+        ← {voltar.rotulo}
       </Link>
 
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
