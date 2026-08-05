@@ -64,7 +64,10 @@ export async function calcularEstatisticas(
   const desdeMes = inicioDoMes();
   const desdeSerie = inicioDeNDiasAtras(diasDaSerie);
 
-  // Uma ida só ao banco. O D1 cobra por consulta e a latência soma.
+  // ENTREGAS DE TESTE FICAM DE FORA (`teste = 0`) em todas as consultas.
+  // Este relatório é lido como "quanto a loja gastou". Simulação nossa não é
+  // gasto, e misturada aqui viraria uma decisão de negócio tomada em cima de
+  // número inventado. Elas continuam visíveis no Histórico, com o selo.
   const [resumo, porPlataforma, serie, geral] = await env.DB.batch([
     // 1) Totais do mês corrente
     env.DB.prepare(
@@ -73,7 +76,7 @@ export async function calcularEstatisticas(
               AVG(valor_pago)      AS media,
               AVG(eta_minutos)     AS eta
          FROM deliveries
-        WHERE data_criacao >= ?1`
+        WHERE teste = 0 AND data_criacao >= ?1`
     ).bind(desdeMes),
 
     // 2) Quebra por plataforma, no mês
@@ -84,7 +87,7 @@ export async function calcularEstatisticas(
               AVG(valor_pago)  AS media,
               AVG(eta_minutos) AS eta
          FROM deliveries
-        WHERE data_criacao >= ?1
+        WHERE teste = 0 AND data_criacao >= ?1
         GROUP BY plataforma_escolhida
         ORDER BY total DESC`
     ).bind(desdeMes),
@@ -96,7 +99,7 @@ export async function calcularEstatisticas(
               COUNT(*)        AS qtd,
               SUM(valor_pago) AS total
          FROM deliveries
-        WHERE data_criacao >= ?1
+        WHERE teste = 0 AND data_criacao >= ?1
         GROUP BY dia
         ORDER BY dia`
     ).bind(desdeSerie),
@@ -107,7 +110,8 @@ export async function calcularEstatisticas(
               SUM(valor_pago) AS total,
               AVG(valor_pago) AS media,
               AVG(eta_minutos) AS eta
-         FROM deliveries`
+         FROM deliveries
+        WHERE teste = 0`
     ),
   ]);
 

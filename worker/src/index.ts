@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import type {
   Cotacao,
   Env,
+  FiltroHistorico,
   Papel,
   Pedido,
   ProviderId,
@@ -35,7 +36,10 @@ import {
   limparTokensAntigos,
   obterEntregaAoVivo,
   marcarEntregaManual,
+  enfileirarEventoCardapio,
+  eventosCardapioPendentes,
 } from "./lib/store";
+import { cancelado, processarEventoCardapio } from "./services/cardapio-web";
 import { historicoCsv, listarHistorico, nomeArquivoCsv } from "./lib/historico";
 import { assinaturaValida } from "./lib/assinatura";
 import { processarWebhookUber } from "./services/uber-webhook";
@@ -97,6 +101,9 @@ app.use("/api/diagnostico", exigirLogin, exigirAdmin);
 // Gestão de usuários — só admin.
 app.use("/api/usuarios", exigirLogin, exigirAdmin);
 app.use("/api/usuarios/*", exigirLogin, exigirAdmin);
+
+// Pedido simulado — só admin. Não é uma venda, é ferramenta de teste.
+app.use("/api/pedidos/simular", exigirLogin, exigirAdmin);
 
 // Modo de operação: ler exige login; TROCAR exige admin.
 app.use("/api/modo", exigirLogin);
@@ -352,12 +359,37 @@ app.post("/api/usuarios/:id/link-acesso", async (c) => {
 // ---------------------------------------------------------------------------
 // 1) Webhook de entrada do Cardápio Web
 //    POST /api/webhook/cardapio-web
+//
+// O QUE ELES MANDAM (não é o pedido!):
+//   { event_id, event_type, merchant_id, order_id, order_status, created_at }
+//   event_type: ORDER_CREATED | ORDER_STATUS_UPDATED
+//   header de autenticação: X-Webhook-Token (token simples, não é assinatura)
+//
+// O CONTRATO DURO: HTTP 200 em até 5 SEGUNDOS. Se estourar, eles reenviam
+// (15 s, 30 s, 60 s… até 900 s, no máximo 15 vezes) e depois PAUSAM o webhook e
+// DESCARTAM as notificações até alguém reativar na mão. Ou seja: uma lentidão
+// nossa não atrasa um pedido, ela derruba a entrada de pedidos da loja inteira.
+//
+// Por isso esta rota não faz nada além de gravar o evento e responder. Buscar
+// o pedido na API deles e geocodificar — que juntos passam dos 5 s com
+// facilidade — acontece em waitUntil, depois da resposta já ter saído.
 // ---------------------------------------------------------------------------
+
+interface EventoCW {
+  event_id?: string;
+  event_type?: string;
+  merchant_id?: number | string;
+  order_id?: number | string;
+  order_status?: string;
+  created_at?: string;
+}
+
 app.post("/api/webhook/cardapio-web", async (c) => {
   const env = c.env;
 
-  // O nome do header varia por plataforma. Aceita também Authorization: Bearer.
-  const header = env.CARDAPIO_WEB_HEADER || "x-webhook-secret";
+  // Eles usam X-Webhook-Token. A variável existe porque o header já mudou uma
+  // vez e trocar configuração é mais barato que fazer deploy.
+  const header = env.CARDAPIO_WEB_HEADER || "x-webhook-token";
   const auth = validarToken(
     env.WEBHOOK_SECRET,
     tokenDoRequest(c.req.raw.headers, header),
@@ -365,22 +397,76 @@ app.post("/api/webhook/cardapio-web", async (c) => {
   );
   if (!auth.ok) return c.json({ erro: auth.erro }, auth.status);
 
+  const bruto = await c.req.text();
+  const body = (() => {
+    try {
+      return JSON.parse(bruto) as EventoCW;
+    } catch {
+      return null;
+    }
+  })();
+
+  if (!body?.order_id) {
+    // 400 aqui é seguro: eles reenviam, mas um corpo que não muda vai falhar
+    // igual das 15 vezes. Melhor recusar visivelmente do que engolir calado.
+    return c.json({ erro: "payload sem order_id" }, 400);
+  }
+
+  // Se o merchant não for o nosso, alguém apontou o webhook errado para cá.
+  const nosso = env.CARDAPIO_WEB_MERCHANT_ID?.trim();
+  if (nosso && body.merchant_id != null && String(body.merchant_id) !== nosso) {
+    console.warn(`[cardapio-web] merchant inesperado: ${body.merchant_id}`);
+    return c.json({ erro: "merchant não reconhecido" }, 403);
+  }
+
+  const evento = {
+    // Sem event_id (não é obrigatório na doc) a chave de idempotência vira
+    // pedido+tipo+status, que é o que basta para não processar duas vezes.
+    eventId:
+      body.event_id ??
+      `${body.order_id}:${body.event_type ?? "?"}:${body.order_status ?? "?"}`,
+    tipo: body.event_type ?? "ORDER_CREATED",
+    orderId: String(body.order_id),
+    merchantId: body.merchant_id != null ? String(body.merchant_id) : null,
+    payload: bruto,
+  };
+
+  // false = reenvio, já temos esse evento. Responde 200 do mesmo jeito: um
+  // erro aqui só faria eles reenviarem de novo e chegarem mais perto da pausa.
+  const novo = await enfileirarEventoCardapio(env, evento);
+
+  if (novo) {
+    c.executionCtx.waitUntil(processarEventoCardapio(env, evento));
+  }
+
+  return c.json({ ok: true, recebido: true });
+});
+
+// ---------------------------------------------------------------------------
+// 1a) Pedido SIMULADO — POST /api/pedidos/simular (admin)
+//
+// Existe porque o webhook agora só aceita o formato do Cardápio Web (um
+// `order_id` que a gente vai buscar na API deles). Não dá mais para injetar um
+// pedido inteiro por lá, e nem deveria: aquela porta é da integração.
+//
+// Todo pedido criado aqui nasce com `teste: true` e o painel mostra isso na
+// tela. Nenhum deles deve ser confundido com venda da loja.
+// ---------------------------------------------------------------------------
+app.post("/api/pedidos/simular", async (c) => {
+  const env = c.env;
   const body = await c.req.json<Partial<Pedido>>().catch(() => null);
+
   if (!body?.cliente?.nome || !body?.cliente?.telefone || !body?.endereco?.cep) {
     return c.json(
-      {
-        erro: "payload inválido: cliente.nome, cliente.telefone e endereco.cep são obrigatórios",
-      },
+      { erro: "Informe nome e telefone do cliente e o CEP de entrega." },
       400
     );
   }
 
-  // Resolve lat/lng (ViaCEP + geocoder, com cache) se o Cardápio Web só mandou
-  // o CEP. Necessário para o cálculo de raio do motoboy próprio.
   const endereco = await garantirCoordenadas(env, body.endereco);
 
   const pedido: Pedido = {
-    id: body.id || crypto.randomUUID(),
+    id: body.id || `TESTE-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
     criadoEm: new Date().toISOString(),
     cliente: body.cliente,
     endereco,
@@ -388,13 +474,13 @@ app.post("/api/webhook/cardapio-web", async (c) => {
     total: body.total ?? 0,
     observacao: body.observacao,
     status: "recebido",
+    teste: true,
   };
 
-  // false = webhook repetido (retry do Cardápio Web). Responde 200 mesmo assim,
-  // senão o Cardápio Web fica reenviando pra sempre.
   const novo = await salvarPedidoNovo(env, pedido);
+  if (!novo) return c.json({ erro: "Já existe um pedido com este número." }, 409);
 
-  return c.json({ ok: true, idPedido: pedido.id, novo });
+  return c.json({ ok: true, idPedido: pedido.id });
 });
 
 // ---------------------------------------------------------------------------
@@ -492,13 +578,18 @@ app.get("/api/pedidos", async (c) => {
 // Base é `deliveries`, não `pedidos`: o cron limpa pedidos com mais de 30 dias
 // e um histórico montado sobre eles se esvaziaria sozinho.
 // ---------------------------------------------------------------------------
-function filtrosDaQuery(c: { req: { query: (k: string) => string | undefined } }) {
+function filtrosDaQuery(c: {
+  req: { query: (k: string) => string | undefined };
+}): FiltroHistorico {
+  const teste = c.req.query("teste");
+
   return {
     de: c.req.query("de"),
     ate: c.req.query("ate"),
     plataforma: c.req.query("plataforma"),
     status: c.req.query("status"),
     busca: c.req.query("busca"),
+    teste: teste === "sim" || teste === "nao" ? teste : undefined,
     limite: Number(c.req.query("limite") ?? 100),
     offset: Number(c.req.query("offset") ?? 0),
   };
@@ -634,6 +725,12 @@ app.post("/api/despachar", async (c) => {
   const pedido = await obterPedido(env, idPedido);
   if (!pedido) return c.json({ erro: "pedido não encontrado" }, 404);
 
+  // Trava 1b — cancelado no Cardápio Web. Sem isto, um pedido cancelado que
+  // ainda está na tela do atendente vira uma corrida cobrada por nada.
+  if (cancelado(pedido.statusCardapio)) {
+    return c.json({ erro: "Este pedido foi cancelado no Cardápio Web." }, 409);
+  }
+
   // Trava 2 — já despachado? Devolve o resultado antigo em vez de cobrar outra
   // corrida. Cliques repetidos e F5 viram no-op.
   const jaFeito = await obterDespacho(env, idPedido);
@@ -670,8 +767,8 @@ app.post("/api/despachar", async (c) => {
     );
 
     await concluirDespacho(env, idPedido, resultado);
-    // Histórico para o relatório. Guarda quem clicou.
-    await registrarDelivery(env, pedido, cotacao, resultado, atendente.email);
+    // Histórico para o relatório. Guarda quem clicou e se foi teste.
+    await registrarDelivery(env, pedido, cotacao, resultado, atendente.email, modo);
 
     return c.json({ ok: true, ...resultado });
   } catch (e) {
@@ -767,10 +864,32 @@ app.get("/api/diagnostico", async (c) => {
 export default {
   fetch: app.fetch,
 
-  // Cron diário (wrangler.toml). O D1 não expira sozinho como o KV fazia.
-  async scheduled(_evt: ScheduledController, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(
-      Promise.all([limparPedidosAntigos(env, 30), limparTokensAntigos(env)])
-    );
+  // Dois crons (wrangler.toml), com trabalhos bem diferentes.
+  async scheduled(evt: ScheduledController, env: Env, ctx: ExecutionContext) {
+    // A limpeza é diária e pesada; a fila do Cardápio Web roda de 5 em 5 min.
+    // Rodar tudo junto a cada 5 minutos seria varrer o banco 288× por dia.
+    if (evt.cron === "0 4 * * *") {
+      ctx.waitUntil(
+        Promise.all([limparPedidosAntigos(env, 30), limparTokensAntigos(env)])
+      );
+      return;
+    }
+
+    ctx.waitUntil(reprocessarEventosCardapio(env));
   },
+};
+
+/**
+ * Rede de segurança da fila do Cardápio Web.
+ *
+ * O waitUntil do webhook cobre o caso normal. Aqui é para quando ele falhou —
+ * a API deles fora do ar, o pedido ainda não visível no momento da consulta —
+ * e o pedido ficaria invisível para a loja. Não dá para contar com o reenvio
+ * deles: são só 15 tentativas e depois o webhook é pausado.
+ */
+async function reprocessarEventosCardapio(env: Env): Promise<void> {
+  const pendentes = await eventosCardapioPendentes(env, 20);
+  for (const evento of pendentes) {
+    await processarEventoCardapio(env, evento);
+  }
 };

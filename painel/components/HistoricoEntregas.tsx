@@ -10,6 +10,7 @@ import {
 } from "@/lib/tipos";
 import { brlOuGratis, dataHora } from "@/lib/formato";
 import LogoProvedor from "./LogoProvedor";
+import SeloTeste from "./SeloTeste";
 import { SkeletonListaPedidos } from "./Skeleton";
 
 // ---------------------------------------------------------------------------
@@ -31,6 +32,7 @@ interface Item {
   valorPedido: number | null;
   courierNome: string | null;
   liveMode: boolean | null;
+  teste: boolean;
 }
 
 interface Resposta {
@@ -46,9 +48,17 @@ interface Filtros {
   plataforma: string;
   status: string;
   busca: string;
+  teste: string;
 }
 
-const VAZIO: Filtros = { de: "", ate: "", plataforma: "", status: "", busca: "" };
+const VAZIO: Filtros = {
+  de: "",
+  ate: "",
+  plataforma: "",
+  status: "",
+  busca: "",
+  teste: "",
+};
 
 /** Últimos N dias em YYYY-MM-DD, no fuso de São Paulo. */
 function diaSP(offsetDias = 0): string {
@@ -158,7 +168,7 @@ export default function HistoricoEntregas() {
 
       {/* ---------------- Filtros ---------------- */}
       <section className="mb-5 rounded-xl border border-gray-200 bg-white p-4 sm:p-5">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <div>
             <label className="block text-xs font-medium text-gray-500" htmlFor="de">
               De
@@ -227,6 +237,22 @@ export default function HistoricoEntregas() {
               <option value="pending">Procurando entregador</option>
               <option value="pickup">A caminho da loja</option>
               <option value="dropoff">Saiu para entrega</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-500" htmlFor="teste">
+              Tipo
+            </label>
+            <select
+              id="teste"
+              value={f.teste}
+              onChange={(e) => set("teste", e.target.value)}
+              className={`mt-1 ${campo}`}
+            >
+              <option value="">Todas</option>
+              <option value="nao">Somente reais</option>
+              <option value="sim">Somente testes</option>
             </select>
           </div>
 
@@ -328,6 +354,7 @@ export default function HistoricoEntregas() {
                 </div>
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {i.teste && <SeloTeste />}
                   <LogoProvedor provider={i.plataforma} tamanho={16} />
                   <span
                     className={`rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
@@ -367,7 +394,10 @@ export default function HistoricoEntregas() {
                   {dados.itens.map((i) => (
                     <tr key={i.idPedido} className="transition hover:bg-gray-50">
                       <td className="px-5 py-3">
-                        <p className="font-medium text-gray-900">#{i.idPedido}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-gray-900">#{i.idPedido}</p>
+                          {i.teste && <SeloTeste />}
+                        </div>
                         <p className="text-xs text-gray-400">
                           {dataHora(i.dataCriacao)}
                         </p>

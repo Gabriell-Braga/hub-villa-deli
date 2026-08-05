@@ -15,6 +15,7 @@ const PERMITIDOS = [
   "plataforma",
   "status",
   "busca",
+  "teste",
   "limite",
   "offset",
 ] as const;

@@ -10,6 +10,7 @@ import type {
 } from "@/lib/tipos";
 import LogoProvedor from "@/components/LogoProvedor";
 import CardEntrega from "@/components/CardEntrega";
+import SeloTeste from "@/components/SeloTeste";
 import { useToast } from "@/components/Toast";
 import { brlOuGratis, dataHora } from "@/lib/formato";
 import {
@@ -152,8 +153,11 @@ export default function PaginaCotacao({
     return () => clearInterval(t);
   }, [despacho, entrega?.status, cotar]);
 
-  const travado = despacho !== null;
   const pedido = dados?.pedido;
+  // Cancelado no Cardápio Web também trava a tela: o servidor recusa o
+  // despacho, e deixar o botão ativo só produziria um erro depois do clique.
+  const cancelado = /cancel/i.test(pedido?.statusCardapio ?? "");
+  const travado = despacho !== null || cancelado;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -166,7 +170,10 @@ export default function PaginaCotacao({
 
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Pedido #{idPedido}</h1>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-xl font-semibold text-gray-900">Pedido #{idPedido}</h1>
+            {pedido?.teste && <SeloTeste tamanho="grande" />}
+          </div>
           {pedido ? (
             <p className="mt-1 text-sm text-gray-500">
               {pedido.cliente.nome} · {pedido.endereco.bairro}, {pedido.endereco.cidade} ·
@@ -192,6 +199,19 @@ export default function PaginaCotacao({
           className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
         >
           {erroCarregar}
+        </div>
+      )}
+
+      {/* Cancelado no Cardápio Web: fica na tela, não é toast. É um estado do
+          pedido, e o atendente pode chegar aqui muito depois do aviso sumir.
+          O botão de despachar já é recusado pelo servidor de qualquer forma. */}
+      {cancelado && (
+        <div
+          role="alert"
+          className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"
+        >
+          <strong className="font-semibold">Pedido cancelado.</strong> A loja
+          cancelou este pedido no Cardápio Web — não acione entregador para ele.
         </div>
       )}
 

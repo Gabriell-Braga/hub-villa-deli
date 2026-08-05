@@ -62,6 +62,11 @@ function montarFiltro(f: FiltroHistorico): { where: string; valores: unknown[] }
     cond.push(`COALESCE(status_ao_vivo, status) = ${p()}`);
     valores.push(f.status.trim());
   }
+  // Sem filtro = mostra tudo. O Histórico é a tela onde as duas coisas
+  // convivem; quem quer só o real usa este filtro (ou o Relatórios, que já
+  // exclui teste sempre).
+  if (f.teste === "sim") cond.push(`teste = 1`);
+  if (f.teste === "nao") cond.push(`teste = 0`);
 
   const busca = f.busca?.trim();
   if (busca) {
@@ -96,6 +101,7 @@ interface Linha {
   courier_nome: string | null;
   tracking_url: string | null;
   live_mode: number | null;
+  teste: number;
 }
 
 const paraItem = (l: Linha): ItemHistorico => ({
@@ -112,11 +118,12 @@ const paraItem = (l: Linha): ItemHistorico => ({
   courierNome: l.courier_nome,
   trackingUrl: l.tracking_url,
   liveMode: l.live_mode === null ? null : l.live_mode === 1,
+  teste: l.teste === 1,
 });
 
 const COLUNAS = `id_pedido, data_criacao, plataforma_escolhida, valor_pago,
   eta_minutos, status, status_ao_vivo, cliente_nome, bairro, valor_pedido,
-  despachado_por, courier_nome, tracking_url, live_mode`;
+  despachado_por, courier_nome, tracking_url, live_mode, teste`;
 
 export async function listarHistorico(
   env: Env,
@@ -236,7 +243,10 @@ export async function historicoCsv(env: Env, f: FiltroHistorico): Promise<string
       celula(i.etaMinutos),
       celula(i.courierNome),
       celula(i.despachadoPor),
-      celula(i.liveMode === false ? "Teste" : i.liveMode === true ? "Real" : ""),
+      // A coluna `teste` é a fonte de verdade: vale para todo provedor. O
+      // liveMode só existe quando o parceiro manda webhook (o motoboy não
+      // manda), então sozinho ele deixava metade das linhas em branco.
+      celula(i.teste ? "Teste" : "Real"),
     ].join(SEP)
   );
 

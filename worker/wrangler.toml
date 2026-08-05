@@ -36,9 +36,12 @@ binding = "HUB_KV"
 id = "PREENCHER_COM_O_ID_DO_KV"          # produção
 preview_id = "PREENCHER_COM_O_PREVIEW_ID" # wrangler dev
 
-# Limpeza diária dos pedidos antigos (D1 não expira sozinho como o KV).
+# Dois horários:
+#   */5  reprocessa eventos do Cardápio Web que falharam na primeira tentativa.
+#        Um pedido preso é um pedido que a loja não vê — não pode esperar horas.
+#   0 4  limpeza diária dos pedidos antigos (D1 não expira sozinho como o KV).
 [triggers]
-crons = ["0 4 * * *"]
+crons = ["*/5 * * * *", "0 4 * * *"]
 
 # ===========================================================================
 # VARIÁVEIS — DEV (padrão do `npx wrangler dev`)
@@ -70,9 +73,13 @@ RESTAURANTE_LNG = "-43.932128"
 RESTAURANTE_TELEFONE = "+5531984428765"
 
 # --- Cardápio Web ----------------------------------------------------------
-# CARDAPIO_WEB_HEADER: nome do header que o Cardápio Web usa para assinar o
-# webhook. O valor do segredo em si vai em WEBHOOK_SECRET.
-CARDAPIO_WEB_HEADER = "x-webhook-secret"
+# CARDAPIO_WEB_HEADER: header em que o Cardápio Web manda o token do webhook.
+# Hoje é X-Webhook-Token. O valor do token em si vai no segredo WEBHOOK_SECRET.
+#
+# CARDAPIO_WEB_BASE_URL vazio = escolhe sozinho pelo AMBIENTE:
+#   producao -> https://integracao.cardapioweb.com
+#   dev/hml  -> https://integracao.sandbox.cardapioweb.com
+CARDAPIO_WEB_HEADER = "x-webhook-token"
 CARDAPIO_WEB_BASE_URL = ""
 CARDAPIO_WEB_MERCHANT_ID = "14875"
 
@@ -122,6 +129,9 @@ database_id = "9d872b31-aaa0-49da-8d8b-9a80e3002113"
 binding = "HUB_KV"
 id = "f9bcfa095d4849158d18df35f5225614"
 
+[env.hml.triggers]
+crons = ["*/5 * * * *", "0 4 * * *"]
+
 [env.hml.vars]
 AMBIENTE = "hml"
 PROVEDORES_ATIVOS = "uber,motoboy"
@@ -133,8 +143,13 @@ RESTAURANTE_LAT = "-19.978452"
 RESTAURANTE_LNG = "-43.932128"
 RESTAURANTE_TELEFONE = "+5531984428765"
 
-CARDAPIO_WEB_HEADER = "x-webhook-secret"
-CARDAPIO_WEB_BASE_URL = ""
+CARDAPIO_WEB_HEADER = "x-webhook-token"
+# A conta do Villa Deli só tem credencial de PRODUÇÃO no Cardápio Web (o mesmo
+# token dá 401 no sandbox deles). Homologação aponta para a base real de
+# propósito: é assim que os pedidos de verdade da loja chegam aqui para teste.
+# Continua seguro porque quem entrega é decidido pelo MODO DE OPERAÇÃO — em
+# teste, o Uber acionado é o de sandbox e nada é cobrado.
+CARDAPIO_WEB_BASE_URL = "https://integracao.cardapioweb.com"
 CARDAPIO_WEB_MERCHANT_ID = "14875"
 
 UBER_BASE_URL = "https://api.uber.com"
@@ -176,7 +191,7 @@ binding = "HUB_KV"
 id = "PREENCHER_COM_O_ID_DO_KV"
 
 [env.producao.triggers]
-crons = ["0 4 * * *"]
+crons = ["*/5 * * * *", "0 4 * * *"]
 
 [env.producao.vars]
 AMBIENTE = "producao"
@@ -189,7 +204,7 @@ RESTAURANTE_LAT = "-19.978452"
 RESTAURANTE_LNG = "-43.932128"
 RESTAURANTE_TELEFONE = "+5531984428765"
 
-CARDAPIO_WEB_HEADER = "x-webhook-secret"
+CARDAPIO_WEB_HEADER = "x-webhook-token"
 CARDAPIO_WEB_BASE_URL = ""
 CARDAPIO_WEB_MERCHANT_ID = "14875"
 

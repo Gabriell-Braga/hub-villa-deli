@@ -4,6 +4,7 @@ import type {
   Env,
   EstadoEntrega,
   EventoEntrega,
+  ModoOperacao,
   Papel,
   ProviderId,
   Pedido,
@@ -47,13 +48,139 @@ function linhaParaPedido(l: LinhaPedido): Pedido {
  */
 export async function salvarPedidoNovo(env: Env, pedido: Pedido): Promise<boolean> {
   const r = await env.DB.prepare(
-    `INSERT OR IGNORE INTO pedidos (id, criado_em, status, dados)
-     VALUES (?1, ?2, ?3, ?4)`
+    `INSERT OR IGNORE INTO pedidos (id, criado_em, status, dados, teste)
+     VALUES (?1, ?2, ?3, ?4, ?5)`
   )
-    .bind(pedido.id, pedido.criadoEm, pedido.status, JSON.stringify(pedido))
+    .bind(
+      pedido.id,
+      pedido.criadoEm,
+      pedido.status,
+      JSON.stringify(pedido),
+      pedido.teste ? 1 : 0
+    )
     .run();
 
   return (r.meta.changes ?? 0) > 0;
+}
+
+/**
+ * Grava o status que o pedido tem no Cardápio Web.
+ *
+ * Mexe só nesse campo do JSON, com json_set do SQLite, em vez de reescrever
+ * `dados` inteiro: o pedido pode estar sendo cotado no mesmo instante, e um
+ * "lê, altera, grava" aqui apagaria o que a cotação escreveu.
+ */
+export async function atualizarStatusCardapio(
+  env: Env,
+  idPedido: string,
+  status: string | null
+): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE pedidos SET dados = json_set(dados, '$.statusCardapio', ?2)
+      WHERE id = ?1`
+  )
+    .bind(idPedido, status)
+    .run();
+}
+
+// ---------------------------------------------------------------------------
+// FILA DE EVENTOS DO CARDÁPIO WEB
+//
+// O webhook deles exige HTTP 200 em até 5 s, e depois de 15 falhas PAUSA o
+// webhook — a loja para de receber pedidos no Hub sem ninguém perceber. Por
+// isso a rota só grava aqui e responde; o processamento pesado (buscar o
+// pedido na API deles + geocodificar) acontece fora do caminho da resposta.
+// ---------------------------------------------------------------------------
+
+export interface EventoCardapio {
+  eventId: string;
+  tipo: string;
+  orderId: string | null;
+  merchantId: string | null;
+  payload: string;
+}
+
+/** Devolve false quando é reenvio — a doc deles indica `event_id` para isso. */
+export async function enfileirarEventoCardapio(
+  env: Env,
+  e: EventoCardapio
+): Promise<boolean> {
+  const r = await env.DB.prepare(
+    `INSERT OR IGNORE INTO eventos_cardapio
+       (event_id, tipo, order_id, merchant_id, recebido_em, payload)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6)`
+  )
+    .bind(
+      e.eventId,
+      e.tipo,
+      e.orderId,
+      e.merchantId,
+      new Date().toISOString(),
+      e.payload
+    )
+    .run();
+
+  return (r.meta.changes ?? 0) > 0;
+}
+
+export async function marcarEventoProcessado(
+  env: Env,
+  eventId: string
+): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE eventos_cardapio SET processado_em = ?2, erro = NULL WHERE event_id = ?1`
+  )
+    .bind(eventId, new Date().toISOString())
+    .run();
+}
+
+export async function marcarEventoComErro(
+  env: Env,
+  eventId: string,
+  erro: string
+): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE eventos_cardapio
+        SET tentativas = tentativas + 1, erro = ?2
+      WHERE event_id = ?1`
+  )
+    .bind(eventId, erro.slice(0, 500))
+    .run();
+}
+
+/**
+ * Eventos que ainda não deram certo. O cron reprocessa.
+ *
+ * `tentativas < 10` evita ficar batendo para sempre num pedido que a API deles
+ * nunca vai devolver — um id apagado, por exemplo.
+ */
+export async function eventosCardapioPendentes(
+  env: Env,
+  limite = 20
+): Promise<EventoCardapio[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT event_id, tipo, order_id, merchant_id, payload
+       FROM eventos_cardapio
+      WHERE processado_em IS NULL AND tentativas < 10
+      ORDER BY recebido_em
+      LIMIT ?1`
+  )
+    .bind(limite)
+    .all<{
+      event_id: string;
+      tipo: string;
+      order_id: string | null;
+      merchant_id: string | null;
+      payload: string;
+    }>();
+
+  return (results ?? []).map((l) => ({
+    eventId: l.event_id,
+    tipo: l.tipo,
+    orderId: l.order_id,
+    merchantId: l.merchant_id,
+    payload: l.payload,
+  }));
 }
 
 export async function obterPedido(env: Env, id: string): Promise<Pedido | null> {
@@ -179,14 +306,20 @@ export async function registrarDelivery(
   pedido: Pedido,
   cotacao: Cotacao,
   resultado: ResultadoDespacho,
-  despachadoPor: string
+  despachadoPor: string,
+  /** Modo no momento do clique — é o que decide se saiu dinheiro de verdade. */
+  modo: ModoOperacao
 ): Promise<void> {
+  // Teste é qualquer um dos dois: pedido simulado, ou despacho com credencial
+  // de sandbox. Basta um para a linha não ser uma venda real.
+  const teste = pedido.teste || modo === "teste" ? 1 : 0;
+
   await env.DB.prepare(
     `INSERT OR IGNORE INTO deliveries (
        id_pedido, plataforma_escolhida, valor_pago, eta_minutos, status,
        data_criacao, delivery_id_externo, tracking_url,
-       cliente_nome, bairro, valor_pedido, despachado_por
-     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`
+       cliente_nome, bairro, valor_pedido, despachado_por, teste
+     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`
   )
     .bind(
       pedido.id,
@@ -200,7 +333,8 @@ export async function registrarDelivery(
       pedido.cliente.nome,
       pedido.endereco.bairro,
       pedido.total,
-      despachadoPor
+      despachadoPor,
+      teste
     )
     .run();
 }
@@ -463,6 +597,7 @@ export async function listarPedidos(
       itens: p.itens?.length ?? 0,
       despacho: despacho ? { ...despacho, valorPago: l.valor_pago } : null,
       melhorPreco: precos.length ? Math.min(...precos) : null,
+      teste: !!p.teste,
     };
   });
 }

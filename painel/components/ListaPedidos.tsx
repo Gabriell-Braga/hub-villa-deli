@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { PedidoResumo, StatusPedido } from "@/lib/tipos";
 import { ROTULO_PROVEDOR } from "@/lib/tipos";
 import LogoProvedor from "./LogoProvedor";
+import SeloTeste from "./SeloTeste";
 import { brlOuGratis, dataHora, desde } from "@/lib/formato";
 import { SkeletonListaPedidos } from "./Skeleton";
 
@@ -158,6 +159,7 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
               </div>
 
               <div className="mt-3 flex flex-wrap items-center gap-2">
+                {p.teste && <SeloTeste />}
                 <Selo status={p.status} />
                 {p.bairro && (
                   <span className="text-xs text-gray-500">{p.bairro}</span>
@@ -194,7 +196,10 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
               {pedidos.map((p) => (
                 <tr key={p.id} className="transition hover:bg-gray-50">
                   <td className="px-5 py-3">
-                    <p className="font-medium text-gray-900">#{p.id}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-gray-900">#{p.id}</p>
+                      {p.teste && <SeloTeste />}
+                    </div>
                     <p className="text-xs text-gray-400">
                       {aba === "abertos"
                         ? `há ${desde(p.criadoEm)}`

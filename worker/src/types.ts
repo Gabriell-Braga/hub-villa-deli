@@ -70,6 +70,8 @@ export interface Env {
   JWT_SECRET: string;
   /** Token para o Hub chamar a API do Cardápio Web (opcional hoje). */
   CARDAPIO_WEB_TOKEN: string;
+  /** Token OAuth do Cardápio Web. Se presente, tem prioridade sobre a API Key. */
+  CARDAPIO_WEB_OAUTH_TOKEN: string;
   /** Signing key do webhook do Uber Direct (Dashboard > Developer > Webhooks). */
   UBER_WEBHOOK_SECRET: string;
 
@@ -123,6 +125,14 @@ export interface Pedido {
   total: number;
   observacao?: string;
   status: StatusPedido;
+  /**
+   * Status do pedido no Cardápio Web (o nosso `status` é o do despacho, são
+   * coisas diferentes). Serve principalmente para barrar o despacho de um
+   * pedido que a loja cancelou lá.
+   */
+  statusCardapio?: string | null;
+  /** true = pedido de teste. Nunca é uma venda real da loja. */
+  teste?: boolean;
 }
 
 // Resultado normalizado de cotação — todo provider devolve neste formato.
@@ -251,6 +261,8 @@ export interface PedidoResumo {
   despacho: (ResultadoDespacho & { valorPago: number | null }) | null;
   /** Menor preço disponível na última cotação, se houver. */
   melhorPreco: number | null;
+  /** true = pedido simulado. O painel marca na tela para não confundir. */
+  teste: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -265,6 +277,8 @@ export interface FiltroHistorico {
   status?: string;
   /** Casa com id do pedido, nome do cliente ou bairro. */
   busca?: string;
+  /** "sim" = só simulados, "nao" = só reais, ausente = os dois. */
+  teste?: "sim" | "nao";
   limite?: number;
   offset?: number;
 }
@@ -283,6 +297,8 @@ export interface ItemHistorico {
   courierNome: string | null;
   trackingUrl: string | null;
   liveMode: boolean | null;
+  /** true = entrega simulada. Não conta nos Relatórios. */
+  teste: boolean;
 }
 
 export interface RespostaHistorico {

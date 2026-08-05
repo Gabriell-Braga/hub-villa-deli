@@ -30,7 +30,10 @@ CREATE TABLE IF NOT EXISTS pedidos (
   cotado_em      TEXT,
   -- JSON do ResultadoDespacho. Preenchido = já despachado (idempotência)
   despacho       TEXT,
-  despachado_em  TEXT
+  despachado_em  TEXT,
+  -- 1 = pedido de teste. Marcado no banco, não só na tela, para o relatório
+  -- conseguir separar teste de venda real.
+  teste          INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_pedidos_criado_em ON pedidos (criado_em);
@@ -82,7 +85,8 @@ CREATE TABLE IF NOT EXISTS deliveries (
   courier_lat           REAL,
   courier_lng           REAL,
   -- false = evento de teste (credenciais de sandbox)
-  live_mode             INTEGER
+  live_mode             INTEGER,
+  teste                 INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_deliveries_data       ON deliveries (data_criacao);
@@ -177,3 +181,31 @@ CREATE TABLE IF NOT EXISTS config (
   atualizado_em   TEXT NOT NULL,
   atualizado_por  TEXT
 );
+
+
+-- ---------------------------------------------------------------------------
+-- 7) EVENTOS_CARDAPIO — fila dos webhooks do Cardápio Web.
+--
+-- Eles NÃO mandam o pedido no webhook: mandam só o , e a gente busca
+-- em GET /api/partner/v1/orders/{id}. E exigem HTTP 200 em até 5 SEGUNDOS,
+-- senão reenviam até 15 vezes e depois PAUSAM o webhook, descartando
+-- notificações até alguém reativar na mão.
+--
+-- Por isso o webhook só grava aqui e responde 200 na hora. Buscar o pedido e
+-- geocodificar acontece fora do caminho da resposta; o que falhar fica com
+-- processado_em nulo e o cron tenta de novo.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS eventos_cardapio (
+  event_id       TEXT PRIMARY KEY,
+  tipo           TEXT NOT NULL,
+  order_id       TEXT,
+  merchant_id    TEXT,
+  recebido_em    TEXT NOT NULL,
+  processado_em  TEXT,
+  tentativas     INTEGER NOT NULL DEFAULT 0,
+  erro           TEXT,
+  payload        TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ev_cw_pendente ON eventos_cardapio (processado_em, recebido_em);
+CREATE INDEX IF NOT EXISTS idx_ev_cw_order    ON eventos_cardapio (order_id);

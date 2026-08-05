@@ -43,6 +43,10 @@ export interface PedidoDetalhe {
   itens: Array<{ nome: string; quantidade: number; preco: number }>;
   total: number;
   observacao?: string;
+  /** Status do pedido lá no Cardápio Web — o `status` acima é o do despacho. */
+  statusCardapio?: string | null;
+  /** true = pedido simulado. Não é uma venda da loja. */
+  teste?: boolean;
 }
 
 /** Estado ao vivo da entrega, alimentado pelos webhooks do parceiro. */
@@ -104,6 +108,8 @@ export interface PedidoResumo {
   itens: number;
   despacho: (Despacho & { valorPago: number | null }) | null;
   melhorPreco: number | null;
+  /** true = pedido simulado. Não é uma venda da loja. */
+  teste: boolean;
 }
 
 export interface Estatisticas {
