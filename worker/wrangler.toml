@@ -116,11 +116,11 @@ name = "hub-logistico-hml"
 [[env.hml.d1_databases]]
 binding = "DB"
 database_name = "hub-logistico-hml"
-database_id = "PREENCHER_COM_O_ID_DO_D1_HML"
+database_id = "9d872b31-aaa0-49da-8d8b-9a80e3002113"
 
 [[env.hml.kv_namespaces]]
 binding = "HUB_KV"
-id = "PREENCHER_COM_O_ID_DO_KV_HML"
+id = "f9bcfa095d4849158d18df35f5225614"
 
 [env.hml.vars]
 AMBIENTE = "hml"
