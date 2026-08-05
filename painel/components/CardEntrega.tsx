@@ -28,7 +28,60 @@ const ETAPAS = [
   { rotulo: "Entregue", status: ["delivered"] },
 ];
 
-const ENCERRADO = ["delivered", "canceled", "returned"];
+// Ícones em SVG, não emoji: emoji muda de desenho conforme o sistema
+// operacional, não herda a cor do texto e destoa num painel de operação.
+const icone = (d: string, className: string) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <path d={d} />
+  </svg>
+);
+
+const IconeTelefone = ({ className = "h-4 w-4" }: { className?: string }) =>
+  icone(
+    "M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z",
+    className
+  );
+
+const IconeEntregue = ({ className = "h-5 w-5" }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+    <path d="m9 11 3 3L22 4" />
+  </svg>
+);
+
+const IconeAlerta = ({ className = "h-5 w-5" }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+    <path d="M12 9v4M12 17h.01" />
+  </svg>
+);
 
 function etapaAtual(status: string | null): number {
   if (!status) return 0;
@@ -105,11 +158,12 @@ export default function CardEntrega({
         }`}
       >
         <span
-          className={`text-base font-semibold ${
+          className={`flex items-center gap-2 text-base font-semibold ${
             cancelado ? "text-red-800" : entregue ? "text-emerald-800" : "text-gray-900"
           }`}
         >
-          {entregue ? "✅ " : cancelado ? "⚠️ " : ""}
+          {entregue && <IconeEntregue />}
+          {cancelado && <IconeAlerta />}
           {rotulo}
         </span>
 
@@ -128,23 +182,8 @@ export default function CardEntrega({
       <div className="p-5">
         {temTrilha && <Trilha status={status} />}
 
-        {/* Previsão e entregador lado a lado: as duas coisas que o cliente
-            pergunta. */}
-        <dl
-          className={`grid gap-5 sm:grid-cols-2 ${temTrilha ? "mt-6" : ""}`}
-        >
-          {entrega?.dropoffEta && !entregue && !cancelado && (
-            <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                Previsão de entrega
-              </dt>
-              <dd className="mt-0.5 text-2xl font-semibold tracking-tight text-gray-900">
-                {hora(entrega.dropoffEta)}
-              </dd>
-              <dd className="text-sm text-gray-500">{faltam(entrega.dropoffEta)}</dd>
-            </div>
-          )}
-
+        {/* Entregador à esquerda, previsão à direita. */}
+        <dl className={`grid gap-5 sm:grid-cols-2 ${temTrilha ? "mt-6" : ""}`}>
           {entrega?.courierNome && (
             <div>
               <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">
@@ -157,16 +196,31 @@ export default function CardEntrega({
                 <dd className="text-sm text-gray-500">{entrega.courierVeiculo}</dd>
               )}
               {entrega.courierTelefone && (
-                <dd className="mt-1.5">
+                <dd className="mt-2">
                   <a
                     href={`tel:${entrega.courierTelefone}`}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                    className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
                   >
-                    <span aria-hidden="true">📞</span>
+                    <IconeTelefone className="h-4 w-4 text-gray-400" />
                     {telefone(entrega.courierTelefone)}
                   </a>
                 </dd>
               )}
+            </div>
+          )}
+
+          {/* col-start-2 fixa a previsão na direita mesmo quando ainda não há
+              entregador atribuído — senão ela pularia para a coluna da esquerda
+              e a informação trocaria de lugar entre um refresh e outro. */}
+          {entrega?.dropoffEta && !entregue && !cancelado && (
+            <div className="sm:col-start-2">
+              <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                Previsão de entrega
+              </dt>
+              <dd className="mt-0.5 text-2xl font-semibold tracking-tight text-gray-900">
+                {hora(entrega.dropoffEta)}
+              </dd>
+              <dd className="text-sm text-gray-500">{faltam(entrega.dropoffEta)}</dd>
             </div>
           )}
         </dl>
