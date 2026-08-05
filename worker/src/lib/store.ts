@@ -300,6 +300,68 @@ export async function aplicarEstadoEntrega(
     .run();
 }
 
+/**
+ * Marca a entrega do motoboy próprio como concluída (ou cancelada).
+ *
+ * Existe porque o motoboy não tem webhook: sem isto o status dele fica em
+ * "Acionado" para sempre, e o histórico nunca mostra o que de fato aconteceu.
+ * Quem confirma é o atendente, na tela do pedido.
+ *
+ * Restrito ao motoboy de propósito. Deixar um atendente escrever o status de
+ * uma corrida da Uber criaria um dado que discorda do parceiro — e o parceiro
+ * é a fonte da verdade quando existe webhook.
+ */
+export async function marcarEntregaManual(
+  env: Env,
+  idPedido: string,
+  status: "delivered" | "canceled",
+  quem: string
+): Promise<{ ok: boolean; erro?: string }> {
+  const l = await env.DB.prepare(
+    `SELECT plataforma_escolhida, COALESCE(status_ao_vivo, status) AS atual
+       FROM deliveries WHERE id_pedido = ?1`
+  )
+    .bind(idPedido)
+    .first<{ plataforma_escolhida: string; atual: string }>();
+
+  if (!l) return { ok: false, erro: "Entrega não encontrada." };
+  if (l.plataforma_escolhida !== "motoboy") {
+    return {
+      ok: false,
+      erro: "O status desta entrega vem do parceiro e não pode ser alterado à mão.",
+    };
+  }
+  if (l.atual === "delivered" || l.atual === "canceled") {
+    return { ok: false, erro: "Esta entrega já foi encerrada." };
+  }
+
+  const agora = new Date().toISOString();
+
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE deliveries
+          SET status_ao_vivo = ?2, status = ?2, status_atualizado_em = ?3
+        WHERE id_pedido = ?1`
+    ).bind(idPedido, status, agora),
+
+    // Fica na trilha de eventos igual aos do parceiro, com quem confirmou.
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO eventos_entrega
+         (id, provider, kind, status, delivery_id_externo, id_pedido,
+          criado_em_parceiro, recebido_em, live_mode, payload)
+       VALUES (?1, 'motoboy', 'manual.status', ?2, ?3, ?3, ?4, ?4, NULL, ?5)`
+    ).bind(
+      `manual:${idPedido}:${status}:${agora}`,
+      status,
+      idPedido,
+      agora,
+      JSON.stringify({ confirmadoPor: quem, status })
+    ),
+  ]);
+
+  return { ok: true };
+}
+
 /** Estado ao vivo para o painel mostrar no detalhe do pedido. */
 export async function obterEntregaAoVivo(
   env: Env,

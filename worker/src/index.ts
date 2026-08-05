@@ -34,7 +34,9 @@ import {
   invalidarTokensDoUsuario,
   limparTokensAntigos,
   obterEntregaAoVivo,
+  marcarEntregaManual,
 } from "./lib/store";
+import { historicoCsv, listarHistorico, nomeArquivoCsv } from "./lib/historico";
 import { assinaturaValida } from "./lib/assinatura";
 import { processarWebhookUber } from "./services/uber-webhook";
 import {
@@ -83,6 +85,9 @@ app.use("/api/*", (c, next) => {
 app.use("/api/cotacao/*", exigirLogin);
 app.use("/api/despachar", exigirLogin);
 app.use("/api/pedidos", exigirLogin);
+app.use("/api/historico", exigirLogin);
+app.use("/api/historico/*", exigirLogin);
+app.use("/api/entrega/*", exigirLogin);
 app.use("/api/estatisticas", exigirLogin);
 app.use("/api/auth/eu", exigirLogin);
 
@@ -477,6 +482,66 @@ app.get("/api/pedidos", async (c) => {
   });
 
   return c.json({ aba, pedidos });
+});
+
+// ---------------------------------------------------------------------------
+// 2b) Histórico de entregas, com filtros
+//     GET /api/historico?de=&ate=&plataforma=&status=&busca=&limite=&offset=
+//     GET /api/historico/csv  (mesmos filtros)
+//
+// Base é `deliveries`, não `pedidos`: o cron limpa pedidos com mais de 30 dias
+// e um histórico montado sobre eles se esvaziaria sozinho.
+// ---------------------------------------------------------------------------
+function filtrosDaQuery(c: { req: { query: (k: string) => string | undefined } }) {
+  return {
+    de: c.req.query("de"),
+    ate: c.req.query("ate"),
+    plataforma: c.req.query("plataforma"),
+    status: c.req.query("status"),
+    busca: c.req.query("busca"),
+    limite: Number(c.req.query("limite") ?? 100),
+    offset: Number(c.req.query("offset") ?? 0),
+  };
+}
+
+app.get("/api/historico", async (c) => {
+  return c.json(await listarHistorico(c.env, filtrosDaQuery(c)));
+});
+
+app.get("/api/historico/csv", async (c) => {
+  const filtros = filtrosDaQuery(c);
+  const csv = await historicoCsv(c.env, filtros);
+
+  return new Response(csv, {
+    headers: {
+      // charset explícito: sem isso o Excel ignora o BOM em algumas versões.
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${nomeArquivoCsv(filtros)}"`,
+      "Cache-Control": "no-store",
+    },
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 2c) Confirmar entrega do motoboy próprio
+//     POST /api/entrega/:idPedido/concluir  { status: "delivered" | "canceled" }
+//
+// O motoboy não tem webhook — sem isto o status dele fica "Acionado" para
+// sempre e o histórico nunca reflete o que aconteceu.
+// ---------------------------------------------------------------------------
+app.post("/api/entrega/:idPedido/concluir", async (c) => {
+  const body = await c.req.json<{ status?: string }>().catch(() => null);
+  const status = body?.status === "canceled" ? "canceled" : "delivered";
+
+  const r = await marcarEntregaManual(
+    c.env,
+    c.req.param("idPedido"),
+    status,
+    c.get("usuario").email
+  );
+
+  if (!r.ok) return c.json({ erro: r.erro }, 400);
+  return c.json({ ok: true, status });
 });
 
 // ---------------------------------------------------------------------------

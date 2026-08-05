@@ -254,6 +254,46 @@ export interface PedidoResumo {
 }
 
 // ---------------------------------------------------------------------------
+// Histórico de entregas (tela Histórico + exportação CSV)
+// ---------------------------------------------------------------------------
+
+/** Datas em YYYY-MM-DD, interpretadas no fuso de São Paulo. */
+export interface FiltroHistorico {
+  de?: string;
+  ate?: string;
+  plataforma?: string;
+  status?: string;
+  /** Casa com id do pedido, nome do cliente ou bairro. */
+  busca?: string;
+  limite?: number;
+  offset?: number;
+}
+
+export interface ItemHistorico {
+  idPedido: string;
+  dataCriacao: string;
+  plataforma: ProviderId;
+  valorPago: number;
+  etaMinutos: number | null;
+  status: string;
+  clienteNome: string | null;
+  bairro: string | null;
+  valorPedido: number | null;
+  despachadoPor: string | null;
+  courierNome: string | null;
+  trackingUrl: string | null;
+  liveMode: boolean | null;
+}
+
+export interface RespostaHistorico {
+  itens: ItemHistorico[];
+  /** Totais do FILTRO INTEIRO, não só da página devolvida. */
+  total: number;
+  somaFrete: number;
+  somaPedidos: number;
+}
+
+// ---------------------------------------------------------------------------
 // Relatórios
 // ---------------------------------------------------------------------------
 export interface Estatisticas {

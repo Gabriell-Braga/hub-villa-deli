@@ -46,6 +46,7 @@ export default function PaginaCotacao({
   const [aviso, setAviso] = useState<Aviso | null>(null);
   const [despacho, setDespacho] = useState<Despacho | null>(null);
   const [entrega, setEntrega] = useState<EntregaAoVivo | null>(null);
+  const [concluindo, setConcluindo] = useState(false);
 
   const cotar = useCallback(async () => {
     setCarregando(true);
@@ -101,6 +102,40 @@ export default function PaginaCotacao({
       setAviso({ tipo: "erro", texto: "Erro de rede ao despachar." });
     } finally {
       setDespachando(null);
+    }
+  }
+
+  async function concluir(status: "delivered" | "canceled") {
+    setConcluindo(true);
+    setAviso(null);
+    try {
+      const res = await fetch(
+        `/api/entrega/${encodeURIComponent(idPedido)}/concluir`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        }
+      );
+      const json = await res.json();
+
+      if (!res.ok) {
+        setAviso({ tipo: "erro", texto: json.erro ?? "Não foi possível salvar." });
+        return;
+      }
+
+      setAviso({
+        tipo: "ok",
+        texto:
+          status === "delivered"
+            ? "Entrega confirmada. Já aparece no histórico."
+            : "Entrega marcada como cancelada.",
+      });
+      await cotar();
+    } catch {
+      setAviso({ tipo: "erro", texto: "Erro de rede ao salvar." });
+    } finally {
+      setConcluindo(false);
     }
   }
 
@@ -232,6 +267,37 @@ export default function PaginaCotacao({
               Atualizado às {hora(entrega.statusAtualizadoEm)}
             </p>
           )}
+
+          {/* Confirmação manual — só para o motoboy próprio.
+              Ele não tem webhook: sem isto o status fica "Acionado" para
+              sempre e o histórico nunca mostra o que aconteceu. Nas
+              transportadoras parceiras o status vem delas, e deixar alguém
+              escrever à mão criaria um dado que discorda da fonte. */}
+          {despacho.provider === "motoboy" &&
+            entrega?.status !== "delivered" &&
+            entrega?.status !== "canceled" && (
+              <div className="mt-4 border-t border-gray-100 pt-4">
+                <p className="text-sm text-gray-600">
+                  O motoboy já entregou este pedido?
+                </p>
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                  <button
+                    onClick={() => concluir("delivered")}
+                    disabled={concluindo}
+                    className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50 sm:py-2"
+                  >
+                    {concluindo ? "Salvando..." : "Marcar como entregue"}
+                  </button>
+                  <button
+                    onClick={() => concluir("canceled")}
+                    disabled={concluindo}
+                    className="rounded-lg border border-red-200 px-4 py-2.5 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-50 sm:py-2"
+                  >
+                    Cancelar entrega
+                  </button>
+                </div>
+              </div>
+            )}
           {/* O tracking_url pode chegar/mudar pelo webhook — o do webhook vence. */}
           {(entrega?.trackingUrl ?? despacho.trackingUrl) && (
             <a
