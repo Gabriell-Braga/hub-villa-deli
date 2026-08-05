@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LogoComNome } from "@/components/Logo";
 import { Skeleton } from "@/components/Skeleton";
+import CampoSenha from "@/components/CampoSenha";
 
 // ---------------------------------------------------------------------------
 // Definição de senha — primeiro acesso e recuperação usam esta mesma tela.
@@ -93,8 +94,6 @@ function Formulario() {
     }
   }
 
-  const caixa =
-    "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none transition focus:border-[var(--marca-primaria)] focus:ring-2 focus:ring-gray-200";
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4 sm:p-6">
@@ -166,16 +165,16 @@ function Formulario() {
               >
                 Nova senha
               </label>
-              <input
-                id="senha"
-                type="password"
-                autoComplete="new-password"
-                required
-                value={senha}
-                onChange={(e) => setSenha(e.target.value)}
-                placeholder="Mínimo de 8 caracteres"
-                className={`mt-1.5 ${caixa}`}
-              />
+              <div className="mt-1.5">
+                <CampoSenha
+                  id="senha"
+                  autoComplete="new-password"
+                  required
+                  value={senha}
+                  onChange={setSenha}
+                  placeholder="Mínimo de 8 caracteres"
+                />
+              </div>
 
               <label
                 className="mt-4 block text-sm font-medium text-gray-700"
@@ -183,16 +182,16 @@ function Formulario() {
               >
                 Repita a senha
               </label>
-              <input
-                id="confirmacao"
-                type="password"
-                autoComplete="new-password"
-                required
-                value={confirmacao}
-                onChange={(e) => setConfirmacao(e.target.value)}
-                placeholder="••••••••"
-                className={`mt-1.5 ${caixa}`}
-              />
+              <div className="mt-1.5">
+                <CampoSenha
+                  id="confirmacao"
+                  autoComplete="new-password"
+                  required
+                  value={confirmacao}
+                  onChange={setConfirmacao}
+                  placeholder="••••••••"
+                />
+              </div>
 
               {erro && (
                 <p

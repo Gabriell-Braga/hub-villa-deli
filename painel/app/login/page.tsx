@@ -5,6 +5,7 @@ import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { LogoComNome } from "@/components/Logo";
+import CampoSenha from "@/components/CampoSenha";
 
 function FormularioLogin() {
   const router = useRouter();
@@ -78,16 +79,16 @@ function FormularioLogin() {
               Esqueci minha senha
             </Link>
           </div>
-          <input
-            id="senha"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={senha}
-            onChange={(e) => setSenha(e.target.value)}
-            placeholder="••••••••"
-            className="mt-1.5 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none transition focus:border-[var(--marca-primaria)] focus:ring-2 focus:ring-gray-200"
-          />
+          <div className="mt-1.5">
+            <CampoSenha
+              id="senha"
+              autoComplete="current-password"
+              required
+              value={senha}
+              onChange={setSenha}
+              placeholder="••••••••"
+            />
+          </div>
 
           <p className="mt-3 text-xs text-gray-400">
             Primeiro acesso? Use o link que o administrador enviou para criar sua
