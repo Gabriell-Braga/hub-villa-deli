@@ -1,4 +1,11 @@
-import type { Cotacao, Env, ModoOperacao, Pedido, ResultadoDespacho } from "../types";
+import type {
+  Cotacao,
+  Env,
+  ModoOperacao,
+  Pedido,
+  PreferenciaVeiculo,
+  ResultadoDespacho,
+} from "../types";
 import { getUberToken } from "./tokens";
 import { distanciaKm, enderecoFormatado } from "../lib/geo";
 import { credenciaisUber } from "../config/ambiente";
@@ -127,32 +134,28 @@ export function traduzirErroUber(status: number, corpo: string): string {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// PORTE DO PEDIDO
+// PREFERÊNCIA DE VEÍCULO
 //
-// Como não há campo de veículo, o que sobra é declarar tamanho e peso com
-// honestidade e deixar a Uber decidir. É o comportamento documentado deles:
-// "if your package is heavy, our system will provide you a driver instead of
-// a biker".
+// Como não há campo de veículo na API, o que sobra é declarar volume e peso e
+// deixar a Uber decidir. É o comportamento documentado deles: "if your package
+// is heavy, our system will provide you a driver instead of a biker".
 //
-// ATENÇÃO AO QUE ISTO **NÃO** FAZ: não muda o preço. A cotação é criada antes,
-// num endpoint que nem aceita manifesto, e o `quote_id` já fixou a tarifa. O
-// porte influencia QUEM vem buscar, não quanto custa.
+// Por isso a tela fala em PREFERÊNCIA, não escolha. Pedir carro é declarar um
+// pedido volumoso; a Uber costuma atender, mas não promete.
 //
-// Os pesos são estimativas por faixa, não medições. Servem para cair do lado
-// certo do critério da Uber; declarar 20 kg num pedido de 2 kg seria pedir
-// carro na marra, e mentir para o parceiro que vai executar a entrega.
+// E ATENÇÃO AO QUE ISTO **NÃO** FAZ: não muda o preço. A cotação foi criada
+// antes, num endpoint que nem aceita manifesto, e o `quote_id` já fixou a
+// tarifa.
 // ---------------------------------------------------------------------------
-export type PorteUber = "normal" | "grande" | "volumoso";
 
-const PORTES: Record<PorteUber, { size: string; gramas: number }> = {
-  // Sacola de delivery comum. `medium` = "precisa de uma sacola" na régua
-  // deles. Nunca `small`: esse é o padrão quando nada é informado e descreve
-  // uma garrafa d'água — pode render entregador de bicicleta.
-  normal: { size: "medium", gramas: 3_000 },
-  // Duas mãos para carregar. Pedido de família, caixa de pizza grande.
-  grande: { size: "large", gramas: 9_000 },
-  // Várias viagens até o veículo. É aqui que a Uber costuma mandar carro.
-  volumoso: { size: "xlarge", gramas: 20_000 },
+const VEICULOS: Record<PreferenciaVeiculo, { size: string; gramas: number }> = {
+  // `medium` = "precisa de uma sacola" na régua deles — a sacola de delivery.
+  // Nunca `small`: é o padrão quando nada é informado, descreve uma garrafa
+  // d'água, e pode render entregador de bicicleta.
+  moto: { size: "medium", gramas: 3_000 },
+  // `xlarge` = "várias viagens até o veículo". É o valor que, na documentação
+  // deles, exige carro ou van.
+  carro: { size: "xlarge", gramas: 20_000 },
 };
 
 /**
@@ -162,8 +165,8 @@ const PORTES: Record<PorteUber, { size: string; gramas: number }> = {
  * é o peso do pedido inteiro que interessa ao critério da Uber, e distribuir
  * daria um total errado quando há muitos itens.
  */
-function manifesto(pedido: Pedido, porte: PorteUber) {
-  const { size, gramas } = PORTES[porte];
+function manifesto(pedido: Pedido, veiculo: PreferenciaVeiculo) {
+  const { size, gramas } = VEICULOS[veiculo];
 
   const itens =
     pedido.itens.length > 0
@@ -178,13 +181,19 @@ function manifesto(pedido: Pedido, porte: PorteUber) {
 }
 
 /**
- * Distância em linha reta da loja até o cliente, no mesmo formato do card do
- * motoboy — para os dois serem comparáveis de relance.
+ * Distância da loja até o cliente, no mesmo formato do card do motoboy — para
+ * os dois serem comparáveis de relance.
  *
- * É a mesma régua que o Uber usa para recusar endereço: nas recusas deles, a
- * "Calculated Distance" bate com a linha reta, e o limite da loja hoje é
- * 5,0 km. Com o número na tela, quando um endereço for recusado dá para ver
- * na hora se foi por pouco ou por muito.
+ * É medida em LINHA RETA, e isso é escolha, não limitação. As faixas do
+ * motoboy são círculos no mapa, e a régua do Uber também é essa: nas recusas
+ * deles a "Calculated Distance" bate com a linha reta, contra um limite de
+ * 5,0 km. Distância por rota daria um número maior e mais familiar, mas que
+ * não corresponde a nenhuma das duas decisões — e custaria uma chamada a uma
+ * API de rotas em cada cotação.
+ *
+ * A tela não escreve "em linha reta" porque a distinção não muda nada para
+ * quem opera; o número existe para dizer se um endereço recusado ficou perto
+ * ou longe do limite.
  */
 function distanciaAteOCliente(env: Env, pedido: Pedido): string | undefined {
   const { lat, lng } = pedido.endereco;
@@ -197,7 +206,7 @@ function distanciaAteOCliente(env: Env, pedido: Pedido): string | undefined {
     lng
   );
 
-  return `${km.toFixed(2)} km em linha reta`;
+  return `${km.toFixed(2)} km`;
 }
 
 function pickupPayload(env: Env) {
@@ -281,7 +290,7 @@ export async function despacharUber(
   pedido: Pedido,
   cotacao: Cotacao,
   modo: ModoOperacao,
-  porte: PorteUber = "normal"
+  veiculo: PreferenciaVeiculo = "moto"
 ): Promise<ResultadoDespacho> {
   const cred = credenciaisUber(env, modo);
   const token = await getUberToken(env, modo);
@@ -301,7 +310,7 @@ export async function despacharUber(
         dropoff_phone_number: pedido.cliente.telefone,
         dropoff_latitude: pedido.endereco.lat,
         dropoff_longitude: pedido.endereco.lng,
-        manifest_items: manifesto(pedido, porte),
+        manifest_items: manifesto(pedido, veiculo),
 
         // CÓDIGO DE ENTREGA (PIN de 4 dígitos).
         //
@@ -378,6 +387,6 @@ export async function despacharUber(
     // declarar peso maior muda o que é cobrado. Hoje não sabemos: o preço vem
     // do quote_id, e a documentação não diz o que acontece quando o manifesto
     // exige um veículo maior que o precificado.
-    porteDeclarado: porte,
+    veiculoPreferido: veiculo,
   };
 }

@@ -12,6 +12,7 @@ import LogoProvedor from "@/components/LogoProvedor";
 import CardEntrega from "@/components/CardEntrega";
 import SeloTeste from "@/components/SeloTeste";
 import SeloOrigem from "@/components/SeloOrigem";
+import ModalVeiculo, { type Veiculo } from "@/components/ModalVeiculo";
 import { useToast } from "@/components/Toast";
 import { brl, brlOuGratis, dataHora } from "@/lib/formato";
 import {
@@ -29,70 +30,6 @@ const ORIGENS = {
   historico: { href: "/historico", rotulo: "Voltar para o histórico" },
   abertos: { href: "/pedidos", rotulo: "Voltar para a fila" },
 } as const;
-
-type Porte = "normal" | "grande" | "volumoso";
-
-const PORTES: Array<{ id: Porte; rotulo: string; ajuda: string }> = [
-  { id: "normal", rotulo: "Sacola", ajuda: "Cabe na garupa de uma moto" },
-  { id: "grande", rotulo: "Grande", ajuda: "Precisa das duas mãos para carregar" },
-  { id: "volumoso", rotulo: "Volumoso", ajuda: "Não cabe numa moto" },
-];
-
-/**
- * Porte do pedido, informado à transportadora no momento do despacho.
- *
- * É importante dizer o que isto NÃO faz, porque a expectativa natural é a
- * oposta: não escolhe o veículo e não muda o preço. A API do Uber não tem
- * campo de veículo, e a tarifa já foi fechada na cotação. O que o porte faz é
- * dar à transportadora a informação com que ELA decide quem vem buscar —
- * pacote pesado, motorista em vez de motoboy.
- *
- * Fica fora dos cards de propósito: vale para qualquer transportadora que o
- * atendente escolher, e repetir o controle em cada card sugeriria que a
- * escolha é por parceiro.
- */
-function SeletorPorte({
-  valor,
-  onChange,
-  travado,
-}: {
-  valor: Porte;
-  onChange: (p: Porte) => void;
-  travado: boolean;
-}) {
-  return (
-    <div className="mb-4 rounded-xl border border-gray-200 bg-white p-4">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="text-sm font-medium text-gray-700">Porte do pedido</span>
-
-        <div className="flex rounded-lg border border-gray-200 p-0.5">
-          {PORTES.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => onChange(p.id)}
-              disabled={travado}
-              title={p.ajuda}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition disabled:opacity-50 ${
-                valor === p.id
-                  ? "bg-[var(--marca-primaria)] text-[var(--marca-contraste)]"
-                  : "text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              {p.rotulo}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <p className="mt-2 text-xs text-gray-500">
-        {PORTES.find((p) => p.id === valor)?.ajuda}. A transportadora usa isso
-        para escolher o veículo — <strong className="font-medium">quem decide
-        é ela</strong>, e o preço continua sendo o da cotação.
-      </p>
-    </div>
-  );
-}
 
 /**
  * Quanto a loja ganha ou perde nesta entrega.
@@ -149,9 +86,12 @@ export default function PaginaCotacao({
   // Motivo pelo qual o servidor se recusou a cotar. Estado do pedido, não erro
   // de sistema — por isso não vai para o toast nem para o alerta vermelho.
   const [bloqueio, setBloqueio] = useState<"pagamento" | "cancelado" | null>(null);
-  // Porte declarado à transportadora. Padrão "normal" porque é o caso da
-  // esmagadora maioria dos pedidos — quem precisar mudar, muda.
-  const [porte, setPorte] = useState<Porte>("normal");
+  // Cotação que está esperando a escolha de veículo no modal. Só o Uber usa:
+  // é o único parceiro em que declarar o volume muda quem vem buscar.
+  const [pedindoVeiculo, setPedindoVeiculo] = useState<{
+    provider: ProviderId;
+    nome: string;
+  } | null>(null);
 
   const cotar = useCallback(async () => {
     setCarregando(true);
@@ -187,13 +127,13 @@ export default function PaginaCotacao({
     }
   }, [idPedido]);
 
-  async function despachar(provider: ProviderId, nome: string) {
+  async function despachar(provider: ProviderId, nome: string, veiculo?: Veiculo) {
     setDespachando(provider);
     try {
       const res = await fetch("/api/despachar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idPedido, provider, porte }),
+        body: JSON.stringify({ idPedido, provider, veiculo }),
       });
       const json = await res.json();
 
@@ -212,6 +152,7 @@ export default function PaginaCotacao({
       toast.erro("Erro de rede ao despachar.");
     } finally {
       setDespachando(null);
+      setPedindoVeiculo(null);
     }
   }
 
@@ -354,12 +295,6 @@ export default function PaginaCotacao({
             Cotações
           </h2>
 
-          {/* Some quando não há mais o que despachar: depois de despachado ou
-              com o pedido bloqueado, é um controle que não faz nada. */}
-          {!travado && (dados?.cotacoes?.length ?? 0) > 0 && (
-            <SeletorPorte valor={porte} onChange={setPorte} travado={travado} />
-          )}
-
           {carregando ? (
             <SkeletonCartoesCotacao />
           ) : (
@@ -422,7 +357,14 @@ export default function PaginaCotacao({
 
                         <div className="mt-auto pt-4">
                           <button
-                            onClick={() => despachar(c.provider, c.nome)}
+                            onClick={() =>
+                              // Só o Uber pergunta o veículo. Nos outros a
+                              // escolha não existe, e um modal a mais entre o
+                              // clique e a corrida seria só atrito.
+                              c.provider === "uber"
+                                ? setPedindoVeiculo({ provider: c.provider, nome: c.nome })
+                                : despachar(c.provider, c.nome)
+                            }
                             disabled={despachando !== null || travado}
                             className="w-full rounded-lg bg-[var(--marca-primaria)] py-2.5 text-sm font-semibold text-[var(--marca-contraste)] transition hover:bg-[var(--marca-primaria-hover)] disabled:opacity-50"
                           >
@@ -565,6 +507,16 @@ export default function PaginaCotacao({
           </aside>
         )}
       </div>
+
+      <ModalVeiculo
+        aberto={pedindoVeiculo !== null}
+        ocupado={despachando !== null}
+        onCancelar={() => setPedindoVeiculo(null)}
+        onConfirmar={(veiculo) =>
+          pedindoVeiculo &&
+          despachar(pedindoVeiculo.provider, pedindoVeiculo.nome, veiculo)
+        }
+      />
     </div>
   );
 }

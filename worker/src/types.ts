@@ -189,21 +189,25 @@ export interface Cotacao {
 }
 
 /**
- * Porte declarado do pedido no despacho.
+ * Veículo PREFERIDO para a entrega. Preferência, não escolha.
  *
- * NÃO escolhe o veículo e NÃO muda o preço — a API do Uber não tem campo de
- * veículo, e a tarifa já foi fixada pela cotação. É a informação com que a
- * Uber decide quem vem buscar: pacote pesado, motorista em vez de motoboy.
+ * A API do Uber não tem campo de veículo — quem decide é ela. O que dá para
+ * fazer é declarar o volume e o peso do pedido no despacho, que é a informação
+ * com que ela decide: "if your package is heavy, our system will provide you a
+ * driver instead of a biker". Pedir carro é declarar pedido volumoso.
+ *
+ * Também NÃO muda o preço: a tarifa já foi fixada pela cotação, num endpoint
+ * que nem aceita manifesto. A tela precisa dizer as duas coisas.
  */
-export type PorteEntrega = "normal" | "grande" | "volumoso";
+export type PreferenciaVeiculo = "moto" | "carro";
 
 export interface ResultadoDespacho {
   provider: ProviderId;
   deliveryId: string;
   trackingUrl: string | null;
   status: string;
-  /** O que foi declarado à transportadora. Guardado para conferir a fatura. */
-  porteDeclarado?: PorteEntrega;
+  /** Veículo pedido à transportadora. Guardado para conferir a fatura. */
+  veiculoPreferido?: PreferenciaVeiculo;
   /**
    * PIN que o cliente informa ao entregador na porta. Sem ele o entregador não
    * fecha a entrega, o que impede pedido entregue à pessoa errada.

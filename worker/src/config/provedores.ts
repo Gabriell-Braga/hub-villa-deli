@@ -3,7 +3,7 @@ import type {
   Env,
   ModoOperacao,
   Pedido,
-  PorteEntrega,
+  PreferenciaVeiculo,
   ProviderId,
   ResultadoDespacho,
 } from "../types";
@@ -41,8 +41,8 @@ export interface Provedor {
     pedido: Pedido,
     cotacao: Cotacao,
     modo: ModoOperacao,
-    /** Porte declarado. Provedor que não usa a informação simplesmente ignora. */
-    porte: PorteEntrega
+    /** Veículo preferido. Provedor que não usa a informação simplesmente ignora. */
+    veiculo: PreferenciaVeiculo
   ) => Promise<ResultadoDespacho>;
 }
 
