@@ -206,41 +206,12 @@ export default function CardEntrega({
       <div className="p-5">
         {temTrilha && <Trilha status={status} ativo={!entregue && !cancelado} />}
 
-        {/* CÓDIGO DE ENTREGA.
-            O entregador só fecha a entrega depois que o cliente diz este
-            número na porta — é o que impede o pedido de ser deixado com a
-            pessoa errada. O atendente precisa conseguir ditar isso por
-            telefone, então vem grande, espaçado e em fonte monoespaçada.
-            Some quando a entrega termina: aí já não protege nada e só
-            atrapalha quem está lendo o histórico. */}
-        {despacho.codigoEntrega && !entregue && !cancelado && (
-          // inline-flex, não block: a caixa acompanha o conteúdo em vez de
-          // esticar até a borda do card. Cheia de espaço vazio ela parecia o
-          // assunto principal da tela, e o assunto é a entrega.
-          //
-          // O rótulo "Código" fica, sem a frase explicativa: quem opera o
-          // painel sabe para que serve depois da primeira entrega, e a frase
-          // ocupava mais espaço que o próprio número. O title cobre a dúvida
-          // de quem estiver vendo pela primeira vez.
-          <span
-            title="O cliente informa este número ao entregador na porta. Sem ele a entrega não é concluída."
-            className={`inline-flex items-baseline gap-2.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 ${
-              temTrilha ? "mt-6" : ""
-            }`}
-          >
-            <span className="text-[11px] font-medium uppercase tracking-wide text-indigo-500">
-              Código
-            </span>
-            {/* Monoespaçada e com respiro entre os dígitos: é um número que o
-                atendente dita por telefone, e 5499 lido errado é uma entrega
-                que não fecha. */}
-            <span className="font-mono text-lg font-bold tracking-[0.2em] text-indigo-900">
-              {despacho.codigoEntrega}
-            </span>
-          </span>
-        )}
-
-        {/* Entregador à esquerda, previsão à direita. */}
+        {/* LINHA DE DADOS.
+            Sem col-start fixo: o primeiro bloco existente ocupa a coluna da
+            esquerda. Enquanto a Uber ainda procura entregador, a previsão é a
+            única informação que existe e fica à esquerda, encostada no início
+            da leitura. Quando o entregador aparece, ele assume a esquerda e a
+            previsão vai para a direita — que é a ordem pedida. */}
         <dl className={`grid gap-5 sm:grid-cols-2 ${temTrilha ? "mt-6" : ""}`}>
           {entrega?.courierNome && (
             <div>
@@ -269,11 +240,8 @@ export default function CardEntrega({
             </div>
           )}
 
-          {/* col-start-2 fixa a previsão na direita mesmo quando ainda não há
-              entregador atribuído — senão ela pularia para a coluna da esquerda
-              e a informação trocaria de lugar entre um refresh e outro. */}
           {entrega?.dropoffEta && !entregue && !cancelado && (
-            <div className="sm:col-start-2">
+            <div>
               <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">
                 Previsão de entrega
               </dt>
@@ -285,18 +253,49 @@ export default function CardEntrega({
           )}
         </dl>
 
-        {/* Rastreio só enquanto a entrega está em andamento: depois de
-            entregue ou cancelada não há o que acompanhar, e o botão verde
-            grande sugeria que ainda havia. */}
-        {link && !cancelado && !entregue && (
-          <a
-            href={link}
-            target="_blank"
-            rel="noreferrer"
-            className={`${BOTAO} mt-5 bg-emerald-600 text-white hover:bg-emerald-700`}
-          >
-            Acompanhar entrega
-          </a>
+        {/* LINHA DE AÇÕES — o que o atendente USA fica junto, numa faixa só.
+            O código andava solto no meio do card e o botão sozinho lá embaixo,
+            com um vão entre os dois. Agrupados, o olho encontra os dois de uma
+            vez, e nenhum deles muda de lugar quando o entregador é atribuído. */}
+        {((link && !cancelado && !entregue) ||
+          (despacho.codigoEntrega && !entregue && !cancelado)) && (
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            {/* Rastreio só enquanto a entrega está em andamento: depois de
+                entregue ou cancelada não há o que acompanhar, e o botão verde
+                grande sugeria que ainda havia. */}
+            {link && !cancelado && !entregue && (
+              <a
+                href={link}
+                target="_blank"
+                rel="noreferrer"
+                className={`${BOTAO} bg-emerald-600 text-white hover:bg-emerald-700`}
+              >
+                Acompanhar entrega
+              </a>
+            )}
+
+            {/* CÓDIGO DE ENTREGA. O entregador só fecha a entrega depois que o
+                cliente diz este número na porta — é o que impede o pedido de
+                ser deixado com a pessoa errada.
+
+                Monoespaçado e com respiro entre os dígitos: é um número que o
+                atendente dita por telefone, e 5499 lido errado é uma entrega
+                que não fecha. Some quando a entrega termina; aí já não protege
+                nada e só atrapalha quem lê o histórico. */}
+            {despacho.codigoEntrega && !entregue && !cancelado && (
+              <span
+                title="O cliente informa este número ao entregador na porta. Sem ele a entrega não é concluída."
+                className={`${BOTAO} border border-indigo-200 bg-indigo-50`}
+              >
+                <span className="text-[11px] font-medium uppercase tracking-wide text-indigo-500">
+                  Código
+                </span>
+                <span className="font-mono text-base font-bold tracking-[0.2em] text-indigo-900">
+                  {despacho.codigoEntrega}
+                </span>
+              </span>
+            )}
+          </div>
         )}
 
         {/* Confirmação manual — só motoboy, que não tem webhook. */}
