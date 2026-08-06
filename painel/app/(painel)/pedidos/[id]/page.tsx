@@ -435,9 +435,17 @@ export default function PaginaCotacao({
                         </div>
                       </>
                     ) : (
-                      <p className="mt-4 text-sm text-red-600">
-                        Indisponível{c.erro ? `: ${c.erro}` : ""}
-                      </p>
+                      <>
+                        <p className="mt-4 text-sm text-red-600">
+                          Indisponível{c.erro ? `: ${c.erro}` : ""}
+                        </p>
+                        {/* A distância também aparece na recusa: sem ela,
+                            "fora da área de cobertura" não diz se faltaram
+                            200 metros ou 3 km. */}
+                        {c.detalhe && (
+                          <p className="mt-1 text-xs text-gray-400">{c.detalhe}</p>
+                        )}
+                      </>
                     )}
                   </div>
                 );
@@ -468,14 +476,14 @@ export default function PaginaCotacao({
               <div>
                 <dt className="text-gray-500">Cliente</dt>
                 <dd className="text-gray-900">{pedido.cliente.nome}</dd>
-                <dd className="text-gray-500">{pedido.cliente.telefone}</dd>
-                {/* Sem este aviso, alguém liga para o próprio restaurante
-                    achando que está falando com o cliente. */}
-                {pedido.semTelefoneDoCliente && (
-                  <dd className="mt-1 text-xs text-amber-700">
-                    Este é o telefone da loja — o marketplace não informa o do
-                    cliente.
-                  </dd>
+                {/* Pedido de marketplace não traz o contato do cliente. O
+                    telefone da loja continua indo para a transportadora, que
+                    exige um número para criar a corrida, mas não aparece aqui:
+                    exibi-lo faria alguém ligar para o próprio restaurante
+                    achando que falava com o cliente. Não mostrar diz a verdade
+                    com menos palavras que um aviso explicando o engano. */}
+                {!pedido.semTelefoneDoCliente && (
+                  <dd className="text-gray-500">{pedido.cliente.telefone}</dd>
                 )}
               </div>
 

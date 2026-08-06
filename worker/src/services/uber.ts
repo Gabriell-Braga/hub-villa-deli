@@ -1,6 +1,6 @@
 import type { Cotacao, Env, ModoOperacao, Pedido, ResultadoDespacho } from "../types";
 import { getUberToken } from "./tokens";
-import { enderecoFormatado } from "../lib/geo";
+import { distanciaKm, enderecoFormatado } from "../lib/geo";
 import { credenciaisUber } from "../config/ambiente";
 
 // ---------------------------------------------------------------------------
@@ -177,6 +177,29 @@ function manifesto(pedido: Pedido, porte: PorteUber) {
   return itens.map((i, idx) => (idx === 0 ? { ...i, weight: gramas } : i));
 }
 
+/**
+ * Distância em linha reta da loja até o cliente, no mesmo formato do card do
+ * motoboy — para os dois serem comparáveis de relance.
+ *
+ * É a mesma régua que o Uber usa para recusar endereço: nas recusas deles, a
+ * "Calculated Distance" bate com a linha reta, e o limite da loja hoje é
+ * 5,0 km. Com o número na tela, quando um endereço for recusado dá para ver
+ * na hora se foi por pouco ou por muito.
+ */
+function distanciaAteOCliente(env: Env, pedido: Pedido): string | undefined {
+  const { lat, lng } = pedido.endereco;
+  if (lat == null || lng == null) return undefined;
+
+  const km = distanciaKm(
+    parseFloat(env.RESTAURANTE_LAT),
+    parseFloat(env.RESTAURANTE_LNG),
+    lat,
+    lng
+  );
+
+  return `${km.toFixed(2)} km em linha reta`;
+}
+
 function pickupPayload(env: Env) {
   return {
     pickup_address: env.RESTAURANTE_CEP, // em prod, use o endereço estruturado completo
@@ -202,6 +225,10 @@ export async function cotarUber(
     etaMinutos: null,
     quoteId: null,
     expiraEm: null,
+    // Vai no `base` para aparecer também quando a cotação FALHA. É justamente
+    // aí que a distância mais importa: "fora da área de cobertura" sem número
+    // não diz se faltaram 200 metros ou 3 km.
+    detalhe: distanciaAteOCliente(env, pedido),
   };
 
   const token = await getUberToken(env, modo);

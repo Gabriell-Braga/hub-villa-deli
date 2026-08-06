@@ -9,11 +9,52 @@
 // é o que o cliente cita quando liga, e não traz o telefone dele.
 // ---------------------------------------------------------------------------
 
-const CANAIS: Record<string, { rotulo: string; classe: string }> = {
+/**
+ * Marca do iFood no tamanho de chip.
+ *
+ * Desenhada aqui, como as dos parceiros em LogoProvedor: nada de hotlink para
+ * servidor de terceiro nem binário de marca alheia no repositório. É uso
+ * nominativo — identifica de onde veio o pedido, na cor deles.
+ *
+ * O bloco vermelho com o nome funciona melhor que um símbolo isolado num chip
+ * de 16px: a palavra "iFood" é lida de relance, um glifo pequeno não.
+ */
+function MarcaIfood() {
+  return (
+    <svg
+      viewBox="0 0 40 16"
+      width="30"
+      height="12"
+      role="img"
+      aria-label="iFood"
+      className="shrink-0"
+    >
+      <rect width="40" height="16" rx="4" fill="#EA1D2C" />
+      <text
+        x="20"
+        y="8.6"
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize="10"
+        fontWeight="700"
+        fontFamily="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+        letterSpacing="-0.3"
+        fill="#FFFFFF"
+      >
+        iFood
+      </text>
+    </svg>
+  );
+}
+
+const CANAIS: Record<
+  string,
+  { rotulo: string; classe: string; marca?: () => JSX.Element }
+> = {
   ifood: {
     rotulo: "iFood",
-    // Vermelho do iFood, em tom claro — é a marca deles, não a da loja.
     classe: "bg-red-50 text-red-700 ring-red-200",
+    marca: MarcaIfood,
   },
   portal: {
     rotulo: "Portal",
@@ -31,11 +72,16 @@ export default function SeloOrigem({
   const c = canal ? CANAIS[canal] : undefined;
   if (!c) return null;
 
+  const Marca = c.marca;
+
   return (
     <span
-      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${c.classe}`}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full py-0.5 pl-1 pr-2.5 text-xs font-medium ring-1 ring-inset ${c.classe}`}
     >
-      {c.rotulo}
+      {/* Com a marca desenhada o nome vira redundância; sem ela, o rótulo é
+          tudo o que o chip tem. */}
+      {Marca ? <Marca /> : <span className="pl-1.5">{c.rotulo}</span>}
+
       {numeroExterno && (
         // O número do pedido no app do cliente. É por ele que o atendente
         // acha o pedido no tablet do marketplace.
