@@ -5,6 +5,7 @@ import type {
   Env,
   FiltroHistorico,
   Papel,
+  PorteEntrega,
   Pedido,
   ProviderId,
   ResultadoDespacho,
@@ -765,18 +766,26 @@ app.get("/api/cotacao/:idPedido", async (c) => {
 
 // ---------------------------------------------------------------------------
 // 4) Despacho — cria a corrida no provedor escolhido
-//    POST /api/despachar  { idPedido, provider }
+//    POST /api/despachar  { idPedido, provider, porte? }
 // ---------------------------------------------------------------------------
 app.post("/api/despachar", async (c) => {
   const env = c.env;
   const atendente = c.get("usuario");
 
   const body = await c.req
-    .json<{ idPedido?: string; provider?: ProviderId }>()
+    .json<{ idPedido?: string; provider?: ProviderId; porte?: string }>()
     .catch(() => null);
 
   const idPedido = body?.idPedido;
   const provider = body?.provider;
+
+  // Valor desconhecido cai em "normal" em vez de recusar o despacho: o porte
+  // é uma dica para a transportadora, não uma trava — travar a corrida por
+  // causa dele seria trocar um problema pequeno por um grande.
+  const porte: PorteEntrega =
+    body?.porte === "grande" || body?.porte === "volumoso"
+      ? body.porte
+      : "normal";
   if (!idPedido || !provider) {
     return c.json({ erro: "idPedido e provider são obrigatórios" }, 400);
   }
@@ -840,7 +849,8 @@ app.post("/api/despachar", async (c) => {
       env,
       pedido,
       cotacao,
-      modo
+      modo,
+      porte
     );
 
     await concluirDespacho(env, idPedido, resultado);

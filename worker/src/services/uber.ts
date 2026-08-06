@@ -126,24 +126,55 @@ export function traduzirErroUber(status: number, corpo: string): string {
 // será um provedor novo de verdade, com credencial própria.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// PORTE DO PEDIDO
+//
+// Como não há campo de veículo, o que sobra é declarar tamanho e peso com
+// honestidade e deixar a Uber decidir. É o comportamento documentado deles:
+// "if your package is heavy, our system will provide you a driver instead of
+// a biker".
+//
+// ATENÇÃO AO QUE ISTO **NÃO** FAZ: não muda o preço. A cotação é criada antes,
+// num endpoint que nem aceita manifesto, e o `quote_id` já fixou a tarifa. O
+// porte influencia QUEM vem buscar, não quanto custa.
+//
+// Os pesos são estimativas por faixa, não medições. Servem para cair do lado
+// certo do critério da Uber; declarar 20 kg num pedido de 2 kg seria pedir
+// carro na marra, e mentir para o parceiro que vai executar a entrega.
+// ---------------------------------------------------------------------------
+export type PorteUber = "normal" | "grande" | "volumoso";
+
+const PORTES: Record<PorteUber, { size: string; gramas: number }> = {
+  // Sacola de delivery comum. `medium` = "precisa de uma sacola" na régua
+  // deles. Nunca `small`: esse é o padrão quando nada é informado e descreve
+  // uma garrafa d'água — pode render entregador de bicicleta.
+  normal: { size: "medium", gramas: 3_000 },
+  // Duas mãos para carregar. Pedido de família, caixa de pizza grande.
+  grande: { size: "large", gramas: 9_000 },
+  // Várias viagens até o veículo. É aqui que a Uber costuma mandar carro.
+  volumoso: { size: "xlarge", gramas: 20_000 },
+};
+
 /**
  * Manifesto do pedido. Vai só no CREATE DELIVERY — a cotação não aceita.
  *
- * O `size` importa mesmo sem escolher veículo: o padrão da Uber quando nada é
- * informado é `small` ("cabe numa mão"), o que pode render um entregador de
- * bicicleta para uma sacola de marmita. `medium` ("precisa de uma sacola") é o
- * que descreve entrega de comida, e é o mínimo honesto a declarar.
+ * O peso é declarado UMA vez, na primeira linha, e não repetido item a item:
+ * é o peso do pedido inteiro que interessa ao critério da Uber, e distribuir
+ * daria um total errado quando há muitos itens.
  */
-function manifesto(pedido: Pedido) {
-  if (pedido.itens.length === 0) {
-    return [{ name: "Pedido", quantity: 1, size: "medium" }];
-  }
+function manifesto(pedido: Pedido, porte: PorteUber) {
+  const { size, gramas } = PORTES[porte];
 
-  return pedido.itens.map((i) => ({
-    name: i.nome,
-    quantity: i.quantidade,
-    size: "medium",
-  }));
+  const itens =
+    pedido.itens.length > 0
+      ? pedido.itens.map((i) => ({
+          name: i.nome,
+          quantity: i.quantidade,
+          size,
+        }))
+      : [{ name: "Pedido", quantity: 1, size }];
+
+  return itens.map((i, idx) => (idx === 0 ? { ...i, weight: gramas } : i));
 }
 
 function pickupPayload(env: Env) {
@@ -222,7 +253,8 @@ export async function despacharUber(
   env: Env,
   pedido: Pedido,
   cotacao: Cotacao,
-  modo: ModoOperacao
+  modo: ModoOperacao,
+  porte: PorteUber = "normal"
 ): Promise<ResultadoDespacho> {
   const cred = credenciaisUber(env, modo);
   const token = await getUberToken(env, modo);
@@ -242,7 +274,7 @@ export async function despacharUber(
         dropoff_phone_number: pedido.cliente.telefone,
         dropoff_latitude: pedido.endereco.lat,
         dropoff_longitude: pedido.endereco.lng,
-        manifest_items: manifesto(pedido),
+        manifest_items: manifesto(pedido, porte),
 
         // CÓDIGO DE ENTREGA (PIN de 4 dígitos).
         //
@@ -315,5 +347,10 @@ export async function despacharUber(
     trackingUrl: d.tracking_url,
     status: d.status,
     codigoEntrega: pin?.value ?? null,
+    // Guardado para dar para conferir depois, contra a fatura da Uber, se
+    // declarar peso maior muda o que é cobrado. Hoje não sabemos: o preço vem
+    // do quote_id, e a documentação não diz o que acontece quando o manifesto
+    // exige um veículo maior que o precificado.
+    porteDeclarado: porte,
   };
 }

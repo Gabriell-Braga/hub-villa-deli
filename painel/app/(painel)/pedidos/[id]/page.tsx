@@ -29,6 +29,70 @@ const ORIGENS = {
   abertos: { href: "/pedidos", rotulo: "Voltar para a fila" },
 } as const;
 
+type Porte = "normal" | "grande" | "volumoso";
+
+const PORTES: Array<{ id: Porte; rotulo: string; ajuda: string }> = [
+  { id: "normal", rotulo: "Sacola", ajuda: "Cabe na garupa de uma moto" },
+  { id: "grande", rotulo: "Grande", ajuda: "Precisa das duas mãos para carregar" },
+  { id: "volumoso", rotulo: "Volumoso", ajuda: "Não cabe numa moto" },
+];
+
+/**
+ * Porte do pedido, informado à transportadora no momento do despacho.
+ *
+ * É importante dizer o que isto NÃO faz, porque a expectativa natural é a
+ * oposta: não escolhe o veículo e não muda o preço. A API do Uber não tem
+ * campo de veículo, e a tarifa já foi fechada na cotação. O que o porte faz é
+ * dar à transportadora a informação com que ELA decide quem vem buscar —
+ * pacote pesado, motorista em vez de motoboy.
+ *
+ * Fica fora dos cards de propósito: vale para qualquer transportadora que o
+ * atendente escolher, e repetir o controle em cada card sugeriria que a
+ * escolha é por parceiro.
+ */
+function SeletorPorte({
+  valor,
+  onChange,
+  travado,
+}: {
+  valor: Porte;
+  onChange: (p: Porte) => void;
+  travado: boolean;
+}) {
+  return (
+    <div className="mb-4 rounded-xl border border-gray-200 bg-white p-4">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="text-sm font-medium text-gray-700">Porte do pedido</span>
+
+        <div className="flex rounded-lg border border-gray-200 p-0.5">
+          {PORTES.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onChange(p.id)}
+              disabled={travado}
+              title={p.ajuda}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition disabled:opacity-50 ${
+                valor === p.id
+                  ? "bg-[var(--marca-primaria)] text-[var(--marca-contraste)]"
+                  : "text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              {p.rotulo}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <p className="mt-2 text-xs text-gray-500">
+        {PORTES.find((p) => p.id === valor)?.ajuda}. A transportadora usa isso
+        para escolher o veículo — <strong className="font-medium">quem decide
+        é ela</strong>, e o preço continua sendo o da cotação.
+      </p>
+    </div>
+  );
+}
+
 /**
  * Quanto a loja ganha ou perde nesta entrega.
  *
@@ -84,6 +148,9 @@ export default function PaginaCotacao({
   // Motivo pelo qual o servidor se recusou a cotar. Estado do pedido, não erro
   // de sistema — por isso não vai para o toast nem para o alerta vermelho.
   const [bloqueio, setBloqueio] = useState<"pagamento" | "cancelado" | null>(null);
+  // Porte declarado à transportadora. Padrão "normal" porque é o caso da
+  // esmagadora maioria dos pedidos — quem precisar mudar, muda.
+  const [porte, setPorte] = useState<Porte>("normal");
 
   const cotar = useCallback(async () => {
     setCarregando(true);
@@ -125,7 +192,7 @@ export default function PaginaCotacao({
       const res = await fetch("/api/despachar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idPedido, provider }),
+        body: JSON.stringify({ idPedido, provider, porte }),
       });
       const json = await res.json();
 
@@ -284,6 +351,12 @@ export default function PaginaCotacao({
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
             Cotações
           </h2>
+
+          {/* Some quando não há mais o que despachar: depois de despachado ou
+              com o pedido bloqueado, é um controle que não faz nada. */}
+          {!travado && (dados?.cotacoes?.length ?? 0) > 0 && (
+            <SeletorPorte valor={porte} onChange={setPorte} travado={travado} />
+          )}
 
           {carregando ? (
             <SkeletonCartoesCotacao />

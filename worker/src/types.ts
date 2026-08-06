@@ -172,11 +172,22 @@ export interface Cotacao {
   detalhe?: string; // memória de cálculo (ex: "3.42 km · faixa 3,5 km")
 }
 
+/**
+ * Porte declarado do pedido no despacho.
+ *
+ * NÃO escolhe o veículo e NÃO muda o preço — a API do Uber não tem campo de
+ * veículo, e a tarifa já foi fixada pela cotação. É a informação com que a
+ * Uber decide quem vem buscar: pacote pesado, motorista em vez de motoboy.
+ */
+export type PorteEntrega = "normal" | "grande" | "volumoso";
+
 export interface ResultadoDespacho {
   provider: ProviderId;
   deliveryId: string;
   trackingUrl: string | null;
   status: string;
+  /** O que foi declarado à transportadora. Guardado para conferir a fatura. */
+  porteDeclarado?: PorteEntrega;
   /**
    * PIN que o cliente informa ao entregador na porta. Sem ele o entregador não
    * fecha a entrega, o que impede pedido entregue à pessoa errada.

@@ -3,6 +3,7 @@ import type {
   Env,
   ModoOperacao,
   Pedido,
+  PorteEntrega,
   ProviderId,
   ResultadoDespacho,
 } from "../types";
@@ -39,7 +40,9 @@ export interface Provedor {
     env: Env,
     pedido: Pedido,
     cotacao: Cotacao,
-    modo: ModoOperacao
+    modo: ModoOperacao,
+    /** Porte declarado. Provedor que não usa a informação simplesmente ignora. */
+    porte: PorteEntrega
   ) => Promise<ResultadoDespacho>;
 }
 
