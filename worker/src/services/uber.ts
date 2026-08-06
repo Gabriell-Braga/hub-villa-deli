@@ -103,40 +103,46 @@ export function traduzirErroUber(status: number, corpo: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// MOTO × CARRO
+// POR QUE NÃO EXISTE "UBER MOTO" E "UBER CARRO" SEPARADOS
 //
-// O Uber Direct NÃO tem um campo "quero moto" ou "quero carro" na API. O que
-// existe é o TAMANHO do pedido em manifest_items.size, e a regra publicada
-// deles: item `xlarge` exige carro ou van. Os demais tamanhos vão de moto na
-// prática, que é o veículo padrão para entrega de comida.
+// Chegamos a ter dois cards, e eles voltavam com preço IDÊNTICO. O motivo, na
+// especificação oficial deles (uber/uber-direct-sdk, openapi.yaml):
 //
-// Então "Uber Direct Carro" não é outro produto: é o mesmo pedido declarado
-// como volumoso. Quem escolhe é o atendente, olhando para o pedido — 20 potes
-// de açaí não sobem numa garupa.
+//   1) O create quote aceita 14 campos, e `manifest_items` NÃO é um deles.
+//      Mandar tamanho na cotação não muda nada — o campo é descartado antes
+//      de chegar no motor de preço.
+//   2) Não existe campo de veículo em lugar nenhum da API. Nem no quote, nem
+//      no create delivery. `vehicle_type` aparece uma única vez no spec
+//      inteiro, e é somente leitura, no Get Delivery, depois que já há um
+//      entregador designado.
+//
+// Quem escolhe o veículo é a Uber, pelo peso e volume declarados no CREATE
+// DELIVERY. Nas palavras deles: "if your package is heavy, our system will
+// provide you a driver instead of a biker".
+//
+// Então o que dá para fazer é declarar o pedido com honestidade e deixar a
+// Uber decidir. É o que `manifesto()` faz. Se um dia a conta brasileira tiver
+// produtos separados de moto e carro, isso virá como outro customer_id — e aí
+// será um provedor novo de verdade, com credencial própria.
 // ---------------------------------------------------------------------------
-export type VeiculoUber = "moto" | "carro";
 
-const TAMANHO_POR_VEICULO: Record<VeiculoUber, string> = {
-  // "You need a handbag to carry it" — a sacola de delivery comum.
-  moto: "medium",
-  // "You will need to make multiple trips to/from the vehicle" — é este valor
-  // que faz o Uber mandar carro ou van, segundo a documentação deles.
-  carro: "xlarge",
-};
-
-function manifesto(pedido: Pedido, veiculo: VeiculoUber) {
-  const size = TAMANHO_POR_VEICULO[veiculo];
-
-  // Pedido sem itens detalhados ainda precisa de manifesto: é ele que carrega
-  // o tamanho. Uma linha genérica resolve sem mentir sobre o conteúdo.
+/**
+ * Manifesto do pedido. Vai só no CREATE DELIVERY — a cotação não aceita.
+ *
+ * O `size` importa mesmo sem escolher veículo: o padrão da Uber quando nada é
+ * informado é `small` ("cabe numa mão"), o que pode render um entregador de
+ * bicicleta para uma sacola de marmita. `medium` ("precisa de uma sacola") é o
+ * que descreve entrega de comida, e é o mínimo honesto a declarar.
+ */
+function manifesto(pedido: Pedido) {
   if (pedido.itens.length === 0) {
-    return [{ name: "Pedido", quantity: 1, size }];
+    return [{ name: "Pedido", quantity: 1, size: "medium" }];
   }
 
   return pedido.itens.map((i) => ({
     name: i.nome,
     quantity: i.quantidade,
-    size,
+    size: "medium",
   }));
 }
 
@@ -153,13 +159,12 @@ function pickupPayload(env: Env) {
 export async function cotarUber(
   env: Env,
   pedido: Pedido,
-  modo: ModoOperacao,
-  veiculo: VeiculoUber = "moto"
+  modo: ModoOperacao
 ): Promise<Cotacao> {
   const cred = credenciaisUber(env, modo);
   const base: Cotacao = {
-    provider: veiculo === "carro" ? "uber_carro" : "uber",
-    nome: veiculo === "carro" ? "Uber Direct Carro" : "Uber Direct Moto",
+    provider: "uber",
+    nome: "Uber Direct",
     disponivel: false,
     preco: null,
     moeda: "BRL",
@@ -182,10 +187,8 @@ export async function cotarUber(
         dropoff_address: enderecoFormatado(pedido.endereco),
         dropoff_latitude: pedido.endereco.lat,
         dropoff_longitude: pedido.endereco.lng,
-        // O tamanho vai já na COTAÇÃO, não só no despacho: é ele que faz o
-        // Uber precificar carro em vez de moto. Sem isto os dois cards
-        // voltariam com o mesmo preço e a escolha seria decorativa.
-        manifest_items: manifesto(pedido, veiculo),
+        // Nada de manifest_items aqui: o create quote aceita 14 campos e este
+        // não é um deles. Mandar era ruído — o campo era descartado.
       }),
     }
   );
@@ -212,10 +215,6 @@ export async function cotarUber(
     etaMinutos: q.duration ?? null,
     quoteId: q.id,
     expiraEm: q.expires ?? null,
-    detalhe:
-      veiculo === "carro"
-        ? "Pedido declarado como volumoso — exige carro ou van"
-        : undefined,
   };
 }
 
@@ -223,8 +222,7 @@ export async function despacharUber(
   env: Env,
   pedido: Pedido,
   cotacao: Cotacao,
-  modo: ModoOperacao,
-  veiculo: VeiculoUber = "moto"
+  modo: ModoOperacao
 ): Promise<ResultadoDespacho> {
   const cred = credenciaisUber(env, modo);
   const token = await getUberToken(env, modo);
@@ -244,9 +242,7 @@ export async function despacharUber(
         dropoff_phone_number: pedido.cliente.telefone,
         dropoff_latitude: pedido.endereco.lat,
         dropoff_longitude: pedido.endereco.lng,
-        // MESMO tamanho da cotação. Divergir aqui faria o Uber cobrar por um
-        // veículo e mandar outro — e o preço aceito na tela não seria o real.
-        manifest_items: manifesto(pedido, veiculo),
+        manifest_items: manifesto(pedido),
 
         // CÓDIGO DE ENTREGA (PIN de 4 dígitos).
         //
@@ -285,16 +281,26 @@ export async function despacharUber(
     throw new Error(traduzirErroUber(res.status, await res.text()));
   }
 
+  interface Verificacao {
+    pincode?: { enabled?: boolean; value?: string };
+  }
+
   const d = (await res.json()) as {
     id: string;
     tracking_url: string;
     status: string;
-    verification_requirements?: {
-      pincode?: { enabled?: boolean; value?: string };
-    };
+    // O PIN vem DENTRO do waypoint de entrega, não na raiz. A página de guia
+    // da Uber mostra um exemplo achatado que engana; no OpenAPI oficial,
+    // DeliveryResp.dropoff é um WaypointInfo e é ele que tem o campo.
+    dropoff?: { verification_requirements?: Verificacao };
+    verification_requirements?: Verificacao;
   };
 
-  const pin = d.verification_requirements?.pincode;
+  const pin =
+    d.dropoff?.verification_requirements?.pincode ??
+    // Tolerância: se um dia eles promoverem o campo para a raiz, continua
+    // funcionando em vez de voltar a sumir em silêncio.
+    d.verification_requirements?.pincode;
 
   if (!pin?.value) {
     // Não é motivo para cancelar a entrega — ela já foi criada e cancelar aqui
@@ -304,7 +310,7 @@ export async function despacharUber(
   }
 
   return {
-    provider: veiculo === "carro" ? "uber_carro" : "uber",
+    provider: "uber",
     deliveryId: d.id,
     trackingUrl: d.tracking_url,
     status: d.status,

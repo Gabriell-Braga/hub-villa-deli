@@ -93,21 +93,41 @@ function etapaAtual(status: string | null): number {
   return i === -1 ? 0 : i;
 }
 
-function Trilha({ status }: { status: string }) {
+/**
+ * Trilha de progresso da entrega.
+ *
+ * A barra da etapa ATUAL enche e esvazia continuamente. Sem isso, "etapa
+ * cumprida" e "etapa acontecendo agora" eram os dois um retângulo verde
+ * parado, e a única diferença era o negrito no rótulo — some no olhar rápido
+ * de quem está atrás do balcão. O movimento diz "é aqui que estamos".
+ *
+ * A animação é uma faixa clara varrendo o verde, e não opacidade piscando:
+ * piscar cansa numa tela que fica aberta o turno inteiro.
+ *
+ * Só a etapa atual anda. Quando a entrega termina ou é cancelada não há etapa
+ * "em andamento", e aí nada se move — ver `ativo`.
+ */
+function Trilha({ status, ativo }: { status: string; ativo: boolean }) {
   const atual = etapaAtual(status);
 
   return (
     <ol className="mt-4 flex items-center gap-1" aria-label="Progresso da entrega">
       {ETAPAS.map((e, i) => {
         const feito = i <= atual;
+        const andando = ativo && i === atual;
+
         return (
           <li key={e.rotulo} className="flex flex-1 flex-col gap-1.5">
             <span
               aria-hidden="true"
-              className={`h-1.5 rounded-full transition ${
+              className={`relative h-1.5 overflow-hidden rounded-full transition ${
                 feito ? "bg-emerald-500" : "bg-gray-200"
               }`}
-            />
+            >
+              {andando && (
+                <span className="absolute inset-y-0 -left-full w-full bg-emerald-200/90 motion-safe:animate-[trilha_1.6s_ease-in-out_infinite]" />
+              )}
+            </span>
             <span
               className={`text-[11px] leading-tight ${
                 i === atual ? "font-semibold text-gray-900" : "text-gray-400"
@@ -184,7 +204,7 @@ export default function CardEntrega({
       </div>
 
       <div className="p-5">
-        {temTrilha && <Trilha status={status} />}
+        {temTrilha && <Trilha status={status} ativo={!entregue && !cancelado} />}
 
         {/* CÓDIGO DE ENTREGA.
             O entregador só fecha a entrega depois que o cliente diz este

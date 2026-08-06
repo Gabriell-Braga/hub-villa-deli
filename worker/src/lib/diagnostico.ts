@@ -5,7 +5,7 @@ import {
   testeUsandoCredencialDeProducao,
 } from "../config/ambiente";
 import { modoAtual, podeUsarProducao } from "../config/modo";
-import { provedoresAtivos } from "../config/provedores";
+import { nomeProvedor, provedoresAtivos } from "../config/provedores";
 import { getUberToken } from "../services/tokens";
 
 // ---------------------------------------------------------------------------
@@ -291,20 +291,17 @@ export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
   }
 
   // --- Provedores ativos ----------------------------------------------------
-  const nomes: Record<string, string> = {
-    uber: "Uber Direct",
-    ifood: "iFood Entrega Fácil",
-    "99": "99 Entregas",
-    motoboy: "Motoboy Próprio",
-  };
-
+  //
+  // Os nomes vêm de nomeProvedor(), não de uma lista aqui. Havia uma cópia
+  // local que ficou para trás quando um provedor novo entrou, e a tela passou
+  // a mostrar o id cru ("uber_carro") para o dono do restaurante.
   itens.push({
     chave: "provedores",
     titulo: "Transportadoras ativas",
     status: ativos.length > 0 ? "ok" : "erro",
     detalhe:
       ativos.length > 0
-        ? ativos.map((a) => nomes[a] ?? a).join(", ")
+        ? ativos.map((a) => nomeProvedor(a)).join(", ")
         : "Nenhuma transportadora ativa — a cotação volta vazia.",
     comoResolver: SUPORTE,
   });

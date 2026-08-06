@@ -21,7 +21,6 @@ import { COR_PROVEDOR, ROTULO_PROVEDOR } from "@/lib/tipos";
 // porque a entrega é da casa e não de uma marca de terceiro.
 const CORES: Record<ProviderId, { fundo: string; texto: string }> = {
   uber: { fundo: COR_PROVEDOR.uber, texto: "#FFFFFF" },
-  uber_carro: { fundo: COR_PROVEDOR.uber_carro, texto: "#FFFFFF" },
   ifood: { fundo: COR_PROVEDOR.ifood, texto: "#FFFFFF" },
   "99": { fundo: COR_PROVEDOR["99"], texto: "#000000" },
   motoboy: { fundo: "var(--marca-primaria)", texto: "var(--marca-contraste)" },
@@ -30,23 +29,8 @@ const CORES: Record<ProviderId, { fundo: string; texto: string }> = {
 /** Wordmark de cada parceiro, já ajustado para caber no quadrado. */
 const MARCA: Partial<Record<ProviderId, { texto: string; tamanho: number }>> = {
   uber: { texto: "Uber", tamanho: 11 },
-  uber_carro: { texto: "Uber", tamanho: 11 },
   ifood: { texto: "iFood", tamanho: 9.5 },
   "99": { texto: "99", tamanho: 15 },
-};
-
-/**
- * Os dois cards de Uber são a MESMA marca — separá-los por cor seria mentir
- * sobre quem presta o serviço. A diferença vai num selo de veículo no canto,
- * e o rótulo ao lado do ícone ("Uber Direct Carro") carrega o resto.
- *
- * A 14px o selo é quase um ponto, e tudo bem: ali o nome está sempre escrito
- * ao lado. Aos 28px do card de cotação, que é onde a escolha acontece de
- * verdade, ele se lê sem esforço.
- */
-const VEICULO: Partial<Record<ProviderId, "moto" | "carro">> = {
-  uber: "moto",
-  uber_carro: "carro",
 };
 
 export default function LogoProvedor({
@@ -60,7 +44,6 @@ export default function LogoProvedor({
 }) {
   const cor = CORES[provider];
   const marca = MARCA[provider];
-  const veiculo = VEICULO[provider];
 
   return (
     <svg
@@ -76,9 +59,7 @@ export default function LogoProvedor({
       {marca ? (
         <text
           x="16"
-          // Sobe um pouco quando há selo de veículo, para o conjunto ficar
-          // óptica­mente centrado em vez de o texto disputar espaço com ele.
-          y={veiculo ? 13.5 : 16}
+          y="16"
           textAnchor="middle"
           dominantBaseline="central"
           fontSize={marca.tamanho}
@@ -112,26 +93,6 @@ export default function LogoProvedor({
           {/* Coluna de direção e guidão */}
           <path d="M21 12.8 L22.8 9.5" />
           <path d="M19.8 9.5 H24.8" />
-        </g>
-      )}
-
-      {/* Selo de veículo, embaixo do wordmark. Silhuetas cheias (não traço):
-          a 14px um contorno de 1px some, uma forma preenchida ainda se lê
-          como "tem duas rodas" ou "tem carroceria". */}
-      {veiculo === "moto" && (
-        <g fill={cor.texto}>
-          <circle cx="10.5" cy="23.5" r="2.4" />
-          <circle cx="21.5" cy="23.5" r="2.4" />
-          <path d="M10.5 23.5 L14 18.6 H19.5 L21.5 23.5 Z" />
-        </g>
-      )}
-
-      {veiculo === "carro" && (
-        <g fill={cor.texto}>
-          {/* Carroceria: capô, teto e traseira num perfil só. */}
-          <path d="M6.6 23.2 v-2.4 l2-3.4 h11.8 l2 3.4 v2.4 Z" />
-          <circle cx="10.4" cy="23.8" r="2.2" />
-          <circle cx="21.6" cy="23.8" r="2.2" />
         </g>
       )}
     </svg>

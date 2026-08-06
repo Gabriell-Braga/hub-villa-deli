@@ -2,16 +2,7 @@
 // e o Worker são deployados separados, então um `import` entre eles criaria um
 // acoplamento de build que não existe em runtime.
 
-/**
- * `uber` e `uber_carro` são a MESMA conta do Uber Direct. O que muda é o
- * tamanho declarado do pedido, que decide se vem moto ou carro e muda o preço.
- */
-export type ProviderId =
-  | "uber"
-  | "uber_carro"
-  | "ifood"
-  | "99"
-  | "motoboy";
+export type ProviderId = "uber" | "ifood" | "99" | "motoboy";
 export type Papel = "atendente" | "admin";
 export type StatusPedido = "recebido" | "cotado" | "despachando" | "despachado";
 
@@ -173,8 +164,7 @@ export interface Estatisticas {
 }
 
 export const ROTULO_PROVEDOR: Record<ProviderId, string> = {
-  uber: "Uber Direct Moto",
-  uber_carro: "Uber Direct Carro",
+  uber: "Uber Direct",
   ifood: "iFood Entrega Fácil",
   "99": "99 Entregas",
   motoboy: "Motoboy Próprio",
@@ -183,9 +173,6 @@ export const ROTULO_PROVEDOR: Record<ProviderId, string> = {
 /** Cores por plataforma — usadas nos gráficos e badges. */
 export const COR_PROVEDOR: Record<ProviderId, string> = {
   uber: "#111827",
-  // Mesma marca, mesma cor: separar por cor daria a entender que é outro
-  // parceiro. Nos gráficos os dois se distinguem pelo rótulo.
-  uber_carro: "#111827",
   ifood: "#EA1D2C",
   "99": "#FFC700",
   motoboy: "#6B7280", // cinza neutro: o motoboy é "da casa", sem marca de parceiro
