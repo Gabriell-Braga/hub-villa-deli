@@ -6,6 +6,7 @@ import type { PedidoResumo, StatusPedido } from "@/lib/tipos";
 import { ROTULO_PROVEDOR } from "@/lib/tipos";
 import LogoProvedor from "./LogoProvedor";
 import SeloTeste from "./SeloTeste";
+import SeloOrigem from "./SeloOrigem";
 import { brl, brlOuGratis, dataHora, desde } from "@/lib/formato";
 import { SkeletonListaPedidos } from "./Skeleton";
 
@@ -174,6 +175,7 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
 
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 {p.teste && <SeloTeste />}
+                <SeloOrigem canal={p.canal} numeroExterno={p.numeroExterno} />
                 <Selo status={p.status} />
                 {!p.pago && (
                   <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-300">
@@ -215,9 +217,10 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
               {pedidos.map((p) => (
                 <tr key={p.id} className="transition hover:bg-gray-50">
                   <td className="px-5 py-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <p className="font-medium text-gray-900">#{p.id}</p>
                       {p.teste && <SeloTeste />}
+                      <SeloOrigem canal={p.canal} numeroExterno={p.numeroExterno} />
                     </div>
                     <p className="text-xs text-gray-400">
                       {aba === "abertos"

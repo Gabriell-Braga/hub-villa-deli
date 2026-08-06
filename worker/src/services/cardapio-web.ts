@@ -50,6 +50,8 @@ interface PedidoCW {
   id: number;
   /** Número curto que a loja usa no balcão. O `id` é longo e ninguém decora. */
   display_id?: number;
+  /** Número do pedido no marketplace — o que o cliente vê no app do iFood. */
+  external_display_id?: string | null;
   status?: string;
   /** delivery | takeout | closed_table — só o primeiro é entrega. */
   order_type?: string;
@@ -250,12 +252,16 @@ export function traduzirPedidoCW(
     preco: i.total_price ?? i.unit_price ?? 0,
   }));
 
-  const doCliente =
-    normalizarTelefone(cw.customer?.phone, cw.customer?.ddi) || telefoneDaLoja;
+  const doCliente = normalizarTelefone(cw.customer?.phone, cw.customer?.ddi);
+  // Pedido de marketplace não traz o contato do cliente. Sem telefone nenhum o
+  // Uber recusa a corrida, então cai no da loja — e isso fica sinalizado, para
+  // ninguém no balcão achar que está ligando para quem fez o pedido.
+  const semTelefoneDoCliente = !doCliente;
 
   // Em teste o número do dono do Hub tem prioridade sobre tudo: é ele quem
   // precisa receber o SMS do Uber para acompanhar.
-  const telefone = teste && telefoneDeTeste ? telefoneDeTeste : doCliente;
+  const telefone =
+    teste && telefoneDeTeste ? telefoneDeTeste : doCliente || telefoneDaLoja;
 
   const total = cw.total ?? 0;
   const freteCobrado = cw.delivery_fee ?? 0;
@@ -276,6 +282,9 @@ export function traduzirPedidoCW(
     subtotal: Math.round((total - freteCobrado) * 100) / 100,
     pago: estaPago(cw),
     formaPagamento: descreverPagamento(cw),
+    canal: cw.sales_channel,
+    numeroExterno: cw.external_display_id ?? undefined,
+    semTelefoneDoCliente,
     observacao: cw.observation ?? undefined,
     status: "recebido",
     statusCardapio: cw.status,
@@ -316,6 +325,9 @@ export async function revalidarPedido(
       freteCobrado: atualizado.freteCobrado,
       subtotal: atualizado.subtotal,
       total: atualizado.total,
+      canal: atualizado.canal,
+      numeroExterno: atualizado.numeroExterno,
+      semTelefoneDoCliente: atualizado.semTelefoneDoCliente,
     });
 
     // Só os campos do Cardápio Web. O resto continua sendo do Hub.
@@ -327,6 +339,9 @@ export async function revalidarPedido(
       freteCobrado: atualizado.freteCobrado,
       subtotal: atualizado.subtotal,
       total: atualizado.total,
+      canal: atualizado.canal,
+      numeroExterno: atualizado.numeroExterno,
+      semTelefoneDoCliente: atualizado.semTelefoneDoCliente,
     };
   } catch (e) {
     console.warn(
@@ -397,6 +412,9 @@ export async function processarEventoCardapio(
         freteCobrado: pedido.freteCobrado,
         subtotal: pedido.subtotal,
         total: pedido.total,
+        canal: pedido.canal,
+        numeroExterno: pedido.numeroExterno,
+        semTelefoneDoCliente: pedido.semTelefoneDoCliente,
       });
     } else {
       // Sem coordenada não dá para calcular a faixa do motoboy próprio. Os

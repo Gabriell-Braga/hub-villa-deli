@@ -71,6 +71,9 @@ export interface AtualizacaoCardapio {
   freteCobrado: number;
   subtotal: number;
   total: number;
+  canal?: string;
+  numeroExterno?: string;
+  semTelefoneDoCliente?: boolean;
 }
 
 /**
@@ -102,7 +105,10 @@ export async function atualizarDoCardapio(
         '$.formaPagamento', ?4,
         '$.freteCobrado',   ?5,
         '$.subtotal',       ?6,
-        '$.total',          ?7
+        '$.total',          ?7,
+        '$.canal',          ?8,
+        '$.numeroExterno',  ?9,
+        '$.semTelefoneDoCliente', json(?10)
       )
       WHERE id = ?1`
   )
@@ -114,7 +120,10 @@ export async function atualizarDoCardapio(
       a.formaPagamento ?? null,
       a.freteCobrado,
       a.subtotal,
-      a.total
+      a.total,
+      a.canal ?? null,
+      a.numeroExterno ?? null,
+      a.semTelefoneDoCliente ? "true" : "false"
     )
     .run();
 }
@@ -638,6 +647,8 @@ export async function listarPedidos(
       // Pedido antigo, de antes desta checagem existir, não tem o campo.
       // Tratar como pago evita travar o que já estava na fila.
       pago: p.pago !== false,
+      canal: p.canal,
+      numeroExterno: p.numeroExterno,
       itens: p.itens?.length ?? 0,
       despacho: despacho ? { ...despacho, valorPago: l.valor_pago } : null,
       melhorPreco: precos.length ? Math.min(...precos) : null,

@@ -144,6 +144,22 @@ export interface Pedido {
   subtotal: number;
   /** Já foi pago? Pedido não pago não é cotado. */
   pago: boolean;
+  /**
+   * De onde veio a venda: `catalog` (cardápio digital da loja), `portal` ou
+   * `ifood`. Importa na operação — pedido de marketplace tem número próprio e
+   * não traz telefone do cliente.
+   */
+  canal?: string;
+  /** Número do pedido no marketplace (o que o cliente vê no app do iFood). */
+  numeroExterno?: string;
+  /**
+   * true = o telefone acima é o da LOJA, não o do cliente.
+   *
+   * Acontece nos pedidos de marketplace, que mascaram o contato. O entregador
+   * precisa de algum número para a corrida existir, então cai no da loja — mas
+   * quem estiver no balcão tem que saber que ligar ali não fala com o cliente.
+   */
+  semTelefoneDoCliente?: boolean;
   /** Como foi pago, em português, para a tela ("Pix", "Cartão de crédito"). */
   formaPagamento?: string;
   observacao?: string;
@@ -299,6 +315,10 @@ export interface PedidoResumo {
   /** Frete cobrado do cliente — a receita da entrega. */
   freteCobrado: number;
   pago: boolean;
+  /** catalog | portal | ifood — de onde veio a venda. */
+  canal?: string;
+  /** Número do pedido no marketplace, quando veio de um. */
+  numeroExterno?: string;
   itens: number;
   /** Preenchido quando já foi despachado. */
   despacho: (ResultadoDespacho & { valorPago: number | null }) | null;

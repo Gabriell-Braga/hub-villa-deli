@@ -51,6 +51,12 @@ export interface PedidoDetalhe {
   subtotal: number;
   pago: boolean;
   formaPagamento?: string;
+  /** catalog | portal | ifood — de onde veio a venda. */
+  canal?: string;
+  /** Número do pedido no marketplace (o que o cliente vê no app). */
+  numeroExterno?: string;
+  /** true = o telefone é o da LOJA; o marketplace não informa o do cliente. */
+  semTelefoneDoCliente?: boolean;
   observacao?: string;
   /** Status do pedido lá no Cardápio Web — o `status` acima é o do despacho. */
   statusCardapio?: string | null;
@@ -117,6 +123,8 @@ export interface PedidoResumo {
   itens: number;
   freteCobrado: number;
   pago: boolean;
+  canal?: string;
+  numeroExterno?: string;
   despacho: (Despacho & { valorPago: number | null }) | null;
   melhorPreco: number | null;
   /** true = pedido simulado. Não é uma venda da loja. */

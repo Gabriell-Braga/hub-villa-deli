@@ -11,6 +11,7 @@ import type {
 import LogoProvedor from "@/components/LogoProvedor";
 import CardEntrega from "@/components/CardEntrega";
 import SeloTeste from "@/components/SeloTeste";
+import SeloOrigem from "@/components/SeloOrigem";
 import { useToast } from "@/components/Toast";
 import { brl, brlOuGratis, dataHora } from "@/lib/formato";
 import {
@@ -283,6 +284,7 @@ export default function PaginaCotacao({
           <div className="flex flex-wrap items-center gap-2.5">
             <h1 className="text-xl font-semibold text-gray-900">Pedido #{idPedido}</h1>
             {pedido?.teste && <SeloTeste tamanho="grande" />}
+            <SeloOrigem canal={pedido?.canal} numeroExterno={pedido?.numeroExterno} />
           </div>
           {pedido ? (
             <p className="mt-1 text-sm text-gray-500">
@@ -467,6 +469,14 @@ export default function PaginaCotacao({
                 <dt className="text-gray-500">Cliente</dt>
                 <dd className="text-gray-900">{pedido.cliente.nome}</dd>
                 <dd className="text-gray-500">{pedido.cliente.telefone}</dd>
+                {/* Sem este aviso, alguém liga para o próprio restaurante
+                    achando que está falando com o cliente. */}
+                {pedido.semTelefoneDoCliente && (
+                  <dd className="mt-1 text-xs text-amber-700">
+                    Este é o telefone da loja — o marketplace não informa o do
+                    cliente.
+                  </dd>
+                )}
               </div>
 
               <div>
