@@ -5,7 +5,7 @@ import { MARCA, VARIAVEIS_CSS } from "@/config/marca";
 
 export const metadata: Metadata = {
   title: `Hub Logístico · ${MARCA.nome}`,
-  description: `Cotação e despacho de entregas — ${MARCA.nome}`,
+  description: `Cotação e despacho de entregas · ${MARCA.nome}`,
 
   // Favicon vem da marca, então acompanha a troca de cliente sem mexer em
   // código. Não usamos app/favicon.ico justamente porque aquele caminho é

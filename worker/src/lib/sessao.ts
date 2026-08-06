@@ -55,7 +55,7 @@ export const exigirLogin = createMiddleware<{
   if (!c.env.JWT_SECRET) {
     // Falha fechada: sem segredo configurado, ninguém entra.
     return c.json(
-      { erro: "Painel não configurado — acione o suporte técnico." },
+      { erro: "Painel não configurado. Acione o suporte técnico." },
       500
     );
   }

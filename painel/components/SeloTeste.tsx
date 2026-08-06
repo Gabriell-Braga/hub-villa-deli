@@ -7,18 +7,14 @@
 // propósito: precisa saltar aos olhos antes do clique, não depois.
 // ---------------------------------------------------------------------------
 
-export default function SeloTeste({
-  tamanho = "normal",
-}: {
-  tamanho?: "normal" | "grande";
-}) {
-  const escala =
-    tamanho === "grande" ? "px-3 py-1 text-sm" : "px-2 py-0.5 text-xs";
-
+// Um tamanho só. Havia uma variante "grande" para o cabeçalho do pedido, mas
+// ali ele fica ao lado do chip de origem, e dois chips vizinhos com alturas
+// diferentes desalinham a linha inteira.
+export default function SeloTeste() {
   return (
     <span
       title="Pedido simulado para testes. Não é uma venda da loja."
-      className={`inline-flex items-center gap-1.5 rounded-full bg-amber-100 font-semibold uppercase tracking-wide text-amber-800 ring-1 ring-inset ring-amber-300 ${escala}`}
+      className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-amber-800 ring-1 ring-inset ring-amber-300"
     >
       <svg
         viewBox="0 0 16 16"

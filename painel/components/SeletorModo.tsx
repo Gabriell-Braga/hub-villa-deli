@@ -104,8 +104,8 @@ export default function SeletorModo({
         }`}
       >
         {emProducao
-          ? "🔴 Modo produção — entregas são reais e cobradas"
-          : "🟡 Modo teste — nenhuma entrega é cobrada"}
+          ? "🔴 Modo produção: entregas são reais e cobradas"
+          : "🟡 Modo teste: nenhuma entrega é cobrada"}
       </div>
 
       <div className="p-5">

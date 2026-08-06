@@ -145,7 +145,7 @@ export default function PaginaCotacao({
       setDespacho(json);
       toast.sucesso(
         json.jaDespachado
-          ? "Este pedido já havia sido despachado — nenhuma corrida nova foi criada."
+          ? "Este pedido já havia sido despachado. Nenhuma corrida nova foi criada."
           : `Despachado via ${nome}.`
       );
     } catch {
@@ -224,7 +224,7 @@ export default function PaginaCotacao({
         <div>
           <div className="flex flex-wrap items-center gap-2.5">
             <h1 className="text-xl font-semibold text-gray-900">Pedido #{idPedido}</h1>
-            {pedido?.teste && <SeloTeste tamanho="grande" />}
+            {pedido?.teste && <SeloTeste />}
             <SeloOrigem canal={pedido?.canal} numeroExterno={pedido?.numeroExterno} />
           </div>
           {pedido ? (
@@ -264,18 +264,21 @@ export default function PaginaCotacao({
           className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"
         >
           <strong className="font-semibold">Pedido cancelado.</strong> A loja
-          cancelou este pedido no Cardápio Web — não acione entregador para ele.
+          cancelou este pedido no Cardápio Web. Não acione entregador para ele.
         </div>
       )}
 
-      {bloqueio === "pagamento" && (
+      {/* `!cancelado` porque os dois podem ser verdade ao mesmo tempo, e aí só
+          o cancelamento importa: mandar esperar o pagamento de um pedido
+          cancelado é mandar esperar por algo que não vem. */}
+      {bloqueio === "pagamento" && !cancelado && (
         <div
           role="status"
           className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
         >
           <strong className="font-semibold">Aguardando pagamento.</strong> Só
           cotamos depois que o Cardápio Web confirma o pagamento. Assim que ele
-          confirmar, o pedido volta sozinho para a fila — ou clique em Recotar.
+          confirmar, o pedido volta sozinho para a fila, ou clique em Recotar.
         </div>
       )}
 
@@ -433,7 +436,7 @@ export default function PaginaCotacao({
                 <dt className="text-gray-500">Endereço</dt>
                 <dd className="text-gray-900">
                   {pedido.endereco.logradouro}, {pedido.endereco.numero}
-                  {pedido.endereco.complemento ? ` — ${pedido.endereco.complemento}` : ""}
+                  {pedido.endereco.complemento ? `, ${pedido.endereco.complemento}` : ""}
                 </dd>
                 <dd className="text-gray-500">
                   {pedido.endereco.bairro} · {pedido.endereco.cidade}/{pedido.endereco.uf}

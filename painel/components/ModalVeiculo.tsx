@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import LogoProvedor from "./LogoProvedor";
 
 // ---------------------------------------------------------------------------
 // Escolha do veículo, no clique de despachar pelo Uber.
@@ -125,10 +126,15 @@ export default function ModalVeiculo({
         onClick={(e) => e.stopPropagation()}
         className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl outline-none sm:p-6"
       >
-        <h2 id="titulo-veiculo" className="text-lg font-semibold text-gray-900">
-          Preferência de veículo
-        </h2>
-        <p className="mt-1 text-sm text-gray-500">
+        {/* A marca no título responde de imediato "isto vale para quem?". Sem
+            ela, o modal aparece no clique de um card e não diz de qual. */}
+        <div className="flex items-center gap-2.5">
+          <LogoProvedor provider="uber" tamanho={26} />
+          <h2 id="titulo-veiculo" className="text-lg font-semibold text-gray-900">
+            Preferência de veículo
+          </h2>
+        </div>
+        <p className="mt-1.5 text-sm text-gray-500">
           Escolha o veículo mais adequado a este pedido.
         </p>
 
@@ -166,7 +172,7 @@ export default function ModalVeiculo({
           garantia.</strong>{" "}
           Quem escolhe o entregador é a Uber. O pedido vai marcado para dar
           preferência ao veículo selecionado, e na maioria das vezes é o que
-          vem — mas pode vir outro. O preço continua sendo o da cotação.
+          vem, mas pode vir outro. O preço continua sendo o da cotação.
         </div>
 
         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

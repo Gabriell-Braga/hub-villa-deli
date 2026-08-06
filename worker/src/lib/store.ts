@@ -610,9 +610,19 @@ export async function listarPedidos(
 ): Promise<PedidoResumo[]> {
   const limite = Math.min(Math.max(opcoes.limite ?? 50, 1), 200);
 
-  // Abertos = tudo que ainda não virou corrida. Histórico = o resto.
+  // Abertos = tudo que ainda não virou corrida E ainda pode virar.
+  //
+  // Pedido cancelado no Cardápio Web sai da fila. Ele continua com status
+  // 'recebido' aqui — o cancelamento é lá, não nosso — mas não há nada a
+  // fazer com ele, e deixá-lo na tela obriga o atendente a abrir para
+  // descobrir isso, pedido após pedido, num horário de pico.
+  //
+  // A grafia varia entre "canceled" e "cancelled"; o LIKE em minúsculas pega
+  // as duas e qualquer variação futura.
+  const naoCancelado = `COALESCE(lower(json_extract(p.dados, '$.statusCardapio')), '') NOT LIKE '%cancel%'`;
+
   const filtro = opcoes.abertos
-    ? `p.status IN ('recebido', 'cotado', 'despachando')`
+    ? `p.status IN ('recebido', 'cotado', 'despachando') AND ${naoCancelado}`
     : `p.status = 'despachado'`;
 
   const { results } = await env.DB.prepare(

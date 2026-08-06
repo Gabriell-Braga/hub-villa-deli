@@ -308,7 +308,7 @@ export default function CardEntrega({
               O motoboy já entregou este pedido?
             </p>
             <p className="mt-0.5 text-xs text-gray-500">
-              O motoboy próprio não envia status automático — confirme aqui para
+              O motoboy próprio não envia status automático. Confirme aqui para
               o histórico ficar correto.
             </p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">

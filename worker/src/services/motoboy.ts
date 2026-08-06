@@ -44,7 +44,7 @@ export async function cotarMotoboy(
   if (!Number.isFinite(oLat) || !Number.isFinite(oLng)) {
     return {
       ...base,
-      erro: "Localização da loja não cadastrada — veja em Configurações.",
+      erro: "Localização da loja não cadastrada. Veja em Configurações.",
     };
   }
 

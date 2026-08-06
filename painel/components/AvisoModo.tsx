@@ -48,7 +48,7 @@ export default function AvisoModo({ ehAdmin }: { ehAdmin: boolean }) {
   return (
     <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 bg-amber-400 px-4 py-1.5 text-center text-xs font-medium text-amber-950">
       <span>
-        <span aria-hidden="true">⚠️</span> Modo de teste — nenhuma entrega é
+        <span aria-hidden="true">⚠️</span> Modo de teste. Nenhuma entrega é
         cobrada de verdade.
       </span>
       {ehAdmin && modo.podeTrocarParaProducao && (

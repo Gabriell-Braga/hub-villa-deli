@@ -509,7 +509,7 @@ export default function HistoricoEntregas() {
           {dados.total > dados.itens.length && (
             <p className="mt-4 text-center text-xs text-gray-400">
               Mostrando {dados.itens.length} de {dados.total}. Refine o período para
-              ver o restante — a exportação inclui até 500 linhas do filtro.
+              ver o restante. A exportação inclui até 500 linhas do filtro.
             </p>
           )}
         </>

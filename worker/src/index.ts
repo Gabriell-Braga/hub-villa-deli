@@ -707,17 +707,10 @@ app.get("/api/cotacao/:idPedido", async (c) => {
   // o atendente não conseguiria nem conferir de qual pedido se trata.
   const recusa = { idPedido, pedido, cotacoes: [], maisBarato: null, despacho: null, entrega: null };
 
-  if (pedido.pago === false) {
-    return c.json(
-      {
-        ...recusa,
-        erro: "Pagamento ainda não confirmado no Cardápio Web.",
-        bloqueio: "pagamento" as const,
-      },
-      409
-    );
-  }
-
+  // Cancelamento é checado ANTES do pagamento. Um pedido cancelado que também
+  // está sem pagamento não tem duas pendências: o cancelamento encerra o
+  // assunto, e responder "aguardando pagamento" mandaria o atendente esperar
+  // por algo que nunca vai acontecer.
   if (cancelado(pedido.statusCardapio)) {
     return c.json(
       {
@@ -729,10 +722,21 @@ app.get("/api/cotacao/:idPedido", async (c) => {
     );
   }
 
+  if (pedido.pago === false) {
+    return c.json(
+      {
+        ...recusa,
+        erro: "Pagamento ainda não confirmado no Cardápio Web.",
+        bloqueio: "pagamento" as const,
+      },
+      409
+    );
+  }
+
   const ativos = provedoresAtivos(env);
   if (ativos.length === 0) {
     return c.json(
-      { erro: "Nenhuma transportadora ativa — veja em Configurações." },
+      { erro: "Nenhuma transportadora ativa. Veja em Configurações." },
       503
     );
   }
@@ -838,13 +842,13 @@ app.post("/api/despachar", async (c) => {
   const cotacoes = await obterCotacoes(env, idPedido);
   const cotacao = cotacoes?.find((x) => x.provider === provider);
   if (!cotacao || !cotacao.disponivel) {
-    return c.json({ erro: "cotação inexistente — cote novamente" }, 409);
+    return c.json({ erro: "Cotação inexistente. Cote novamente." }, 409);
   }
 
   // Trava 3 — cotação vencida. Uber/iFood expiram em minutos; sem esta checagem
   // o erro só aparecia depois de bater no parceiro.
   if (cotacao.expiraEm && Date.parse(cotacao.expiraEm) <= Date.now()) {
-    return c.json({ erro: "cotação expirada — clique em Recotar" }, 409);
+    return c.json({ erro: "Cotação expirada. Clique em Recotar." }, 409);
   }
 
   // Trava 4 — reserva atômica. Dois cliques simultâneos: só um passa daqui.

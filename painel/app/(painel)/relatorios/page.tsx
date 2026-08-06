@@ -66,7 +66,7 @@ export default function PaginaRelatorios() {
               a frase não teria por que existir. */}
           {dados?.incluiTestes && (
             <p className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-300">
-              Ambiente de teste — as entregas simuladas estão somadas aqui
+              Ambiente de teste: as entregas simuladas estão somadas aqui
             </p>
           )}
         </div>

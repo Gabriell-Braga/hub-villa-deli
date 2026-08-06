@@ -46,7 +46,7 @@ function FormularioLogin() {
         <div className="mb-6">
           <LogoComNome tamanho={72} empilhado />
           <p className="mt-4 text-center text-sm text-gray-500">
-            Hub Logístico — entre para cotar e despachar entregas
+            Hub Logístico. Entre para cotar e despachar entregas
           </p>
         </div>
 

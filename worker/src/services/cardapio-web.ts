@@ -239,7 +239,7 @@ export function traduzirPedidoCW(
     logradouro: e.street ?? "",
     numero: e.number ?? "s/n",
     complemento:
-      [e.complement, e.reference].filter(Boolean).join(" — ") || undefined,
+      [e.complement, e.reference].filter(Boolean).join(", ") || undefined,
     bairro: e.neighborhood ?? "",
     cidade: e.city ?? "",
     uf: e.state ?? "",

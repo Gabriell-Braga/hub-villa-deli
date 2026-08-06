@@ -60,10 +60,10 @@ export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
     status: "ok",
     detalhe:
       modo === "producao"
-        ? "PRODUÇÃO — as entregas despachadas são reais e cobradas."
+        ? "PRODUÇÃO. As entregas despachadas são reais e cobradas."
         : podeUsarProducao(env)
-          ? "Teste — nenhuma entrega é cobrada. Troque para produção quando validar."
-          : "Teste — este ambiente não pode operar em produção.",
+          ? "Teste. Nenhuma entrega é cobrada. Troque para produção quando validar."
+          : "Teste. Este ambiente não pode operar em produção.",
   });
 
   if (modo === "teste" && testeUsandoCredencialDeProducao(env)) {
@@ -72,7 +72,7 @@ export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
       titulo: "Credenciais de teste",
       status: "aviso",
       detalhe:
-        "O modo teste está usando as credenciais de produção — não há credenciais de teste cadastradas.",
+        "O modo teste está usando as credenciais de produção. Não há credenciais de teste cadastradas.",
       comoResolver:
         "Peça as credenciais de sandbox ao Uber e envie ao suporte, para que teste e produção fiquem separados.",
     });
@@ -122,7 +122,7 @@ export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
     status: preenchido(env.WEBHOOK_SECRET) ? "ok" : "erro",
     detalhe: preenchido(env.WEBHOOK_SECRET)
       ? "Chave de integração cadastrada."
-      : "Chave de integração ausente — nenhum pedido do Cardápio Web será recebido.",
+      : "Chave de integração ausente. Nenhum pedido do Cardápio Web será recebido.",
     comoResolver: SUPORTE,
   });
 
@@ -132,7 +132,7 @@ export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
     status: preenchido(env.JWT_SECRET) ? "ok" : "erro",
     detalhe: preenchido(env.JWT_SECRET)
       ? "Chave de sessão cadastrada."
-      : "Chave de sessão ausente — o login do painel não funciona.",
+      : "Chave de sessão ausente. O login do painel não funciona.",
     comoResolver: SUPORTE,
   });
 
@@ -146,7 +146,7 @@ export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
     titulo: "Endereço da loja",
     status: coordsOk ? "ok" : "erro",
     detalhe: coordsOk
-      ? `${env.RESTAURANTE_NOME || "Loja"} — localização cadastrada.`
+      ? `${env.RESTAURANTE_NOME || "Loja"}: localização cadastrada.`
       : "Localização da loja não cadastrada. É de onde o entregador coleta e o centro das faixas de preço do motoboy próprio.",
     comoResolver:
       "Informe ao suporte o endereço exato da loja, com a localização no mapa.",
@@ -166,7 +166,7 @@ export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
     status: telOk ? "ok" : "erro",
     detalhe: telOk
       ? tel
-      : "Telefone inválido ou não cadastrado. O Uber recusa toda cotação sem ele — é o número que o entregador liga na coleta.",
+      : "Telefone inválido ou não cadastrado. O Uber recusa toda cotação sem ele. É o número que o entregador liga na coleta.",
     comoResolver: "Informe ao suporte o telefone de contato da loja, com DDD.",
   });
 
@@ -189,7 +189,7 @@ export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
       chave: "uber",
       titulo: "Uber Direct",
       status: "aviso",
-      detalhe: "Desativado — não entra na cotação.",
+      detalhe: "Desativado. Não entra na cotação.",
     });
   } else {
     // Nomes como o Uber os chama no portal dele — é onde o lojista vai olhar.
@@ -232,7 +232,7 @@ export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
             // O que importa aqui é o MODO (qual credencial), não o ambiente.
             detalhe:
               modo === "producao"
-                ? "Conectado à conta real — pronto para despachar entregas cobradas."
+                ? "Conectado à conta real. Pronto para despachar entregas cobradas."
                 : "Conectado à conta de teste do Uber.",
           });
         } else if (res.status === 401 || res.status === 403) {
@@ -252,7 +252,7 @@ export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
             status: "erro",
             detalhe: "O Uber não reconheceu o Customer ID cadastrado.",
             comoResolver:
-              "Confirme o Customer ID no portal do Uber — ele é diferente entre teste e produção.",
+              "Confirme o Customer ID no portal do Uber. Ele é diferente entre teste e produção.",
           });
         } else {
           itens.push({
@@ -283,7 +283,7 @@ export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
       titulo: "Acompanhamento da entrega",
       status: preenchido(cred.webhookSecret) ? "ok" : "aviso",
       detalhe: preenchido(cred.webhookSecret)
-        ? "Configurado — o painel recebe status e localização do entregador."
+        ? "Configurado. O painel recebe status e localização do entregador."
         : "Sem chave de assinatura. O despacho funciona, mas o painel não recebe atualização de status nem a posição do entregador.",
       comoResolver:
         "No painel do Uber Direct, cadastre a URL de webhook do Hub e envie a chave de assinatura ao suporte.",
@@ -302,7 +302,7 @@ export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
     detalhe:
       ativos.length > 0
         ? ativos.map((a) => nomeProvedor(a)).join(", ")
-        : "Nenhuma transportadora ativa — a cotação volta vazia.",
+        : "Nenhuma transportadora ativa. A cotação volta vazia.",
     comoResolver: SUPORTE,
   });
 

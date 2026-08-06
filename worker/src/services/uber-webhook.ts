@@ -105,7 +105,7 @@ export async function processarWebhookUber(
   }
 
   if (!deliveryId) {
-    return { ok: true, duplicado: false, detalhe: "evento sem delivery_id — só registrado" };
+    return { ok: true, duplicado: false, detalhe: "evento sem delivery_id, só registrado" };
   }
   if (!idPedido) {
     // Entrega que não nasceu neste Hub (ou pedido já limpo pelo cron).
@@ -113,7 +113,7 @@ export async function processarWebhookUber(
     return {
       ok: true,
       duplicado: false,
-      detalhe: `entrega ${deliveryId} não encontrada — evento arquivado`,
+      detalhe: `entrega ${deliveryId} não encontrada, evento arquivado`,
     };
   }
 
