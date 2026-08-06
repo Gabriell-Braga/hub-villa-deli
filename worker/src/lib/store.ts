@@ -63,23 +63,59 @@ export async function salvarPedidoNovo(env: Env, pedido: Pedido): Promise<boolea
   return (r.meta.changes ?? 0) > 0;
 }
 
+/** O que o Cardápio Web ainda pode mudar depois do pedido ter entrado. */
+export interface AtualizacaoCardapio {
+  statusCardapio: string | null;
+  pago: boolean;
+  formaPagamento?: string;
+  freteCobrado: number;
+  subtotal: number;
+  total: number;
+}
+
 /**
- * Grava o status que o pedido tem no Cardápio Web.
+ * Reaplica no pedido o que veio do Cardápio Web numa releitura.
  *
- * Mexe só nesse campo do JSON, com json_set do SQLite, em vez de reescrever
- * `dados` inteiro: o pedido pode estar sendo cotado no mesmo instante, e um
- * "lê, altera, grava" aqui apagaria o que a cotação escreveu.
+ * PRECISA existir, e não é detalhe: um pedido no Pix entra com o pagamento
+ * ainda não compensado. Se só o status fosse atualizado, `pago` ficaria
+ * congelado em false para sempre e o pedido nunca sairia da fila — foi
+ * exatamente o que aconteceu.
+ *
+ * Atualiza campo a campo com json_set em vez de reescrever `dados` inteiro: o
+ * pedido pode estar sendo cotado no mesmo instante, e um "lê, altera, grava"
+ * aqui apagaria o que a cotação escreveu.
+ *
+ * O que NÃO é tocado: id, criadoEm, status do despacho, marca de teste e o
+ * telefone. Esses são do Hub, não do Cardápio Web — em especial o telefone,
+ * que em pedido de teste foi trocado de propósito pelo do dono do Hub.
  */
-export async function atualizarStatusCardapio(
+export async function atualizarDoCardapio(
   env: Env,
   idPedido: string,
-  status: string | null
+  a: AtualizacaoCardapio
 ): Promise<void> {
   await env.DB.prepare(
-    `UPDATE pedidos SET dados = json_set(dados, '$.statusCardapio', ?2)
+    `UPDATE pedidos SET dados = json_set(
+        dados,
+        '$.statusCardapio', ?2,
+        '$.pago',           json(?3),
+        '$.formaPagamento', ?4,
+        '$.freteCobrado',   ?5,
+        '$.subtotal',       ?6,
+        '$.total',          ?7
+      )
       WHERE id = ?1`
   )
-    .bind(idPedido, status)
+    .bind(
+      idPedido,
+      a.statusCardapio,
+      // json() porque um bind de 1/0 viraria número, e o painel checa booleano.
+      a.pago ? "true" : "false",
+      a.formaPagamento ?? null,
+      a.freteCobrado,
+      a.subtotal,
+      a.total
+    )
     .run();
 }
 

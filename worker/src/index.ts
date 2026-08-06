@@ -40,7 +40,11 @@ import {
   enfileirarEventoCardapio,
   eventosCardapioPendentes,
 } from "./lib/store";
-import { cancelado, processarEventoCardapio } from "./services/cardapio-web";
+import {
+  cancelado,
+  processarEventoCardapio,
+  revalidarPedido,
+} from "./services/cardapio-web";
 import { historicoCsv, listarHistorico, nomeArquivoCsv } from "./lib/historico";
 import { assinaturaValida } from "./lib/assinatura";
 import { processarWebhookUber } from "./services/uber-webhook";
@@ -677,8 +681,18 @@ app.get("/api/cotacao/:idPedido", async (c) => {
   const env = c.env;
   const idPedido = c.req.param("idPedido");
 
-  const pedido = await obterPedido(env, idPedido);
+  let pedido = await obterPedido(env, idPedido);
   if (!pedido) return c.json({ erro: "pedido não encontrado" }, 404);
+
+  // Antes de recusar por falta de pagamento, PERGUNTA de novo ao Cardápio Web.
+  //
+  // O pedido no Pix entra com o pagamento pendente e compensa segundos depois.
+  // O normal é o webhook de status avisar, mas se ele falhar o pedido fica
+  // preso na fila para sempre. A releitura acontece só neste caso — pedido já
+  // pago não gera chamada nenhuma.
+  if (pedido.pago === false) {
+    pedido = (await revalidarPedido(env, pedido)) ?? pedido;
+  }
 
   // SÓ COTAMOS PEDIDO PAGO.
   //

@@ -3,7 +3,7 @@ import { ambiente } from "../config/ambiente";
 import { modoAtual } from "../config/modo";
 import { garantirCoordenadas } from "../lib/geocode";
 import {
-  atualizarStatusCardapio,
+  atualizarDoCardapio,
   marcarEventoComErro,
   marcarEventoProcessado,
   obterPedido,
@@ -283,6 +283,59 @@ export function traduzirPedidoCW(
   };
 }
 
+/**
+ * Reconsulta o pedido no Cardápio Web e reaplica o que mudou.
+ *
+ * Usada quando o Hub acha que o pedido não está pago. O caminho normal é o
+ * webhook de status avisar, mas ele pode falhar — e um pedido travado como
+ * "aguardando pagamento" some da operação sem ninguém entender por quê. Aqui
+ * a dúvida custa uma chamada; do outro lado, custa uma venda.
+ *
+ * Devolve o pedido atualizado, ou null se não deu para reconsultar (aí vale o
+ * que já estava guardado).
+ */
+export async function revalidarPedido(
+  env: Env,
+  pedido: Pedido
+): Promise<Pedido | null> {
+  try {
+    // O id do Hub é o display_id; a API deles busca pelo id interno também
+    // por esse número, que é o que o webhook mandou.
+    const cw = await buscarPedidoCW(env, pedido.id);
+    const atualizado = traduzirPedidoCW(
+      cw,
+      !!pedido.teste,
+      env.RESTAURANTE_TELEFONE ?? "",
+      env.TELEFONE_TESTE
+    );
+
+    await atualizarDoCardapio(env, pedido.id, {
+      statusCardapio: atualizado.statusCardapio ?? null,
+      pago: atualizado.pago,
+      formaPagamento: atualizado.formaPagamento,
+      freteCobrado: atualizado.freteCobrado,
+      subtotal: atualizado.subtotal,
+      total: atualizado.total,
+    });
+
+    // Só os campos do Cardápio Web. O resto continua sendo do Hub.
+    return {
+      ...pedido,
+      statusCardapio: atualizado.statusCardapio,
+      pago: atualizado.pago,
+      formaPagamento: atualizado.formaPagamento,
+      freteCobrado: atualizado.freteCobrado,
+      subtotal: atualizado.subtotal,
+      total: atualizado.total,
+    };
+  } catch (e) {
+    console.warn(
+      `[cardapio-web] revalidar ${pedido.id}: ${e instanceof Error ? e.message : e}`
+    );
+    return null;
+  }
+}
+
 /** Qualquer variação de "cancelado" nas duas grafias que eles usam. */
 export function cancelado(status?: string | null): boolean {
   return /cancel/i.test(status ?? "");
@@ -333,9 +386,18 @@ export async function processarEventoCardapio(
     const jaExiste = await obterPedido(env, pedido.id);
 
     if (jaExiste) {
-      // ORDER_STATUS_UPDATED (ou reenvio): só o status deles muda. Não
-      // sobrescrevemos o pedido, que a esta altura já pode estar cotado.
-      await atualizarStatusCardapio(env, pedido.id, cw.status ?? null);
+      // ORDER_STATUS_UPDATED (ou reenvio). Reaplica o que o Cardápio Web pode
+      // ter mudado desde a criação — pagamento em primeiro lugar. Pedido no
+      // Pix entra com o pagamento pendente e só compensa depois; é justamente
+      // para isso que este evento existe.
+      await atualizarDoCardapio(env, pedido.id, {
+        statusCardapio: pedido.statusCardapio ?? null,
+        pago: pedido.pago,
+        formaPagamento: pedido.formaPagamento,
+        freteCobrado: pedido.freteCobrado,
+        subtotal: pedido.subtotal,
+        total: pedido.total,
+      });
     } else {
       // Sem coordenada não dá para calcular a faixa do motoboy próprio. Os
       // pedidos de entrega deles já trazem lat/lng, então isto quase nunca
