@@ -8,7 +8,7 @@ import {
   ROTULO_PROVEDOR,
   ROTULO_STATUS_ENTREGA,
 } from "@/lib/tipos";
-import { brlOuGratis, dataHora } from "@/lib/formato";
+import { brl, brlOuGratis, dataHora } from "@/lib/formato";
 import LogoProvedor from "./LogoProvedor";
 import SeloTeste from "./SeloTeste";
 import { SkeletonListaPedidos } from "./Skeleton";
@@ -25,6 +25,8 @@ interface Item {
   dataCriacao: string;
   plataforma: ProviderId;
   valorPago: number;
+  freteCobrado: number;
+  margem: number;
   etaMinutos: number | null;
   status: string;
   clienteNome: string | null;
@@ -39,6 +41,8 @@ interface Resposta {
   itens: Item[];
   total: number;
   somaFrete: number;
+  somaFreteCobrado: number;
+  somaMargem: number;
   somaPedidos: number;
 }
 
@@ -69,6 +73,17 @@ function diaSP(offsetDias = 0): string {
     month: "2-digit",
     day: "2-digit",
   }).format(d);
+}
+
+/**
+ * Valor com sinal explícito: "+R$ 1,99" / "−R$ 3,00".
+ *
+ * Sem o sinal, um prejuízo de R$ 3 e um lucro de R$ 3 aparecem idênticos, e a
+ * cor sozinha não basta — parte das pessoas não distingue verde de vermelho.
+ */
+function saldo(v: number): string {
+  const sinal = v > 0 ? "+" : v < 0 ? "−" : "";
+  return sinal + brl(Math.abs(v));
 }
 
 const ATALHOS = [
@@ -280,22 +295,44 @@ export default function HistoricoEntregas() {
         )}
       </section>
 
-      {/* ---------------- Resumo + exportar ---------------- */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-gray-600">
-          {carregando ? (
-            "Carregando..."
-          ) : dados ? (
-            <>
+      {/* ---------------- Resumo + exportar ----------------
+          Três números na ordem da conta: o que entrou de frete, o que saiu
+          para os parceiros, e o que sobrou. "Gasto com frete" sozinho não
+          responde nada — a loja também RECEBEU frete. */}
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        {carregando ? (
+          <p className="text-sm text-gray-600">Carregando...</p>
+        ) : dados ? (
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+            <span className="text-gray-600">
               <strong className="text-gray-900">{dados.total}</strong>{" "}
-              {dados.total === 1 ? "entrega" : "entregas"} · frete{" "}
-              <strong className="text-gray-900">{brlOuGratis(dados.somaFrete)}</strong>
-              {dados.somaPedidos > 0 && (
-                <> · pedidos {brlOuGratis(dados.somaPedidos)}</>
-              )}
-            </>
-          ) : null}
-        </p>
+              {dados.total === 1 ? "entrega" : "entregas"}
+            </span>
+            <span className="text-gray-600">
+              Frete cobrado{" "}
+              <strong className="text-gray-900">
+                {brlOuGratis(dados.somaFreteCobrado)}
+              </strong>
+            </span>
+            <span className="text-gray-600">
+              Custo{" "}
+              <strong className="text-gray-900">
+                {brlOuGratis(dados.somaFrete)}
+              </strong>
+            </span>
+            <span
+              className={`rounded-lg px-2.5 py-1 font-semibold ${
+                dados.somaMargem >= 0
+                  ? "bg-emerald-50 text-emerald-800"
+                  : "bg-red-50 text-red-800"
+              }`}
+            >
+              Resultado {saldo(dados.somaMargem)}
+            </span>
+          </div>
+        ) : (
+          <span />
+        )}
 
         {/* Link comum, não fetch: o navegador cuida do download sozinho e o
             nome do arquivo vem do cabeçalho que o Worker manda. */}
@@ -348,9 +385,20 @@ export default function HistoricoEntregas() {
                       #{i.idPedido} · {dataHora(i.dataCriacao)}
                     </p>
                   </div>
-                  <p className="shrink-0 font-semibold text-gray-900">
-                    {brlOuGratis(i.valorPago)}
-                  </p>
+                  {/* No celular não cabe a conta inteira: mostra o resultado,
+                      que é o número que importa, e o custo abaixo em cinza. */}
+                  <div className="shrink-0 text-right">
+                    <p
+                      className={`font-semibold ${
+                        i.margem >= 0 ? "text-emerald-700" : "text-red-700"
+                      }`}
+                    >
+                      {saldo(i.margem)}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      custo {brlOuGratis(i.valorPago)}
+                    </p>
+                  </div>
                 </div>
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -385,7 +433,13 @@ export default function HistoricoEntregas() {
                     </th>
                     <th className="px-5 py-3 font-medium">Transportadora</th>
                     <th className="px-5 py-3 font-medium">Status</th>
-                    <th className="px-5 py-3 text-right font-medium">Frete</th>
+                    {/* A conta lida da esquerda para a direita: cobrado − custo
+                        = resultado. */}
+                    <th className="hidden px-5 py-3 text-right font-medium md:table-cell">
+                      Frete cobrado
+                    </th>
+                    <th className="px-5 py-3 text-right font-medium">Custo</th>
+                    <th className="px-5 py-3 text-right font-medium">Resultado</th>
                     <th className="px-5 py-3" />
                   </tr>
                 </thead>
@@ -424,8 +478,18 @@ export default function HistoricoEntregas() {
                           {ROTULO_STATUS_ENTREGA[i.status] ?? i.status}
                         </span>
                       </td>
-                      <td className="px-5 py-3 text-right font-semibold text-gray-900">
+                      <td className="hidden px-5 py-3 text-right text-gray-600 md:table-cell">
+                        {brlOuGratis(i.freteCobrado)}
+                      </td>
+                      <td className="px-5 py-3 text-right text-gray-600">
                         {brlOuGratis(i.valorPago)}
+                      </td>
+                      <td
+                        className={`px-5 py-3 text-right font-semibold ${
+                          i.margem >= 0 ? "text-emerald-700" : "text-red-700"
+                        }`}
+                      >
+                        {saldo(i.margem)}
                       </td>
                       <td className="px-5 py-3 text-right">
                         <Link

@@ -60,11 +60,20 @@ CREATE TABLE IF NOT EXISTS deliveries (
   id_pedido             TEXT NOT NULL UNIQUE,
   -- uber | ifood | 99 | motoboy
   plataforma_escolhida  TEXT NOT NULL,
-  -- em reais. 0 = frete grátis (faixa de 1 km do motoboy próprio)
+  -- CUSTO: o que a loja pagou ao parceiro, em reais.
   valor_pago            REAL NOT NULL,
+  -- RECEITA: o que o CLIENTE pagou de frete, pela tabela de raio do Cardápio
+  -- Web. Não muda conforme o parceiro escolhido — o parceiro muda o custo, não
+  -- o preço. `frete_cobrado - valor_pago` é o resultado da entrega, e é a
+  -- pergunta que o dono do restaurante realmente faz.
+  -- 0 = frete grátis (faixa de 1 km).
+  frete_cobrado         REAL NOT NULL DEFAULT 0,
   eta_minutos           INTEGER,
   status                TEXT NOT NULL,
   data_criacao          TEXT NOT NULL,
+  -- PIN informado pelo cliente ao entregador na porta (Uber Direct). O motoboy
+  -- próprio não tem, então aceita NULL.
+  codigo_entrega        TEXT,
 
   -- contexto útil no relatório (não exigido, mas barato de guardar)
   delivery_id_externo   TEXT,

@@ -8,9 +8,19 @@ import { brl } from "@/lib/formato";
 import StatCard from "@/components/StatCard";
 import { Skeleton, SkeletonGraficoBarras } from "@/components/Skeleton";
 import { MARCA } from "@/config/marca";
-import { EntregasPorPlataforma, GastoPorDia } from "@/components/GraficoGastos";
+import { EntregasPorPlataforma, FretePorDia } from "@/components/GraficoGastos";
 
 const JANELAS = [7, 30, 90];
+
+/**
+ * Resultado com sinal explícito: "+R$ 12,40" / "−R$ 3,00".
+ *
+ * A cor sozinha não serve como único sinal — parte das pessoas não distingue
+ * verde de vermelho, e num relatório de dinheiro confundir lucro com prejuízo
+ * é o pior erro possível.
+ */
+const comSinal = (v: number) =>
+  (v > 0 ? "+" : v < 0 ? "−" : "") + brl(Math.abs(v));
 
 export default function PaginaRelatorios() {
   const [dias, setDias] = useState(30);
@@ -49,8 +59,8 @@ export default function PaginaRelatorios() {
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Relatórios</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Gasto com frete no mês corrente (horário de Brasília) e evolução no
-            período.
+            Resultado das entregas no mês corrente: o frete que os clientes
+            pagaram menos o que foi pago às transportadoras.
           </p>
         </div>
 
@@ -79,25 +89,30 @@ export default function PaginaRelatorios() {
         </div>
       )}
 
-      {/* Stat cards */}
+      {/* Stat cards — a conta na ordem em que se lê:
+          entrou de frete, saiu para o parceiro, sobrou isto. */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          rotulo="Gasto com frete no mês"
+          rotulo="Frete cobrado no mês"
+          valor={brl(mes?.freteCobrado ?? 0)}
+          detalhe="O que os clientes pagaram de entrega"
+          cor="#059669"
+          carregando={carregando}
+        />
+        <StatCard
+          rotulo="Custo com transportadoras"
           valor={brl(mes?.gastoTotal ?? 0)}
-          detalhe="Soma de todas as plataformas"
+          detalhe="O que a loja pagou aos parceiros"
           cor={MARCA.cores.primaria}
           carregando={carregando}
         />
         <StatCard
-          rotulo="Entregas no mês"
-          valor={String(mes?.entregas ?? 0)}
-          detalhe="Corridas efetivamente despachadas"
-          carregando={carregando}
-        />
-        <StatCard
-          rotulo="Custo médio do frete"
-          valor={brl(mes?.custoMedio ?? 0)}
-          detalhe="Por entrega, no mês"
+          rotulo="Resultado das entregas"
+          valor={comSinal(mes?.margem ?? 0)}
+          detalhe={`${mes?.entregas ?? 0} entregas · ${comSinal(
+            mes?.margemMedia ?? 0
+          )} por entrega`}
+          tom={(mes?.margem ?? 0) >= 0 ? "positivo" : "negativo"}
           carregando={carregando}
         />
         <StatCard
@@ -108,7 +123,9 @@ export default function PaginaRelatorios() {
         />
       </div>
 
-      {/* Um card por plataforma — a pergunta "quanto gastei com Uber?" */}
+      {/* Um card por plataforma. A pergunta não é "quanto gastei com o Uber",
+          é "com qual parceiro a loja sai ganhando" — por isso o número grande
+          é o resultado, e o custo fica no detalhe. */}
       <h2 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-wide text-gray-500">
         Por plataforma, no mês
       </h2>
@@ -134,8 +151,11 @@ export default function PaginaRelatorios() {
                   {p.nome}
                 </>
               }
-              valor={brl(p.gastoTotal)}
-              detalhe={`${p.entregas} entregas · média ${brl(p.custoMedio)}`}
+              valor={comSinal(p.margem)}
+              detalhe={`${p.entregas} entregas · custo médio ${brl(
+                p.custoMedio
+              )} · ${comSinal(p.margemMedia)} por entrega`}
+              tom={p.margem >= 0 ? "positivo" : "negativo"}
               cor={COR_PROVEDOR[p.provider]}
             />
           ))}
@@ -149,15 +169,38 @@ export default function PaginaRelatorios() {
       {/* Gráficos */}
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <section className="rounded-xl border border-gray-200 bg-white p-5">
-          <h2 className="text-sm font-semibold text-gray-900">
-            Gasto por dia
-            <span className="ml-2 font-normal text-gray-400">últimos {dias} dias</span>
-          </h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-gray-900">
+              Frete cobrado × custo
+              <span className="ml-2 font-normal text-gray-400">
+                últimos {dias} dias
+              </span>
+            </h2>
+            {/* Legenda à mão em vez da do Recharts: assim ela fica no
+                cabeçalho, junto do título, e não rouba altura do gráfico. */}
+            <div className="flex items-center gap-3 text-xs text-gray-500">
+              <span className="flex items-center gap-1.5">
+                <span
+                  className="h-2 w-2 rounded-full bg-emerald-600"
+                  aria-hidden="true"
+                />
+                Cobrado
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{ backgroundColor: MARCA.cores.primaria }}
+                  aria-hidden="true"
+                />
+                Custo
+              </span>
+            </div>
+          </div>
           <div className="mt-4">
             {carregando ? (
               <SkeletonGraficoBarras />
             ) : (
-              <GastoPorDia dados={dados?.serieDiaria ?? []} />
+              <FretePorDia dados={dados?.serieDiaria ?? []} />
             )}
           </div>
         </section>
@@ -180,7 +223,11 @@ export default function PaginaRelatorios() {
       {dados && (
         <p className="mt-6 text-center text-xs text-gray-400">
           Acumulado de todos os tempos: {dados.total.entregas} entregas ·{" "}
-          {brl(dados.total.gastoTotal)} · média {brl(dados.total.custoMedio)}
+          {brl(dados.total.freteCobrado)} cobrados ·{" "}
+          {brl(dados.total.gastoTotal)} de custo · resultado{" "}
+          {comSinal(dados.total.margem)}
+          <br />
+          Entregas de teste não entram nestes números.
         </p>
       )}
     </div>

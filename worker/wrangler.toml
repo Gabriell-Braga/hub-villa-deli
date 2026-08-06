@@ -72,6 +72,12 @@ RESTAURANTE_LNG = "-43.932128"
 # o número que o entregador liga na coleta.
 RESTAURANTE_TELEFONE = "+5531984428765"
 
+# TELEFONE DE TESTE — substitui o do cliente em TODO pedido marcado como
+# teste. O Uber manda SMS de acompanhamento para o número do destino: sem
+# esta troca, um teste nosso vira mensagem estranha no celular de um cliente
+# real, e quem está testando não recebe aviso nenhum.
+TELEFONE_TESTE = "+5531973065499"
+
 # --- Cardápio Web ----------------------------------------------------------
 # CARDAPIO_WEB_HEADER: header em que o Cardápio Web manda o token do webhook.
 # Hoje é X-Webhook-Token. O valor do token em si vai no segredo WEBHOOK_SECRET.
@@ -143,6 +149,12 @@ RESTAURANTE_LAT = "-19.978452"
 RESTAURANTE_LNG = "-43.932128"
 RESTAURANTE_TELEFONE = "+5531984428765"
 
+# TELEFONE DE TESTE — substitui o do cliente em TODO pedido marcado como
+# teste. O Uber manda SMS de acompanhamento para o número do destino: sem
+# esta troca, um teste nosso vira mensagem estranha no celular de um cliente
+# real, e quem está testando não recebe aviso nenhum.
+TELEFONE_TESTE = "+5531973065499"
+
 CARDAPIO_WEB_HEADER = "x-webhook-token"
 # A conta do Villa Deli só tem credencial de PRODUÇÃO no Cardápio Web (o mesmo
 # token dá 401 no sandbox deles). Homologação aponta para a base real de
@@ -203,6 +215,12 @@ RESTAURANTE_CEP = "34006-086"
 RESTAURANTE_LAT = "-19.978452"
 RESTAURANTE_LNG = "-43.932128"
 RESTAURANTE_TELEFONE = "+5531984428765"
+
+# TELEFONE DE TESTE — substitui o do cliente em TODO pedido marcado como
+# teste. O Uber manda SMS de acompanhamento para o número do destino: sem
+# esta troca, um teste nosso vira mensagem estranha no celular de um cliente
+# real, e quem está testando não recebe aviso nenhum.
+TELEFONE_TESTE = "+5531973065499"
 
 CARDAPIO_WEB_HEADER = "x-webhook-token"
 CARDAPIO_WEB_BASE_URL = ""

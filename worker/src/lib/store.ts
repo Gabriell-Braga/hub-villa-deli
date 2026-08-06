@@ -316,20 +316,24 @@ export async function registrarDelivery(
 
   await env.DB.prepare(
     `INSERT OR IGNORE INTO deliveries (
-       id_pedido, plataforma_escolhida, valor_pago, eta_minutos, status,
-       data_criacao, delivery_id_externo, tracking_url,
-       cliente_nome, bairro, valor_pedido, despachado_por, teste
-     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`
+       id_pedido, plataforma_escolhida, valor_pago, frete_cobrado,
+       eta_minutos, status, data_criacao, delivery_id_externo, tracking_url,
+       codigo_entrega, cliente_nome, bairro, valor_pedido, despachado_por, teste
+     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)`
   )
     .bind(
       pedido.id,
       resultado.provider,
       cotacao.preco ?? 0,
+      // Congelado no momento do despacho, junto com o custo. Se a loja mudar a
+      // tabela de frete amanhã, o resultado de hoje continua sendo o de hoje.
+      pedido.freteCobrado ?? 0,
       cotacao.etaMinutos,
       resultado.status,
       new Date().toISOString(),
       resultado.deliveryId,
       resultado.trackingUrl,
+      resultado.codigoEntrega ?? null,
       pedido.cliente.nome,
       pedido.endereco.bairro,
       pedido.total,
@@ -594,6 +598,10 @@ export async function listarPedidos(
       bairro: p.endereco?.bairro ?? "",
       cidade: p.endereco?.cidade ?? "",
       total: p.total ?? 0,
+      freteCobrado: p.freteCobrado ?? 0,
+      // Pedido antigo, de antes desta checagem existir, não tem o campo.
+      // Tratar como pago evita travar o que já estava na fila.
+      pago: p.pago !== false,
       itens: p.itens?.length ?? 0,
       despacho: despacho ? { ...despacho, valorPago: l.valor_pago } : null,
       melhorPreco: precos.length ? Math.min(...precos) : null,

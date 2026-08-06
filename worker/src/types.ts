@@ -25,6 +25,14 @@ export interface Env {
   RESTAURANTE_LAT: string;
   RESTAURANTE_LNG: string;
   RESTAURANTE_TELEFONE: string;
+  /**
+   * Telefone que substitui o do cliente em TODO pedido de teste.
+   *
+   * O Uber manda SMS de acompanhamento para o número do destino. Sem esta
+   * troca, um teste nosso dispara mensagem para um cliente real que não faz
+   * ideia do que é — e o dono do Hub perde a chance de acompanhar o teste.
+   */
+  TELEFONE_TESTE: string;
 
   // Base URLs — produção
   UBER_BASE_URL: string;
@@ -122,7 +130,22 @@ export interface Pedido {
   cliente: Cliente;
   endereco: Endereco;
   itens: ItemPedido[];
+  /** O que o cliente pagou no total — JÁ INCLUI o frete. */
   total: number;
+  /**
+   * Frete que o CLIENTE pagou, definido pela tabela de raio do Cardápio Web.
+   *
+   * É a receita da entrega, e não muda conforme o parceiro escolhido. O preço
+   * do Uber (ou do motoboy) é o CUSTO. A diferença entre os dois é o que a
+   * loja ganha ou perde na entrega — é essa conta que o painel mostra.
+   */
+  freteCobrado: number;
+  /** Total dos produtos, sem o frete. `total - freteCobrado`. */
+  subtotal: number;
+  /** Já foi pago? Pedido não pago não é cotado. */
+  pago: boolean;
+  /** Como foi pago, em português, para a tela ("Pix", "Cartão de crédito"). */
+  formaPagamento?: string;
   observacao?: string;
   status: StatusPedido;
   /**
@@ -154,6 +177,12 @@ export interface ResultadoDespacho {
   deliveryId: string;
   trackingUrl: string | null;
   status: string;
+  /**
+   * PIN que o cliente informa ao entregador na porta. Sem ele o entregador não
+   * fecha a entrega, o que impede pedido entregue à pessoa errada.
+   * Null quando o parceiro não oferece (é o caso do motoboy próprio).
+   */
+  codigoEntrega?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -256,6 +285,9 @@ export interface PedidoResumo {
   bairro: string;
   cidade: string;
   total: number;
+  /** Frete cobrado do cliente — a receita da entrega. */
+  freteCobrado: number;
+  pago: boolean;
   itens: number;
   /** Preenchido quando já foi despachado. */
   despacho: (ResultadoDespacho & { valorPago: number | null }) | null;
@@ -287,7 +319,12 @@ export interface ItemHistorico {
   idPedido: string;
   dataCriacao: string;
   plataforma: ProviderId;
+  /** CUSTO: o que a loja pagou ao parceiro. */
   valorPago: number;
+  /** RECEITA: o que o cliente pagou de frete. */
+  freteCobrado: number;
+  /** `freteCobrado - valorPago`. Negativo = a loja bancou a diferença. */
+  margem: number;
   etaMinutos: number | null;
   status: string;
   clienteNome: string | null;
@@ -305,19 +342,35 @@ export interface RespostaHistorico {
   itens: ItemHistorico[];
   /** Totais do FILTRO INTEIRO, não só da página devolvida. */
   total: number;
+  /** Custo com os parceiros. */
   somaFrete: number;
+  /** Frete cobrado dos clientes. */
+  somaFreteCobrado: number;
+  /** Resultado das entregas: cobrado − custo. */
+  somaMargem: number;
   somaPedidos: number;
 }
 
 // ---------------------------------------------------------------------------
 // Relatórios
 // ---------------------------------------------------------------------------
+// O relatório é sobre O RESULTADO DA ENTREGA, não sobre gasto.
+//
+// O frete que o cliente paga vem da tabela de raio do Cardápio Web e não muda
+// conforme o parceiro escolhido. Escolher Uber ou motoboy próprio não altera o
+// que o cliente pagou — altera só quanto sobra para a loja. Por isso todo
+// número aqui vem em trio: cobrado (receita), custo, e a diferença.
 export interface Estatisticas {
   periodo: { de: string; ate: string; fuso: string };
   mes: {
     gastoTotal: number;
+    freteCobrado: number;
+    /** `freteCobrado - gastoTotal`. Negativo = a loja bancou a diferença. */
+    margem: number;
     entregas: number;
     custoMedio: number;
+    /** Margem média por entrega. */
+    margemMedia: number;
     etaMedio: number | null;
   };
   porPlataforma: Array<{
@@ -325,9 +378,24 @@ export interface Estatisticas {
     nome: string;
     entregas: number;
     gastoTotal: number;
+    freteCobrado: number;
+    margem: number;
     custoMedio: number;
+    margemMedia: number;
     etaMedio: number | null;
   }>;
-  serieDiaria: Array<{ dia: string; entregas: number; gasto: number }>;
-  total: { gastoTotal: number; entregas: number; custoMedio: number };
+  serieDiaria: Array<{
+    dia: string;
+    entregas: number;
+    gasto: number;
+    cobrado: number;
+    margem: number;
+  }>;
+  total: {
+    gastoTotal: number;
+    freteCobrado: number;
+    margem: number;
+    entregas: number;
+    custoMedio: number;
+  };
 }

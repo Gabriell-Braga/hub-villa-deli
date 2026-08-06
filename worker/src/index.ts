@@ -52,6 +52,8 @@ import {
 } from "./lib/tokens-senha";
 import { gerarHash } from "./lib/senha";
 import { garantirCoordenadas } from "./lib/geocode";
+import { distanciaKm } from "./lib/geo";
+import { faixaPara } from "./config/faixas-motoboy";
 import { provedoresAtivos, provedorAtivo, nomeProvedor } from "./config/provedores";
 import { tokenDoRequest, validarToken } from "./lib/auth";
 import { conferirSenha } from "./lib/senha";
@@ -449,29 +451,54 @@ app.post("/api/webhook/cardapio-web", async (c) => {
 // `order_id` que a gente vai buscar na API deles). Não dá mais para injetar um
 // pedido inteiro por lá, e nem deveria: aquela porta é da integração.
 //
-// Todo pedido criado aqui nasce com `teste: true` e o painel mostra isso na
-// tela. Nenhum deles deve ser confundido com venda da loja.
+// Todo pedido criado aqui nasce com `teste: true`, com o TELEFONE DE TESTE no
+// lugar do informado, e já pago. O painel mostra o selo de teste na tela.
 // ---------------------------------------------------------------------------
 app.post("/api/pedidos/simular", async (c) => {
   const env = c.env;
   const body = await c.req.json<Partial<Pedido>>().catch(() => null);
 
-  if (!body?.cliente?.nome || !body?.cliente?.telefone || !body?.endereco?.cep) {
-    return c.json(
-      { erro: "Informe nome e telefone do cliente e o CEP de entrega." },
-      400
-    );
+  if (!body?.cliente?.nome || !body?.endereco?.cep) {
+    return c.json({ erro: "Informe o nome do cliente e o CEP de entrega." }, 400);
   }
 
   const endereco = await garantirCoordenadas(env, body.endereco);
 
+  // O frete de um pedido simulado sai da MESMA tabela de raio do Cardápio Web
+  // que o cliente pagaria de verdade. Inventar um número aqui faria a margem
+  // na tela ser ficção, que é justamente o que se está testando.
+  const km =
+    endereco.lat != null && endereco.lng != null
+      ? distanciaKm(
+          parseFloat(env.RESTAURANTE_LAT),
+          parseFloat(env.RESTAURANTE_LNG),
+          endereco.lat,
+          endereco.lng
+        )
+      : null;
+  const freteCobrado =
+    body.freteCobrado ?? (km == null ? 0 : faixaPara(km)?.preco ?? 0);
+
+  const subtotal =
+    body.subtotal ??
+    (body.itens ?? []).reduce((s, i) => s + (i.preco ?? 0), 0);
+
   const pedido: Pedido = {
     id: body.id || `TESTE-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
     criadoEm: new Date().toISOString(),
-    cliente: body.cliente,
+    cliente: {
+      nome: body.cliente.nome,
+      // NUNCA o telefone informado. O Uber manda SMS para o número do destino,
+      // e teste nosso não pode virar mensagem no celular de outra pessoa.
+      telefone: env.TELEFONE_TESTE || env.RESTAURANTE_TELEFONE,
+    },
     endereco,
     itens: body.itens ?? [],
-    total: body.total ?? 0,
+    total: Math.round((subtotal + freteCobrado) * 100) / 100,
+    freteCobrado,
+    subtotal: Math.round(subtotal * 100) / 100,
+    pago: true,
+    formaPagamento: "Pix",
     observacao: body.observacao,
     status: "recebido",
     teste: true,
@@ -480,7 +507,13 @@ app.post("/api/pedidos/simular", async (c) => {
   const novo = await salvarPedidoNovo(env, pedido);
   if (!novo) return c.json({ erro: "Já existe um pedido com este número." }, 409);
 
-  return c.json({ ok: true, idPedido: pedido.id });
+  return c.json({
+    ok: true,
+    idPedido: pedido.id,
+    telefone: pedido.cliente.telefone,
+    freteCobrado,
+    distanciaKm: km == null ? null : Math.round(km * 100) / 100,
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -646,6 +679,41 @@ app.get("/api/cotacao/:idPedido", async (c) => {
   const pedido = await obterPedido(env, idPedido);
   if (!pedido) return c.json({ erro: "pedido não encontrado" }, 404);
 
+  // SÓ COTAMOS PEDIDO PAGO.
+  //
+  // Cotar já custa: o Uber cria uma cotação real e o atendente vê um botão
+  // pronto para clicar. Se o pagamento cair depois, o pedido volta a aparecer
+  // pelo webhook de status e a cotação acontece normalmente.
+  //
+  // `pago !== false` porque pedido antigo, de antes deste campo existir, não
+  // tem a informação — e travar a fila que já estava lá seria pior.
+  //
+  // O pedido vai junto na resposta de recusa: sem ele a tela ficaria vazia, e
+  // o atendente não conseguiria nem conferir de qual pedido se trata.
+  const recusa = { idPedido, pedido, cotacoes: [], maisBarato: null, despacho: null, entrega: null };
+
+  if (pedido.pago === false) {
+    return c.json(
+      {
+        ...recusa,
+        erro: "Pagamento ainda não confirmado no Cardápio Web.",
+        bloqueio: "pagamento" as const,
+      },
+      409
+    );
+  }
+
+  if (cancelado(pedido.statusCardapio)) {
+    return c.json(
+      {
+        ...recusa,
+        erro: "Este pedido foi cancelado no Cardápio Web.",
+        bloqueio: "cancelado" as const,
+      },
+      409
+    );
+  }
+
   const ativos = provedoresAtivos(env);
   if (ativos.length === 0) {
     return c.json(
@@ -729,6 +797,15 @@ app.post("/api/despachar", async (c) => {
   // ainda está na tela do atendente vira uma corrida cobrada por nada.
   if (cancelado(pedido.statusCardapio)) {
     return c.json({ erro: "Este pedido foi cancelado no Cardápio Web." }, 409);
+  }
+
+  // Trava 1c — não pago. Repetida aqui de propósito: a cotação pode ter sido
+  // feita antes de alguém cancelar o pagamento, e é o despacho que gasta.
+  if (pedido.pago === false) {
+    return c.json(
+      { erro: "Pagamento ainda não confirmado no Cardápio Web." },
+      409
+    );
   }
 
   // Trava 2 — já despachado? Devolve o resultado antigo em vez de cobrar outra

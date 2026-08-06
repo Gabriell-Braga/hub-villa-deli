@@ -24,6 +24,8 @@ export interface Despacho {
   deliveryId: string;
   trackingUrl: string | null;
   status: string;
+  /** PIN que o cliente informa ao entregador na porta. Só o Uber tem. */
+  codigoEntrega?: string | null;
 }
 
 export interface PedidoDetalhe {
@@ -41,7 +43,14 @@ export interface PedidoDetalhe {
     cep: string;
   };
   itens: Array<{ nome: string; quantidade: number; preco: number }>;
+  /** O que o cliente pagou no total — JÁ INCLUI o frete. */
   total: number;
+  /** Frete que o CLIENTE pagou (tabela de raio do Cardápio Web). Receita. */
+  freteCobrado: number;
+  /** Produtos, sem o frete. */
+  subtotal: number;
+  pago: boolean;
+  formaPagamento?: string;
   observacao?: string;
   /** Status do pedido lá no Cardápio Web — o `status` acima é o do despacho. */
   statusCardapio?: string | null;
@@ -106,6 +115,8 @@ export interface PedidoResumo {
   cidade: string;
   total: number;
   itens: number;
+  freteCobrado: number;
+  pago: boolean;
   despacho: (Despacho & { valorPago: number | null }) | null;
   melhorPreco: number | null;
   /** true = pedido simulado. Não é uma venda da loja. */
@@ -116,8 +127,11 @@ export interface Estatisticas {
   periodo: { de: string; ate: string; fuso: string };
   mes: {
     gastoTotal: number;
+    freteCobrado: number;
+    margem: number;
     entregas: number;
     custoMedio: number;
+    margemMedia: number;
     etaMedio: number | null;
   };
   porPlataforma: Array<{
@@ -125,11 +139,26 @@ export interface Estatisticas {
     nome: string;
     entregas: number;
     gastoTotal: number;
+    freteCobrado: number;
+    margem: number;
     custoMedio: number;
+    margemMedia: number;
     etaMedio: number | null;
   }>;
-  serieDiaria: Array<{ dia: string; entregas: number; gasto: number }>;
-  total: { gastoTotal: number; entregas: number; custoMedio: number };
+  serieDiaria: Array<{
+    dia: string;
+    entregas: number;
+    gasto: number;
+    cobrado: number;
+    margem: number;
+  }>;
+  total: {
+    gastoTotal: number;
+    freteCobrado: number;
+    margem: number;
+    entregas: number;
+    custoMedio: number;
+  };
 }
 
 export const ROTULO_PROVEDOR: Record<ProviderId, string> = {

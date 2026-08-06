@@ -91,6 +91,7 @@ interface Linha {
   data_criacao: string;
   plataforma_escolhida: string;
   valor_pago: number;
+  frete_cobrado: number;
   eta_minutos: number | null;
   status: string;
   status_ao_vivo: string | null;
@@ -109,6 +110,9 @@ const paraItem = (l: Linha): ItemHistorico => ({
   dataCriacao: l.data_criacao,
   plataforma: l.plataforma_escolhida as ProviderId,
   valorPago: l.valor_pago,
+  freteCobrado: l.frete_cobrado ?? 0,
+  // Arredondado: subtração de float dá 1.9899999999999998 na tela.
+  margem: Math.round(((l.frete_cobrado ?? 0) - l.valor_pago) * 100) / 100,
   etaMinutos: l.eta_minutos,
   status: l.status_ao_vivo ?? l.status,
   clienteNome: l.cliente_nome,
@@ -121,7 +125,7 @@ const paraItem = (l: Linha): ItemHistorico => ({
   teste: l.teste === 1,
 });
 
-const COLUNAS = `id_pedido, data_criacao, plataforma_escolhida, valor_pago,
+const COLUNAS = `id_pedido, data_criacao, plataforma_escolhida, valor_pago, frete_cobrado,
   eta_minutos, status, status_ao_vivo, cliente_nome, bairro, valor_pedido,
   despachado_por, courier_nome, tracking_url, live_mode, teste`;
 
@@ -144,8 +148,9 @@ export async function listarHistorico(
     // filtrado, não só a página que está na tela.
     env.DB.prepare(
       `SELECT COUNT(*) AS n,
-              COALESCE(SUM(valor_pago), 0)   AS frete,
-              COALESCE(SUM(valor_pedido), 0) AS pedidos
+              COALESCE(SUM(valor_pago), 0)    AS frete,
+              COALESCE(SUM(frete_cobrado), 0) AS cobrado,
+              COALESCE(SUM(valor_pedido), 0)  AS pedidos
          FROM deliveries ${where}`
     ).bind(...valores),
   ]);
@@ -153,14 +158,19 @@ export async function listarHistorico(
   const t = (totais.results as unknown as {
     n: number;
     frete: number;
+    cobrado: number;
     pedidos: number;
   }[])[0];
+
+  const centavos = (v: number) => Math.round((v ?? 0) * 100) / 100;
 
   return {
     itens: (pagina.results as unknown as Linha[]).map(paraItem),
     total: t?.n ?? 0,
-    somaFrete: Math.round((t?.frete ?? 0) * 100) / 100,
-    somaPedidos: Math.round((t?.pedidos ?? 0) * 100) / 100,
+    somaFrete: centavos(t?.frete ?? 0),
+    somaFreteCobrado: centavos(t?.cobrado ?? 0),
+    somaMargem: centavos((t?.cobrado ?? 0) - (t?.frete ?? 0)),
+    somaPedidos: centavos(t?.pedidos ?? 0),
   };
 }
 
@@ -213,6 +223,10 @@ export async function historicoCsv(env: Env, f: FiltroHistorico): Promise<string
   // primeiras linhas é pior que não exportar: parece completo e não é.
   const r = await listarHistorico(env, { ...f, limite: 500, offset: 0 });
 
+  // As três colunas de dinheiro ficam lado a lado e nessa ordem de propósito:
+  // é a conta lida da esquerda para a direita. "Frete pago pelo cliente" menos
+  // "Custo da entrega" dá "Resultado" — a coluna que o dono do restaurante
+  // abre a planilha para ver.
   const cab = [
     "Pedido",
     "Data",
@@ -221,7 +235,10 @@ export async function historicoCsv(env: Env, f: FiltroHistorico): Promise<string
     "Status",
     "Cliente",
     "Bairro",
-    "Frete (R$)",
+    "Frete pago pelo cliente (R$)",
+    "Custo da entrega (R$)",
+    "Resultado (R$)",
+    "Produtos (R$)",
     "Total do pedido (R$)",
     "ETA (min)",
     "Entregador",
@@ -238,7 +255,16 @@ export async function historicoCsv(env: Env, f: FiltroHistorico): Promise<string
       celula(ROTULO_STATUS[i.status] ?? i.status),
       celula(i.clienteNome),
       celula(i.bairro),
+      celula(dinheiro(i.freteCobrado)),
       celula(dinheiro(i.valorPago)),
+      celula(dinheiro(i.margem)),
+      // O total do pedido já inclui o frete; separar os produtos evita somar
+      // frete duas vezes quando alguém fizer conta com a coluna ao lado.
+      celula(
+        i.valorPedido === null
+          ? ""
+          : dinheiro(Math.round((i.valorPedido - i.freteCobrado) * 100) / 100)
+      ),
       celula(dinheiro(i.valorPedido)),
       celula(i.etaMinutos),
       celula(i.courierNome),
@@ -251,20 +277,18 @@ export async function historicoCsv(env: Env, f: FiltroHistorico): Promise<string
   );
 
   // Linha de total no fim — é o número que o dono do restaurante procura.
+  const vazias = (n: number) => Array(n).fill("");
   const total = [
     celula(`TOTAL (${r.total} entregas)`),
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
+    ...vazias(6),
+    celula(dinheiro(r.somaFreteCobrado)),
     celula(dinheiro(r.somaFrete)),
+    celula(dinheiro(r.somaMargem)),
+    celula(
+      dinheiro(Math.round((r.somaPedidos - r.somaFreteCobrado) * 100) / 100)
+    ),
     celula(dinheiro(r.somaPedidos)),
-    "",
-    "",
-    "",
-    "",
+    ...vazias(4),
   ].join(SEP);
 
   return "﻿" + [cab.join(SEP), ...linhas, total].join("\r\n") + "\r\n";

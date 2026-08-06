@@ -12,7 +12,7 @@ import LogoProvedor from "@/components/LogoProvedor";
 import CardEntrega from "@/components/CardEntrega";
 import SeloTeste from "@/components/SeloTeste";
 import { useToast } from "@/components/Toast";
-import { brlOuGratis, dataHora } from "@/lib/formato";
+import { brl, brlOuGratis, dataHora } from "@/lib/formato";
 import {
   Skeleton,
   SkeletonCartoesCotacao,
@@ -28,6 +28,36 @@ const ORIGENS = {
   historico: { href: "/historico", rotulo: "Voltar para o histórico" },
   abertos: { href: "/pedidos", rotulo: "Voltar para a fila" },
 } as const;
+
+/**
+ * Quanto a loja ganha ou perde nesta entrega.
+ *
+ * O frete que o cliente pagou é definido pela tabela de raio do cardápio e já
+ * foi cobrado — escolher Uber ou motoboy não muda um centavo para o cliente.
+ * Muda só o custo. Por isso o número que decide a escolha não é o preço do
+ * card, é a diferença; e é ele que fica colorido.
+ */
+function Resultado({ cobrado, custo }: { cobrado: number; custo: number }) {
+  const saldo = Math.round((cobrado - custo) * 100) / 100;
+  const positivo = saldo >= 0;
+
+  return (
+    <div
+      className={`mt-3 rounded-lg px-3 py-2 text-xs ${
+        positivo ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-800"
+      }`}
+    >
+      <span className="font-semibold">
+        {positivo ? "Sobra " : "A loja banca "}
+        {brl(Math.abs(saldo))}
+      </span>
+      <span className="opacity-75">
+        {" "}
+        · cliente pagou {brlOuGratis(cobrado)} de frete
+      </span>
+    </div>
+  );
+}
 
 export default function PaginaCotacao({
   params,
@@ -51,6 +81,9 @@ export default function PaginaCotacao({
   const [despacho, setDespacho] = useState<Despacho | null>(null);
   const [entrega, setEntrega] = useState<EntregaAoVivo | null>(null);
   const [concluindo, setConcluindo] = useState(false);
+  // Motivo pelo qual o servidor se recusou a cotar. Estado do pedido, não erro
+  // de sistema — por isso não vai para o toast nem para o alerta vermelho.
+  const [bloqueio, setBloqueio] = useState<"pagamento" | "cancelado" | null>(null);
 
   const cotar = useCallback(async () => {
     setCarregando(true);
@@ -60,11 +93,21 @@ export default function PaginaCotacao({
       const json = await res.json();
 
       if (!res.ok) {
+        // Recusa por regra de negócio (não pago, cancelado) vem COM o pedido:
+        // dá para manter o resumo na tela em vez de deixar o atendente diante
+        // de uma página em branco com uma frase.
+        if (json.bloqueio) {
+          setDados(json);
+          setBloqueio(json.bloqueio);
+          setErroCarregar(null);
+          return;
+        }
         setDados(null);
         setErroCarregar(json.erro ?? `Erro ${res.status} ao cotar.`);
         return;
       }
 
+      setBloqueio(null);
       setDados(json);
       if (json.despacho) setDespacho(json.despacho);
       setEntrega(json.entrega ?? null);
@@ -154,10 +197,10 @@ export default function PaginaCotacao({
   }, [despacho, entrega?.status, cotar]);
 
   const pedido = dados?.pedido;
-  // Cancelado no Cardápio Web também trava a tela: o servidor recusa o
-  // despacho, e deixar o botão ativo só produziria um erro depois do clique.
-  const cancelado = /cancel/i.test(pedido?.statusCardapio ?? "");
-  const travado = despacho !== null || cancelado;
+  // Cancelado ou não pago também travam a tela: o servidor recusa o despacho,
+  // e deixar o botão ativo só produziria um erro depois do clique.
+  const cancelado = bloqueio === "cancelado" || /cancel/i.test(pedido?.statusCardapio ?? "");
+  const travado = despacho !== null || bloqueio !== null || cancelado;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -202,9 +245,9 @@ export default function PaginaCotacao({
         </div>
       )}
 
-      {/* Cancelado no Cardápio Web: fica na tela, não é toast. É um estado do
-          pedido, e o atendente pode chegar aqui muito depois do aviso sumir.
-          O botão de despachar já é recusado pelo servidor de qualquer forma. */}
+      {/* Estado do pedido, não erro de sistema: fica na tela, não é toast. O
+          atendente pode chegar aqui muito depois de um aviso ter sumido, e o
+          que ele precisa saber é POR QUE não dá para despachar. */}
       {cancelado && (
         <div
           role="alert"
@@ -212,6 +255,17 @@ export default function PaginaCotacao({
         >
           <strong className="font-semibold">Pedido cancelado.</strong> A loja
           cancelou este pedido no Cardápio Web — não acione entregador para ele.
+        </div>
+      )}
+
+      {bloqueio === "pagamento" && (
+        <div
+          role="status"
+          className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          <strong className="font-semibold">Aguardando pagamento.</strong> Só
+          cotamos depois que o Cardápio Web confirma o pagamento. Assim que ele
+          confirmar, o pedido volta sozinho para a fila — ou clique em Recotar.
         </div>
       )}
 
@@ -266,9 +320,14 @@ export default function PaginaCotacao({
                     {c.disponivel ? (
                       <>
                         <div className="mt-4 flex items-end justify-between">
-                          <span className="text-2xl font-semibold tracking-tight text-gray-900">
-                            {brlOuGratis(c.preco)}
-                          </span>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-gray-400">
+                              Custo da entrega
+                            </p>
+                            <span className="text-2xl font-semibold tracking-tight text-gray-900">
+                              {brlOuGratis(c.preco)}
+                            </span>
+                          </div>
                           <span className="text-sm text-gray-500">
                             {c.etaMinutos ? `~${c.etaMinutos} min` : "ETA n/d"}
                           </span>
@@ -277,6 +336,14 @@ export default function PaginaCotacao({
                         {c.detalhe && (
                           <p className="mt-1 text-xs text-gray-400">{c.detalhe}</p>
                         )}
+
+                        {/* O que muda de um card para o outro NÃO é o preço do
+                            pedido — é quanto sobra para a loja. É essa a
+                            comparação que o atendente precisa fazer. */}
+                        <Resultado
+                          cobrado={pedido?.freteCobrado ?? 0}
+                          custo={c.preco ?? 0}
+                        />
 
                         <div className="mt-auto pt-4">
                           <button
@@ -303,12 +370,14 @@ export default function PaginaCotacao({
             </div>
           )}
 
-          {!carregando && (dados?.cotacoes?.length ?? 0) === 0 && !erroCarregar && (
-            <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
-              Nenhuma cotação. Confira se o pedido chegou pelo webhook e se há
-              provedor ativo.
-            </div>
-          )}
+          {!carregando &&
+            (dados?.cotacoes?.length ?? 0) === 0 &&
+            !erroCarregar &&
+            !bloqueio && (
+              <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
+                Nenhuma cotação disponível para este endereço no momento.
+              </div>
+            )}
         </section>
 
         {/* Resumo do pedido */}
@@ -358,11 +427,41 @@ export default function PaginaCotacao({
                 </dd>
               </div>
 
-              <div className="border-t border-gray-100 pt-3">
-                <div className="flex justify-between font-medium text-gray-900">
-                  <span>Total do pedido</span>
-                  <span>{brlOuGratis(pedido.total)}</span>
+              {/* A soma tem que fechar na tela.
+                  Antes só aparecia "Total do pedido", que já inclui o frete —
+                  e como a lista de itens não inclui, os números não batiam e
+                  parecia erro. Agora as três linhas fecham a conta. */}
+              <div className="space-y-1.5 border-t border-gray-100 pt-3">
+                <div className="flex justify-between text-gray-600">
+                  <span>Produtos</span>
+                  <span>{brl(pedido.subtotal)}</span>
                 </div>
+                <div className="flex justify-between text-gray-600">
+                  <span>Frete pago pelo cliente</span>
+                  <span>{brlOuGratis(pedido.freteCobrado)}</span>
+                </div>
+                <div className="flex justify-between border-t border-gray-100 pt-1.5 font-medium text-gray-900">
+                  <span>Total do pedido</span>
+                  <span>{brl(pedido.total)}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <dt className="text-gray-500">Pagamento</dt>
+                <dd className="flex items-center gap-2">
+                  {pedido.formaPagamento && (
+                    <span className="text-gray-900">{pedido.formaPagamento}</span>
+                  )}
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
+                      pedido.pago
+                        ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                        : "bg-amber-50 text-amber-800 ring-amber-300"
+                    }`}
+                  >
+                    {pedido.pago ? "Pago" : "Aguardando"}
+                  </span>
+                </dd>
               </div>
 
               {pedido.observacao && (

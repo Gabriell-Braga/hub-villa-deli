@@ -33,7 +33,7 @@ function CaixaTooltip({
   formatar,
 }: {
   active?: boolean;
-  payload?: Array<{ value: number; name: string }>;
+  payload?: Array<{ value: number; name: string; color?: string }>;
   label?: string;
   formatar: (v: number) => string;
 }) {
@@ -43,7 +43,22 @@ function CaixaTooltip({
     <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-md">
       <p className="text-xs font-medium text-gray-500">{label}</p>
       {payload.map((p) => (
-        <p key={p.name} className="text-sm font-semibold text-gray-900">
+        <p
+          key={p.name}
+          className="flex items-center gap-2 text-sm font-semibold text-gray-900"
+        >
+          {/* Com duas séries o nome precisa aparecer, senão são dois números
+              soltos e ninguém sabe qual é qual. */}
+          {payload.length > 1 && (
+            <>
+              <span
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{ backgroundColor: p.color }}
+                aria-hidden="true"
+              />
+              <span className="font-normal text-gray-500">{p.name}</span>
+            </>
+          )}
           {formatar(p.value)}
         </p>
       ))}
@@ -51,7 +66,17 @@ function CaixaTooltip({
   );
 }
 
-export function GastoPorDia({ dados }: { dados: Estatisticas["serieDiaria"] }) {
+const VERDE = "#059669";
+
+/**
+ * Receita e custo do frete, dia a dia.
+ *
+ * Duas séries em vez de uma: a linha de gasto sozinha dava a impressão de que
+ * entrega é só despesa. O frete cobrado do cliente é a outra metade da conta, e
+ * a distância entre as duas linhas é o resultado — dá para ver de longe se um
+ * dia foi de lucro ou de prejuízo.
+ */
+export function FretePorDia({ dados }: { dados: Estatisticas["serieDiaria"] }) {
   if (dados.length === 0) {
     return (
       <div className="flex h-64 items-center justify-center text-sm text-gray-400">
@@ -66,6 +91,10 @@ export function GastoPorDia({ dados }: { dados: Estatisticas["serieDiaria"] }) {
     <ResponsiveContainer width="100%" height={256}>
       <AreaChart data={serie} margin={{ top: 8, right: 8, bottom: 0, left: -12 }}>
         <defs>
+          <linearGradient id="gradCobrado" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={VERDE} stopOpacity={0.24} />
+            <stop offset="100%" stopColor={VERDE} stopOpacity={0} />
+          </linearGradient>
           <linearGradient id="gradGasto" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={MARCA.cores.primaria} stopOpacity={0.28} />
             <stop offset="100%" stopColor={MARCA.cores.primaria} stopOpacity={0} />
@@ -84,7 +113,16 @@ export function GastoPorDia({ dados }: { dados: Estatisticas["serieDiaria"] }) {
         <Tooltip content={<CaixaTooltip formatar={brl} />} />
         <Area
           type="monotone"
+          dataKey="cobrado"
+          name="Cobrado"
+          stroke={VERDE}
+          strokeWidth={2}
+          fill="url(#gradCobrado)"
+        />
+        <Area
+          type="monotone"
           dataKey="gasto"
+          name="Custo"
           stroke={MARCA.cores.primaria}
           strokeWidth={2}
           fill="url(#gradGasto)"

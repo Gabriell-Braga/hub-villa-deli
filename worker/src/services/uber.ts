@@ -201,6 +201,17 @@ export async function despacharUber(
           quantity: i.quantidade,
         })),
 
+        // CÓDIGO DE ENTREGA (PIN de 4 dígitos).
+        //
+        // O entregador só consegue fechar a entrega depois que o cliente
+        // informa este número na porta. É o que impede o pedido de ser
+        // deixado com a pessoa errada — e, quando o cliente reclama que não
+        // recebeu, é a prova de que recebeu.
+        //
+        // A Uber devolve o valor gerado em verification_requirements.pincode.
+        // Incompatível com "deixar na porta", que não usamos.
+        dropoff_verification: { pincode: { enabled: true } },
+
         // ENTREGADOR SIMULADO — só em modo teste.
         //
         // O "robocourier" da Uber NÃO é automático: sem este bloco a entrega
@@ -231,12 +242,25 @@ export async function despacharUber(
     id: string;
     tracking_url: string;
     status: string;
+    verification_requirements?: {
+      pincode?: { enabled?: boolean; value?: string };
+    };
   };
+
+  const pin = d.verification_requirements?.pincode;
+
+  if (!pin?.value) {
+    // Não é motivo para cancelar a entrega — ela já foi criada e cancelar aqui
+    // custaria dinheiro. Mas precisa aparecer no log: significa que a conta
+    // não tem o recurso liberado, e a entrega saiu sem a proteção.
+    console.warn(`[uber] entrega ${d.id} criada SEM código de verificação`);
+  }
 
   return {
     provider: "uber",
     deliveryId: d.id,
     trackingUrl: d.tracking_url,
     status: d.status,
+    codigoEntrega: pin?.value ?? null,
   };
 }

@@ -43,6 +43,7 @@ export function inicioDeNDiasAtras(dias: number, agora = new Date()): string {
 interface LinhaResumo {
   qtd: number;
   total: number | null;
+  cobrado: number | null;
   media: number | null;
   eta: number | null;
 }
@@ -55,6 +56,7 @@ interface LinhaDia {
   dia: string;
   qtd: number;
   total: number | null;
+  cobrado: number | null;
 }
 
 export async function calcularEstatisticas(
@@ -73,6 +75,7 @@ export async function calcularEstatisticas(
     env.DB.prepare(
       `SELECT COUNT(*)             AS qtd,
               SUM(valor_pago)      AS total,
+              SUM(frete_cobrado)   AS cobrado,
               AVG(valor_pago)      AS media,
               AVG(eta_minutos)     AS eta
          FROM deliveries
@@ -82,10 +85,11 @@ export async function calcularEstatisticas(
     // 2) Quebra por plataforma, no mês
     env.DB.prepare(
       `SELECT plataforma_escolhida,
-              COUNT(*)         AS qtd,
-              SUM(valor_pago)  AS total,
-              AVG(valor_pago)  AS media,
-              AVG(eta_minutos) AS eta
+              COUNT(*)           AS qtd,
+              SUM(valor_pago)    AS total,
+              SUM(frete_cobrado) AS cobrado,
+              AVG(valor_pago)    AS media,
+              AVG(eta_minutos)   AS eta
          FROM deliveries
         WHERE teste = 0 AND data_criacao >= ?1
         GROUP BY plataforma_escolhida
@@ -96,8 +100,9 @@ export async function calcularEstatisticas(
     //    de agrupar — sem isso, entregas da noite caem no dia seguinte.
     env.DB.prepare(
       `SELECT date(data_criacao, '-3 hours') AS dia,
-              COUNT(*)        AS qtd,
-              SUM(valor_pago) AS total
+              COUNT(*)           AS qtd,
+              SUM(valor_pago)    AS total,
+              SUM(frete_cobrado) AS cobrado
          FROM deliveries
         WHERE teste = 0 AND data_criacao >= ?1
         GROUP BY dia
@@ -106,10 +111,11 @@ export async function calcularEstatisticas(
 
     // 4) Acumulado de todos os tempos (rodapé do relatório)
     env.DB.prepare(
-      `SELECT COUNT(*)        AS qtd,
-              SUM(valor_pago) AS total,
-              AVG(valor_pago) AS media,
-              AVG(eta_minutos) AS eta
+      `SELECT COUNT(*)           AS qtd,
+              SUM(valor_pago)    AS total,
+              SUM(frete_cobrado) AS cobrado,
+              AVG(valor_pago)    AS media,
+              AVG(eta_minutos)   AS eta
          FROM deliveries
         WHERE teste = 0`
     ),
@@ -121,35 +127,59 @@ export async function calcularEstatisticas(
   const num = (v: number | null | undefined) =>
     v == null ? 0 : Math.round(v * 100) / 100;
 
+  /** Receita menos custo. Sempre calculado aqui, nunca somado no SQL. */
+  const margem = (cobrado: number | null | undefined, custo: number | null | undefined) =>
+    num((cobrado ?? 0) - (custo ?? 0));
+
+  const porEntrega = (v: number, qtd: number) => (qtd ? num(v / qtd) : 0);
+
+  const mesMargem = margem(r?.cobrado, r?.total);
+  const geralMargem = margem(g?.cobrado, g?.total);
+
   return {
     periodo: { de: desdeMes, ate: new Date().toISOString(), fuso: FUSO },
 
     mes: {
       gastoTotal: num(r?.total),
+      freteCobrado: num(r?.cobrado),
+      margem: mesMargem,
       entregas: r?.qtd ?? 0,
       custoMedio: num(r?.media),
+      margemMedia: porEntrega(mesMargem, r?.qtd ?? 0),
       etaMedio: r?.eta == null ? null : Math.round(r.eta),
     },
 
     porPlataforma: (porPlataforma.results as unknown as LinhaPlataforma[]).map(
-      (l) => ({
-        provider: l.plataforma_escolhida as ProviderId,
-        nome: nomeProvedor(l.plataforma_escolhida as ProviderId),
-        entregas: l.qtd,
-        gastoTotal: num(l.total),
-        custoMedio: num(l.media),
-        etaMedio: l.eta == null ? null : Math.round(l.eta),
-      })
+      (l) => {
+        const m = margem(l.cobrado, l.total);
+        return {
+          provider: l.plataforma_escolhida as ProviderId,
+          nome: nomeProvedor(l.plataforma_escolhida as ProviderId),
+          entregas: l.qtd,
+          gastoTotal: num(l.total),
+          freteCobrado: num(l.cobrado),
+          margem: m,
+          custoMedio: num(l.media),
+          // É esta coluna que responde "qual parceiro compensa mais". Comparar
+          // só o custo médio esconde que as faixas de frete são diferentes.
+          margemMedia: porEntrega(m, l.qtd),
+          etaMedio: l.eta == null ? null : Math.round(l.eta),
+        };
+      }
     ),
 
     serieDiaria: (serie.results as unknown as LinhaDia[]).map((l) => ({
       dia: l.dia,
       entregas: l.qtd,
       gasto: num(l.total),
+      cobrado: num(l.cobrado),
+      margem: margem(l.cobrado, l.total),
     })),
 
     total: {
       gastoTotal: num(g?.total),
+      freteCobrado: num(g?.cobrado),
+      margem: geralMargem,
       entregas: g?.qtd ?? 0,
       custoMedio: num(g?.media),
     },

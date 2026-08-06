@@ -186,6 +186,34 @@ export default function CardEntrega({
       <div className="p-5">
         {temTrilha && <Trilha status={status} />}
 
+        {/* CÓDIGO DE ENTREGA.
+            O entregador só fecha a entrega depois que o cliente diz este
+            número na porta — é o que impede o pedido de ser deixado com a
+            pessoa errada. O atendente precisa conseguir ditar isso por
+            telefone, então vem grande, espaçado e em fonte monoespaçada.
+            Some quando a entrega termina: aí já não protege nada e só
+            atrapalha quem está lendo o histórico. */}
+        {despacho.codigoEntrega && !entregue && !cancelado && (
+          <div
+            className={`${
+              temTrilha ? "mt-6" : ""
+            } flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3`}
+          >
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-indigo-500">
+                Código de entrega
+              </p>
+              <p className="font-mono text-2xl font-bold tracking-[0.35em] text-indigo-900">
+                {despacho.codigoEntrega}
+              </p>
+            </div>
+            <p className="max-w-xs text-xs text-indigo-800">
+              O cliente informa este número ao entregador. Sem ele a entrega não
+              é concluída.
+            </p>
+          </div>
+        )}
+
         {/* Entregador à esquerda, previsão à direita. */}
         <dl className={`grid gap-5 sm:grid-cols-2 ${temTrilha ? "mt-6" : ""}`}>
           {entrega?.courierNome && (

@@ -83,6 +83,54 @@ interface PedidoCW {
     /** Já inclui os adicionais escolhidos (options). É este que vale. */
     total_price?: number;
   }>;
+  payments?: Array<{
+    total?: number;
+    /** online = pago no app. Outro valor = pagamento na entrega. */
+    payment_type?: string;
+    /** pix_auto, online_credit_card, ifood, ifood_voucher, dinheiro… */
+    payment_method?: string;
+    /** paid = já caiu. É o que decide se o pedido pode ser cotado. */
+    status?: string;
+  }>;
+}
+
+/** Nomes de meio de pagamento em português, para a tela do atendente. */
+const FORMAS: Record<string, string> = {
+  pix_auto: "Pix",
+  pix: "Pix",
+  online_credit_card: "Cartão de crédito",
+  online_debit_card: "Cartão de débito",
+  credit_card: "Cartão de crédito",
+  debit_card: "Cartão de débito",
+  ifood: "iFood",
+  ifood_voucher: "Vale iFood",
+  dinheiro: "Dinheiro",
+  cash: "Dinheiro",
+};
+
+/**
+ * O pedido já foi pago?
+ *
+ * Exigimos que TODAS as linhas de pagamento estejam `paid` — pedido do iFood
+ * costuma vir em duas (vale + resto), e considerar pago com uma só deixaria
+ * passar pedido parcialmente quitado.
+ *
+ * Sem nenhuma linha de pagamento tratamos como NÃO pago. Falha fechada: o
+ * prejuízo de segurar um pedido pago por engano é uma ligação; o de despachar
+ * um pedido não pago é a comida e o frete.
+ */
+function estaPago(cw: PedidoCW): boolean {
+  const p = cw.payments ?? [];
+  return p.length > 0 && p.every((x) => x.status === "paid");
+}
+
+function descreverPagamento(cw: PedidoCW): string | undefined {
+  const metodos = (cw.payments ?? [])
+    .map((p) => FORMAS[p.payment_method ?? ""] ?? p.payment_method)
+    .filter(Boolean);
+
+  // Sem duplicar: iFood manda "ifood" duas vezes em alguns pedidos.
+  return [...new Set(metodos)].join(" + ") || undefined;
 }
 
 /**
@@ -167,11 +215,16 @@ export function normalizarTelefone(bruto?: string, ddi?: string): string {
  * que acontece de verdade nos pedidos vindos do iFood, onde o número é
  * mascarado pela plataforma. Sem nenhum telefone o Uber recusa a corrida; com
  * o da loja, o entregador ao menos consegue falar com alguém.
+ *
+ * `telefoneDeTeste`, quando o pedido é de teste, SUBSTITUI o do cliente. O
+ * Uber manda SMS de acompanhamento para o número do destino: sem esta troca,
+ * um teste nosso vira mensagem estranha no celular de um cliente real.
  */
 export function traduzirPedidoCW(
   cw: PedidoCW,
   teste: boolean,
-  telefoneDaLoja: string
+  telefoneDaLoja: string,
+  telefoneDeTeste?: string
 ): Pedido {
   const e = cw.delivery_address ?? {};
 
@@ -197,8 +250,15 @@ export function traduzirPedidoCW(
     preco: i.total_price ?? i.unit_price ?? 0,
   }));
 
-  const telefone =
+  const doCliente =
     normalizarTelefone(cw.customer?.phone, cw.customer?.ddi) || telefoneDaLoja;
+
+  // Em teste o número do dono do Hub tem prioridade sobre tudo: é ele quem
+  // precisa receber o SMS do Uber para acompanhar.
+  const telefone = teste && telefoneDeTeste ? telefoneDeTeste : doCliente;
+
+  const total = cw.total ?? 0;
+  const freteCobrado = cw.delivery_fee ?? 0;
 
   return {
     id: String(cw.display_id ?? cw.id),
@@ -209,9 +269,13 @@ export function traduzirPedidoCW(
     },
     endereco,
     itens,
-    // O total deles inclui a taxa de entrega — é o que o cliente pagou, e é
-    // esse número que a loja reconhece.
-    total: cw.total ?? 0,
+    // O total deles JÁ INCLUI a taxa de entrega — é o que o cliente pagou.
+    total,
+    freteCobrado,
+    // Arredondado porque subtração de float dá 38.989999999999995.
+    subtotal: Math.round((total - freteCobrado) * 100) / 100,
+    pago: estaPago(cw),
+    formaPagamento: descreverPagamento(cw),
     observacao: cw.observation ?? undefined,
     status: "recebido",
     statusCardapio: cw.status,
@@ -260,7 +324,12 @@ export async function processarEventoCardapio(
     const teste =
       (await modoAtual(env)) === "teste" || ambiente(env) !== "producao";
 
-    const pedido = traduzirPedidoCW(cw, teste, env.RESTAURANTE_TELEFONE ?? "");
+    const pedido = traduzirPedidoCW(
+      cw,
+      teste,
+      env.RESTAURANTE_TELEFONE ?? "",
+      env.TELEFONE_TESTE
+    );
     const jaExiste = await obterPedido(env, pedido.id);
 
     if (jaExiste) {

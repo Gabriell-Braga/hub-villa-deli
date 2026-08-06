@@ -6,7 +6,7 @@ import type { PedidoResumo, StatusPedido } from "@/lib/tipos";
 import { ROTULO_PROVEDOR } from "@/lib/tipos";
 import LogoProvedor from "./LogoProvedor";
 import SeloTeste from "./SeloTeste";
-import { brlOuGratis, dataHora, desde } from "@/lib/formato";
+import { brl, brlOuGratis, dataHora, desde } from "@/lib/formato";
 import { SkeletonListaPedidos } from "./Skeleton";
 
 // ---------------------------------------------------------------------------
@@ -46,29 +46,43 @@ function Selo({ status }: { status: StatusPedido }) {
   );
 }
 
-/** Valor à direita: frete pago (histórico) ou melhor cotação (aberto). */
+/**
+ * Coluna da direita.
+ *
+ * Sempre CUSTO da entrega — nunca o total do pedido. Misturar os dois era o
+ * que fazia parecer que o frete somava no preço dos produtos. O frete que o
+ * cliente pagou aparece embaixo, como referência, para a comparação ser
+ * possível sem abrir o pedido.
+ */
 function Valor({ p }: { p: PedidoResumo }) {
-  if (p.despacho) {
-    return (
-      <div>
-        <p className="font-semibold text-gray-900">
-          {brlOuGratis(p.despacho.valorPago)}
-        </p>
+  const custo = p.despacho ? p.despacho.valorPago : p.melhorPreco;
+  if (custo == null) return <span className="text-gray-400">—</span>;
+
+  const saldo = Math.round((p.freteCobrado - custo) * 100) / 100;
+
+  return (
+    <div>
+      <p className="font-semibold text-gray-900">{brlOuGratis(custo)}</p>
+
+      {p.despacho ? (
         <p className="flex items-center justify-end gap-1.5 text-xs text-gray-400">
           <LogoProvedor provider={p.despacho.provider} tamanho={14} />
           {ROTULO_PROVEDOR[p.despacho.provider]}
         </p>
-      </div>
-    );
-  }
+      ) : (
+        <p className="text-xs text-gray-400">melhor cotação</p>
+      )}
 
-  if (p.melhorPreco != null) {
-    return (
-      <p className="font-semibold text-gray-900">{brlOuGratis(p.melhorPreco)}</p>
-    );
-  }
-
-  return <span className="text-gray-400">—</span>;
+      <p
+        className={`text-xs font-medium ${
+          saldo >= 0 ? "text-emerald-700" : "text-red-700"
+        }`}
+      >
+        {saldo >= 0 ? "+" : "−"}
+        {brl(Math.abs(saldo))}
+      </p>
+    </div>
+  );
 }
 
 export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) {
@@ -161,6 +175,11 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 {p.teste && <SeloTeste />}
                 <Selo status={p.status} />
+                {!p.pago && (
+                  <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-300">
+                    Aguardando pagamento
+                  </span>
+                )}
                 {p.bairro && (
                   <span className="text-xs text-gray-500">{p.bairro}</span>
                 )}
@@ -186,7 +205,7 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
                 </th>
                 <th className="px-5 py-3 font-medium">Status</th>
                 <th className="px-5 py-3 text-right font-medium">
-                  {aba === "abertos" ? "Melhor cotação" : "Frete pago"}
+                  {aba === "abertos" ? "Melhor cotação" : "Custo da entrega"}
                 </th>
                 <th className="px-5 py-3" />
               </tr>
@@ -219,7 +238,14 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
                   </td>
 
                   <td className="px-5 py-3">
-                    <Selo status={p.status} />
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Selo status={p.status} />
+                      {!p.pago && (
+                        <span className="whitespace-nowrap rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-300">
+                          Aguardando pagamento
+                        </span>
+                      )}
+                    </div>
                   </td>
 
                   <td className="px-5 py-3 text-right">
