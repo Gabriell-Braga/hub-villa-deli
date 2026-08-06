@@ -214,24 +214,30 @@ export default function CardEntrega({
             Some quando a entrega termina: aí já não protege nada e só
             atrapalha quem está lendo o histórico. */}
         {despacho.codigoEntrega && !entregue && !cancelado && (
-          <div
-            className={`${
+          // inline-flex, não block: a caixa acompanha o conteúdo em vez de
+          // esticar até a borda do card. Cheia de espaço vazio ela parecia o
+          // assunto principal da tela, e o assunto é a entrega.
+          //
+          // O rótulo "Código" fica, sem a frase explicativa: quem opera o
+          // painel sabe para que serve depois da primeira entrega, e a frase
+          // ocupava mais espaço que o próprio número. O title cobre a dúvida
+          // de quem estiver vendo pela primeira vez.
+          <span
+            title="O cliente informa este número ao entregador na porta. Sem ele a entrega não é concluída."
+            className={`inline-flex items-baseline gap-2.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 ${
               temTrilha ? "mt-6" : ""
-            } flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3`}
+            }`}
           >
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-indigo-500">
-                Código de entrega
-              </p>
-              <p className="font-mono text-2xl font-bold tracking-[0.35em] text-indigo-900">
-                {despacho.codigoEntrega}
-              </p>
-            </div>
-            <p className="max-w-xs text-xs text-indigo-800">
-              O cliente informa este número ao entregador. Sem ele a entrega não
-              é concluída.
-            </p>
-          </div>
+            <span className="text-[11px] font-medium uppercase tracking-wide text-indigo-500">
+              Código
+            </span>
+            {/* Monoespaçada e com respiro entre os dígitos: é um número que o
+                atendente dita por telefone, e 5499 lido errado é uma entrega
+                que não fecha. */}
+            <span className="font-mono text-lg font-bold tracking-[0.2em] text-indigo-900">
+              {despacho.codigoEntrega}
+            </span>
+          </span>
         )}
 
         {/* Entregador à esquerda, previsão à direita. */}
