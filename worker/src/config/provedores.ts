@@ -44,12 +44,24 @@ export interface Provedor {
 }
 
 export const PROVEDORES: Record<ProviderId, Provedor> = {
+  // Dois cards de Uber, mesma conta e mesma credencial. A diferença é o
+  // tamanho declarado do pedido, que é o que faz o Uber mandar moto ou carro
+  // — e cobrar de acordo. Ver o comentário em services/uber.ts.
   uber: {
     id: "uber",
-    nome: "Uber Direct",
+    nome: "Uber Direct Moto",
     ativo: true,
-    cotar: cotarUber,
-    despachar: despacharUber,
+    cotar: (env, pedido, modo) => cotarUber(env, pedido, modo, "moto"),
+    despachar: (env, pedido, cotacao, modo) =>
+      despacharUber(env, pedido, cotacao, modo, "moto"),
+  },
+  uber_carro: {
+    id: "uber_carro",
+    nome: "Uber Direct Carro",
+    ativo: true,
+    cotar: (env, pedido, modo) => cotarUber(env, pedido, modo, "carro"),
+    despachar: (env, pedido, cotacao, modo) =>
+      despacharUber(env, pedido, cotacao, modo, "carro"),
   },
   ifood: {
     id: "ifood",

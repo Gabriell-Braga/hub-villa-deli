@@ -56,7 +56,7 @@ AMBIENTE = "dev"
 #   "uber,motoboy"            -> Uber + motoboy próprio   (configuração atual)
 #   "uber,ifood,99,motoboy"   -> todos
 # Vazio = usa o padrão de src/config/provedores.ts.
-PROVEDORES_ATIVOS = "uber,motoboy"
+PROVEDORES_ATIVOS = "uber,uber_carro,motoboy"
 
 # Origens liberadas no CORS (separadas por vírgula).
 PAINEL_ORIGIN = "http://localhost:3000"
@@ -140,7 +140,7 @@ crons = ["*/5 * * * *", "0 4 * * *"]
 
 [env.hml.vars]
 AMBIENTE = "hml"
-PROVEDORES_ATIVOS = "uber,motoboy"
+PROVEDORES_ATIVOS = "uber,uber_carro,motoboy"
 PAINEL_ORIGIN = "https://hub-cardapio-web.vercel.app"
 
 RESTAURANTE_NOME = "Villa Deli"
@@ -207,7 +207,7 @@ crons = ["*/5 * * * *", "0 4 * * *"]
 
 [env.producao.vars]
 AMBIENTE = "producao"
-PROVEDORES_ATIVOS = "uber,motoboy"
+PROVEDORES_ATIVOS = "uber,uber_carro,motoboy"
 PAINEL_ORIGIN = "https://painel.seudominio.com.br"
 
 RESTAURANTE_NOME = "Villa Deli"

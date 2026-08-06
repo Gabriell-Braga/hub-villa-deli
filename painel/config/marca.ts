@@ -12,13 +12,14 @@
 //
 //        NEXT_PUBLIC_MARCA_NOME="Villa Deli"
 //        NEXT_PUBLIC_MARCA_TAGLINE="Pizza & Burger"
-//        NEXT_PUBLIC_MARCA_LOGO="/marca/logo.png"
 //        NEXT_PUBLIC_MARCA_COR_PRIMARIA="#1C1C1C"
 //        NEXT_PUBLIC_MARCA_COR_PRIMARIA_HOVER="#000000"
 //        NEXT_PUBLIC_MARCA_COR_SUAVE="#F3F4F6"
 //        NEXT_PUBLIC_MARCA_COR_SUAVE_TEXTO="#111827"
 //
 //   2) Editando os PADRÕES abaixo (para forkar por cliente, se um dia precisar).
+//
+// O CAMINHO DAS IMAGENS NÃO É CONFIGURÁVEL, de propósito — ver ARQUIVOS abaixo.
 //
 // O logo é opcional: se o arquivo não existir, o painel desenha um monograma
 // com as iniciais nas cores da marca. Ver components/Logo.tsx.
@@ -52,16 +53,34 @@ function cor(chave: string, padrao: string): string {
   return valida ? comHash : padrao;
 }
 
+// ---------------------------------------------------------------------------
+// ARQUIVOS DA MARCA — caminho FIXO, não configurável.
+//
+// Já foi variável de ambiente e deu problema em produção: basta alguém salvar
+// "marca/logo.svg" sem a barra inicial que o navegador trata como caminho
+// RELATIVO. Em /pedidos/14279 ele vai buscar /pedidos/14279/marca/logo.svg,
+// dá 404, e o logo aparece quebrado em todas as telas menos a raiz — com a
+// configuração parecendo perfeitamente correta.
+//
+// Trocar o logo de um cliente é trocar o ARQUIVO, não a configuração. Basta
+// sobrescrever public/marca/logo.svg. Não há ganho nenhum em deixar o caminho
+// aberto, e há esta classe inteira de bug em jogo.
+// ---------------------------------------------------------------------------
+
+/** Logo do painel. Substitua o arquivo; não mexa no caminho. */
+export const CAMINHO_LOGO = "/marca/logo.svg";
+
+/**
+ * Ícone da aba do navegador. Separado do logo de propósito: o favicon precisa
+ * funcionar em fundo claro E escuro e ser legível a 16px, o que costuma pedir
+ * uma versão própria da arte.
+ */
+export const CAMINHO_FAVICON = "/marca/favicon.svg";
+
 export interface Marca {
   nome: string;
   tagline: string;
-  /** Caminho dentro de public/. Se o arquivo não existir, cai no monograma. */
   logo: string;
-  /**
-   * Ícone da aba do navegador. Separado do logo de propósito: o favicon precisa
-   * funcionar em fundo claro E escuro e ser legível a 16px, o que costuma pedir
-   * uma versão própria da arte.
-   */
   favicon: string;
   /** Iniciais do monograma de fallback. */
   monograma: string;
@@ -85,8 +104,8 @@ export interface Marca {
 export const MARCA: Marca = {
   nome: env("NEXT_PUBLIC_MARCA_NOME", "Villa Deli"),
   tagline: env("NEXT_PUBLIC_MARCA_TAGLINE", "Pizza & Burger"),
-  logo: env("NEXT_PUBLIC_MARCA_LOGO", "/marca/logo.png"),
-  favicon: env("NEXT_PUBLIC_MARCA_FAVICON", "/marca/favicon.svg"),
+  logo: CAMINHO_LOGO,
+  favicon: CAMINHO_FAVICON,
   monograma: env("NEXT_PUBLIC_MARCA_MONOGRAMA", ""),
   cores: {
     primaria: cor("NEXT_PUBLIC_MARCA_COR_PRIMARIA", "#1C1C1C"),

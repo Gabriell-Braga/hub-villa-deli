@@ -35,7 +35,13 @@ function fimDoDia(data: string): string {
 
 const ehData = (v?: string) => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
 
-const PLATAFORMAS: ProviderId[] = ["uber", "ifood", "99", "motoboy"];
+const PLATAFORMAS: ProviderId[] = [
+  "uber",
+  "uber_carro",
+  "ifood",
+  "99",
+  "motoboy",
+];
 
 /**
  * Monta o WHERE e os valores. Tudo por bind — nunca concatenando entrada do

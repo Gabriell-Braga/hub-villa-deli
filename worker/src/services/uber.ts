@@ -102,6 +102,44 @@ export function traduzirErroUber(status: number, corpo: string): string {
   }
 }
 
+// ---------------------------------------------------------------------------
+// MOTO × CARRO
+//
+// O Uber Direct NÃO tem um campo "quero moto" ou "quero carro" na API. O que
+// existe é o TAMANHO do pedido em manifest_items.size, e a regra publicada
+// deles: item `xlarge` exige carro ou van. Os demais tamanhos vão de moto na
+// prática, que é o veículo padrão para entrega de comida.
+//
+// Então "Uber Direct Carro" não é outro produto: é o mesmo pedido declarado
+// como volumoso. Quem escolhe é o atendente, olhando para o pedido — 20 potes
+// de açaí não sobem numa garupa.
+// ---------------------------------------------------------------------------
+export type VeiculoUber = "moto" | "carro";
+
+const TAMANHO_POR_VEICULO: Record<VeiculoUber, string> = {
+  // "You need a handbag to carry it" — a sacola de delivery comum.
+  moto: "medium",
+  // "You will need to make multiple trips to/from the vehicle" — é este valor
+  // que faz o Uber mandar carro ou van, segundo a documentação deles.
+  carro: "xlarge",
+};
+
+function manifesto(pedido: Pedido, veiculo: VeiculoUber) {
+  const size = TAMANHO_POR_VEICULO[veiculo];
+
+  // Pedido sem itens detalhados ainda precisa de manifesto: é ele que carrega
+  // o tamanho. Uma linha genérica resolve sem mentir sobre o conteúdo.
+  if (pedido.itens.length === 0) {
+    return [{ name: "Pedido", quantity: 1, size }];
+  }
+
+  return pedido.itens.map((i) => ({
+    name: i.nome,
+    quantity: i.quantidade,
+    size,
+  }));
+}
+
 function pickupPayload(env: Env) {
   return {
     pickup_address: env.RESTAURANTE_CEP, // em prod, use o endereço estruturado completo
@@ -115,12 +153,13 @@ function pickupPayload(env: Env) {
 export async function cotarUber(
   env: Env,
   pedido: Pedido,
-  modo: ModoOperacao
+  modo: ModoOperacao,
+  veiculo: VeiculoUber = "moto"
 ): Promise<Cotacao> {
   const cred = credenciaisUber(env, modo);
   const base: Cotacao = {
-    provider: "uber",
-    nome: "Uber Direct",
+    provider: veiculo === "carro" ? "uber_carro" : "uber",
+    nome: veiculo === "carro" ? "Uber Direct Carro" : "Uber Direct Moto",
     disponivel: false,
     preco: null,
     moeda: "BRL",
@@ -143,6 +182,10 @@ export async function cotarUber(
         dropoff_address: enderecoFormatado(pedido.endereco),
         dropoff_latitude: pedido.endereco.lat,
         dropoff_longitude: pedido.endereco.lng,
+        // O tamanho vai já na COTAÇÃO, não só no despacho: é ele que faz o
+        // Uber precificar carro em vez de moto. Sem isto os dois cards
+        // voltariam com o mesmo preço e a escolha seria decorativa.
+        manifest_items: manifesto(pedido, veiculo),
       }),
     }
   );
@@ -169,6 +212,10 @@ export async function cotarUber(
     etaMinutos: q.duration ?? null,
     quoteId: q.id,
     expiraEm: q.expires ?? null,
+    detalhe:
+      veiculo === "carro"
+        ? "Pedido declarado como volumoso — exige carro ou van"
+        : undefined,
   };
 }
 
@@ -176,7 +223,8 @@ export async function despacharUber(
   env: Env,
   pedido: Pedido,
   cotacao: Cotacao,
-  modo: ModoOperacao
+  modo: ModoOperacao,
+  veiculo: VeiculoUber = "moto"
 ): Promise<ResultadoDespacho> {
   const cred = credenciaisUber(env, modo);
   const token = await getUberToken(env, modo);
@@ -196,10 +244,9 @@ export async function despacharUber(
         dropoff_phone_number: pedido.cliente.telefone,
         dropoff_latitude: pedido.endereco.lat,
         dropoff_longitude: pedido.endereco.lng,
-        manifest_items: pedido.itens.map((i) => ({
-          name: i.nome,
-          quantity: i.quantidade,
-        })),
+        // MESMO tamanho da cotação. Divergir aqui faria o Uber cobrar por um
+        // veículo e mandar outro — e o preço aceito na tela não seria o real.
+        manifest_items: manifesto(pedido, veiculo),
 
         // CÓDIGO DE ENTREGA (PIN de 4 dígitos).
         //
@@ -257,7 +304,7 @@ export async function despacharUber(
   }
 
   return {
-    provider: "uber",
+    provider: veiculo === "carro" ? "uber_carro" : "uber",
     deliveryId: d.id,
     trackingUrl: d.tracking_url,
     status: d.status,

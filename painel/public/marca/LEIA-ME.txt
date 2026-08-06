@@ -1,36 +1,47 @@
 LOGO DO RESTAURANTE
 ===================
 
-ARTE OFICIAL
-------------
-Salve o logo do cliente NESTA PASTA como logo.png e troque, no
-painel/.env.local:
+COMO TROCAR
+-----------
+Sobrescreva os DOIS arquivos desta pasta, mantendo exatamente estes nomes:
 
-    NEXT_PUBLIC_MARCA_LOGO=/marca/logo.png
+    logo.svg      logo do painel
+    favicon.svg   icone da aba do navegador
 
-Ja existe um logo.svg nesta pasta: e uma APROXIMACAO do logo do Villa Deli,
-feita a mao para o painel nao ficar sem marca. A tipografia original e
-customizada e nao bate 100%. Substitua assim que tiver o arquivo oficial.
+So isso. Nao ha configuracao para mexer, e nao ha variavel de ambiente para
+o caminho das imagens.
 
-Recomendações:
-  - PNG ou SVG com fundo transparente (ou o próprio fundo da marca)
-  - Quadrado, no mínimo 256x256 px
-  - O painel recorta em círculo, então logos circulares ficam perfeitos
+Isso e proposital. O caminho ja foi configuravel e derrubou o logo em
+producao: alguem salvou "marca/logo.svg" sem a barra inicial, o navegador
+tratou como caminho RELATIVO, e o logo quebrou em todas as telas menos a
+raiz — com a configuracao parecendo perfeita. Trocar o logo de um cliente e
+trocar o ARQUIVO, nao a configuracao.
 
-Se o arquivo NÃO existir, o painel desenha automaticamente um monograma com
-as iniciais do nome, nas cores da marca. Nada quebra.
+Se voce PRECISA usar PNG, converta para SVG ou renomeie o arquivo para
+logo.svg mesmo assim (o navegador le pelo conteudo, nao pela extensao). Se
+preferir mudar de vez, o caminho esta em painel/config/marca.ts, na constante
+CAMINHO_LOGO — um lugar so, no codigo, revisado junto com o resto.
 
-Para usar outro nome de arquivo, defina no painel/.env.local:
+Recomendacoes para a arte:
+  - fundo transparente (ou o proprio fundo da marca)
+  - quadrado, no minimo 256x256 px
+  - o painel recorta em circulo, entao logos circulares ficam perfeitos
 
-    NEXT_PUBLIC_MARCA_LOGO=/marca/villa-deli.svg
+Se o arquivo NAO existir, o painel desenha um monograma com as iniciais do
+nome, nas cores da marca. Nunca aparece imagem quebrada: o monograma fica
+desenhado por baixo e a imagem entra por cima quando carrega.
 
-Tudo o mais (nome, tagline, cores) fica em painel/config/marca.ts e pode ser
-sobrescrito por variáveis de ambiente. Ver CREDENCIAIS.md na raiz do projeto.
+
+SOBRE O logo.svg ATUAL
+----------------------
+E uma APROXIMACAO do logo do Villa Deli, feita a mao para o painel nao ficar
+sem marca. A tipografia original e customizada e nao bate 100%. Substitua
+assim que tiver o arquivo oficial.
 
 
 FAVICON (icone da aba do navegador)
 -----------------------------------
-favicon.svg nesta pasta. E derivado do logo, com duas diferencas que importam:
+E derivado do logo, com duas diferencas que importam:
 
   - fundo proprio (creme atras das letras vazadas), para nao sumir em aba
     escura
@@ -39,6 +50,9 @@ favicon.svg nesta pasta. E derivado do logo, com duas diferencas que importam:
 O logo.svg NAO serve como favicon: as letras dele sao vazadas e assumem a cor
 do fundo, entao em modo escuro ficariam invisiveis.
 
-Para apontar outro arquivo, no painel/.env.local:
 
-    NEXT_PUBLIC_MARCA_FAVICON=/marca/outro-icone.svg
+O RESTO DA MARCA
+----------------
+Nome, tagline e cores ficam em painel/config/marca.ts e PODEM ser
+sobrescritos por variaveis de ambiente (NEXT_PUBLIC_MARCA_*). Ver
+CREDENCIAIS.md na raiz do projeto.

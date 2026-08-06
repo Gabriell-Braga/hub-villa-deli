@@ -96,7 +96,13 @@ export interface Env {
 // ---------------------------------------------------------------------------
 // Domínio
 // ---------------------------------------------------------------------------
-export type ProviderId = "uber" | "ifood" | "99" | "motoboy";
+/**
+ * `uber` e `uber_carro` são a MESMA conta do Uber Direct. O que muda é o
+ * tamanho declarado do pedido, que decide se vem moto ou carro e muda o preço.
+ * Ficam separados porque o atendente escolhe um ou outro, e o relatório
+ * precisa conseguir comparar os dois. Ver services/uber.ts.
+ */
+export type ProviderId = "uber" | "uber_carro" | "ifood" | "99" | "motoboy";
 
 export interface Endereco {
   logradouro: string;

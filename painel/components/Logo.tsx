@@ -6,14 +6,30 @@ import { MARCA, MONOGRAMA } from "@/config/marca";
 // ---------------------------------------------------------------------------
 // Logo da marca.
 //
-// Tenta carregar o arquivo de public/ (padrão: /marca/logo.png). Se o arquivo
-// não existir — que é o estado de um cliente recém-instalado — desenha um
-// monograma com as iniciais nas cores da marca. Assim o painel nunca mostra
-// ícone quebrado e a instalação funciona antes de alguém enviar a arte.
+// O monograma (iniciais nas cores da marca) é SEMPRE desenhado, e a imagem
+// entra por cima. Não é enfeite: significa que o painel nunca mostra ícone
+// quebrado. Se o arquivo faltar, se o caminho estiver errado, se a rede
+// falhar no meio — o que aparece são as iniciais, e ninguém percebe defeito.
 //
-// É client component só por causa do onError: é a única forma de detectar
-// arquivo ausente sem ir ao disco no build.
+// A versão anterior renderizava só o <img> e trocava para o monograma no
+// onError. Funcionava, mas o navegador já tinha desenhado o ícone quebrado
+// antes do evento chegar, e a troca acontecia a cada navegação porque o
+// estado morria junto com o componente.
+//
+// Daí as duas decisões abaixo:
+//   - a falha fica num módulo, não no estado do componente: uma vez que se
+//     sabe que não há arquivo, nenhuma outra instância tenta de novo;
+//   - a imagem começa invisível e só aparece no onLoad.
+//
+// É client component só por causa desses dois eventos.
 // ---------------------------------------------------------------------------
+
+/**
+ * Lembrança entre montagens. O logo é o MESMO arquivo para o painel inteiro:
+ * se ele falhou uma vez, falhou para todo mundo, e reencomendar a cada troca
+ * de tela só produz 404 repetido no console do cliente.
+ */
+let arquivoFalhou = false;
 
 export default function Logo({
   tamanho = 40,
@@ -22,37 +38,45 @@ export default function Logo({
   tamanho?: number;
   className?: string;
 }) {
-  const [falhou, setFalhou] = useState(false);
+  const [falhou, setFalhou] = useState(arquivoFalhou);
+  const [carregou, setCarregou] = useState(false);
 
-  if (falhou || !MARCA.logo) {
-    return (
-      <span
-        className={`inline-flex shrink-0 items-center justify-center rounded-full font-semibold tracking-tight ${className}`}
-        style={{
-          width: tamanho,
-          height: tamanho,
-          backgroundColor: "var(--marca-primaria)",
-          color: "var(--marca-contraste)",
-          fontSize: tamanho * 0.36,
-        }}
-        aria-hidden="true"
-      >
-        {MONOGRAMA}
-      </span>
-    );
-  }
+  const mostrarImagem = !!MARCA.logo && !falhou;
 
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={MARCA.logo}
-      alt={MARCA.nome}
-      width={tamanho}
-      height={tamanho}
-      onError={() => setFalhou(true)}
-      className={`shrink-0 rounded-full object-cover ${className}`}
-      style={{ width: tamanho, height: tamanho }}
-    />
+    <span
+      className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold tracking-tight ${className}`}
+      style={{
+        width: tamanho,
+        height: tamanho,
+        backgroundColor: "var(--marca-primaria)",
+        color: "var(--marca-contraste)",
+        fontSize: tamanho * 0.36,
+      }}
+      // O nome já aparece escrito ao lado em todos os usos (ver LogoComNome),
+      // então repetir aqui só faria o leitor de tela dizer duas vezes.
+      aria-hidden="true"
+    >
+      {MONOGRAMA}
+
+      {mostrarImagem && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={MARCA.logo}
+          alt=""
+          width={tamanho}
+          height={tamanho}
+          onLoad={() => setCarregou(true)}
+          onError={() => {
+            arquivoFalhou = true;
+            setFalhou(true);
+          }}
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity ${
+            carregou ? "opacity-100" : "opacity-0"
+          }`}
+        />
+      )}
+    </span>
   );
 }
 

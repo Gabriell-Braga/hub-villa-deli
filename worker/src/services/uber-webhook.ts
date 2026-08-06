@@ -87,6 +87,9 @@ export async function processarWebhookUber(
 
   const evento: EventoEntrega = {
     id: idEvento,
+    // Sempre "uber", inclusive para entregas despachadas como uber_carro: aqui
+    // é o PARCEIRO que mandou o evento, e é o mesmo. A entrega certa é achada
+    // pelo delivery_id_externo, então o status chega nas duas do mesmo jeito.
     provider: "uber",
     kind,
     status: p.status ?? p.data?.status ?? null,
