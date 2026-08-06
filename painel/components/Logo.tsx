@@ -1,27 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MARCA, MONOGRAMA } from "@/config/marca";
 
 // ---------------------------------------------------------------------------
 // Logo da marca.
 //
-// O monograma (iniciais nas cores da marca) é SEMPRE desenhado, e a imagem
-// entra por cima. Não é enfeite: significa que o painel nunca mostra ícone
-// quebrado. Se o arquivo faltar, se o caminho estiver errado, se a rede
-// falhar no meio — o que aparece são as iniciais, e ninguém percebe defeito.
+// O monograma (iniciais nas cores da marca) fica SEMPRE desenhado no fundo, e
+// a imagem cobre ele. Se o arquivo faltar, o caminho estiver errado ou a rede
+// falhar, o que sobra na tela são as iniciais — nunca um ícone quebrado.
 //
-// A versão anterior renderizava só o <img> e trocava para o monograma no
-// onError. Funcionava, mas o navegador já tinha desenhado o ícone quebrado
-// antes do evento chegar, e a troca acontecia a cada navegação porque o
-// estado morria junto com o componente.
+// A imagem NÃO espera onLoad para aparecer, e isso é deliberado. Já foi assim
+// e dava justamente o defeito oposto: o <img> vem no HTML do servidor, o
+// navegador termina de baixar antes do React hidratar, o onLoad se perde, e a
+// imagem ficava carregada porém invisível — só o monograma aparecia, mesmo com
+// tudo funcionando.
 //
-// Daí as duas decisões abaixo:
-//   - a falha fica num módulo, não no estado do componente: uma vez que se
-//     sabe que não há arquivo, nenhuma outra instância tenta de novo;
-//   - a imagem começa invisível e só aparece no onLoad.
+// Com `alt=""` o navegador não desenha placeholder de imagem quebrada, então
+// deixá-la visível desde o começo é seguro: enquanto carrega, aparece o
+// monograma por baixo, que é exatamente o que se quer.
 //
-// É client component só por causa desses dois eventos.
+// O onError e a checagem de `naturalWidth` são rede de segurança para
+// navegador que insista em desenhar algo. A falha é lembrada no módulo, não no
+// estado do componente, para não repetir o 404 a cada navegação.
 // ---------------------------------------------------------------------------
 
 /**
@@ -39,7 +40,22 @@ export default function Logo({
   className?: string;
 }) {
   const [falhou, setFalhou] = useState(arquivoFalhou);
-  const [carregou, setCarregou] = useState(false);
+  const img = useRef<HTMLImageElement>(null);
+
+  // Rede de segurança para navegador que desenha placeholder de imagem
+  // quebrada mesmo com alt vazio.
+  //
+  // O onError sozinho não bastava: o <img> vem no HTML do servidor, o
+  // navegador já terminou de baixar antes do React hidratar, e o evento se
+  // perde. `complete` diz que a requisição acabou; `naturalWidth === 0`
+  // separa "deu 404" de "carregou".
+  useEffect(() => {
+    const el = img.current;
+    if (el?.complete && el.naturalWidth === 0) {
+      arquivoFalhou = true;
+      setFalhou(true);
+    }
+  }, []);
 
   const mostrarImagem = !!MARCA.logo && !falhou;
 
@@ -62,18 +78,16 @@ export default function Logo({
       {mostrarImagem && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
+          ref={img}
           src={MARCA.logo}
           alt=""
           width={tamanho}
           height={tamanho}
-          onLoad={() => setCarregou(true)}
           onError={() => {
             arquivoFalhou = true;
             setFalhou(true);
           }}
-          className={`absolute inset-0 h-full w-full object-cover transition-opacity ${
-            carregou ? "opacity-100" : "opacity-0"
-          }`}
+          className="absolute inset-0 h-full w-full object-cover"
         />
       )}
     </span>

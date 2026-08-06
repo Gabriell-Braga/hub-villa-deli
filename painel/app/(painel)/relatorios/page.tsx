@@ -62,6 +62,13 @@ export default function PaginaRelatorios() {
             Resultado das entregas no mês corrente: o frete que os clientes
             pagaram menos o que foi pago às transportadoras.
           </p>
+          {/* Só aparece fora de produção. Lá o relatório é só de venda real e
+              a frase não teria por que existir. */}
+          {dados?.incluiTestes && (
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-300">
+              Ambiente de teste — as entregas simuladas estão somadas aqui
+            </p>
+          )}
         </div>
 
         {/* No celular ocupa a linha inteira: três alvos de toque confortáveis
@@ -227,7 +234,9 @@ export default function PaginaRelatorios() {
           {brl(dados.total.gastoTotal)} de custo · resultado{" "}
           {comSinal(dados.total.margem)}
           <br />
-          Entregas de teste não entram nestes números.
+          {dados.incluiTestes
+            ? "Entregas de teste estão somadas nestes números."
+            : "Entregas de teste não entram nestes números."}
         </p>
       )}
     </div>

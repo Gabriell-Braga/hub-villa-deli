@@ -1,5 +1,6 @@
 import type { Env, Estatisticas, ProviderId } from "../types";
 import { nomeProvedor } from "../config/provedores";
+import { ambiente } from "../config/ambiente";
 
 // ---------------------------------------------------------------------------
 // Agregações da tabela `deliveries` para a tela de Relatórios.
@@ -66,10 +67,17 @@ export async function calcularEstatisticas(
   const desdeMes = inicioDoMes();
   const desdeSerie = inicioDeNDiasAtras(diasDaSerie);
 
-  // ENTREGAS DE TESTE FICAM DE FORA (`teste = 0`) em todas as consultas.
-  // Este relatório é lido como "quanto a loja gastou". Simulação nossa não é
-  // gasto, e misturada aqui viraria uma decisão de negócio tomada em cima de
-  // número inventado. Elas continuam visíveis no Histórico, com o selo.
+  // ENTREGAS DE TESTE: entram ou não, conforme o AMBIENTE.
+  //
+  // Em produção ficam de fora. O relatório de lá é lido como "quanto a loja
+  // gastou", e simulação nossa não é gasto — misturada, viraria decisão de
+  // negócio tomada em cima de número inventado.
+  //
+  // Em dev e homologação entram. Lá TODA entrega é de teste; excluí-las
+  // deixava a tela permanentemente zerada, e um relatório vazio não mostra
+  // que o relatório funciona. O painel avisa na tela qual dos dois é o caso.
+  const soReais = ambiente(env) === "producao";
+  const filtroTeste = soReais ? "teste = 0" : "1 = 1";
   const [resumo, porPlataforma, serie, geral] = await env.DB.batch([
     // 1) Totais do mês corrente
     env.DB.prepare(
@@ -79,7 +87,7 @@ export async function calcularEstatisticas(
               AVG(valor_pago)      AS media,
               AVG(eta_minutos)     AS eta
          FROM deliveries
-        WHERE teste = 0 AND data_criacao >= ?1`
+        WHERE ${filtroTeste} AND data_criacao >= ?1`
     ).bind(desdeMes),
 
     // 2) Quebra por plataforma, no mês
@@ -91,7 +99,7 @@ export async function calcularEstatisticas(
               AVG(valor_pago)    AS media,
               AVG(eta_minutos)   AS eta
          FROM deliveries
-        WHERE teste = 0 AND data_criacao >= ?1
+        WHERE ${filtroTeste} AND data_criacao >= ?1
         GROUP BY plataforma_escolhida
         ORDER BY total DESC`
     ).bind(desdeMes),
@@ -104,7 +112,7 @@ export async function calcularEstatisticas(
               SUM(valor_pago)    AS total,
               SUM(frete_cobrado) AS cobrado
          FROM deliveries
-        WHERE teste = 0 AND data_criacao >= ?1
+        WHERE ${filtroTeste} AND data_criacao >= ?1
         GROUP BY dia
         ORDER BY dia`
     ).bind(desdeSerie),
@@ -117,7 +125,7 @@ export async function calcularEstatisticas(
               AVG(valor_pago)    AS media,
               AVG(eta_minutos)   AS eta
          FROM deliveries
-        WHERE teste = 0`
+        WHERE ${filtroTeste}`
     ),
   ]);
 
@@ -138,6 +146,9 @@ export async function calcularEstatisticas(
 
   return {
     periodo: { de: desdeMes, ate: new Date().toISOString(), fuso: FUSO },
+    // O painel precisa DIZER na tela o que está somando. Um número que às
+    // vezes inclui teste e às vezes não, sem avisar, é pior que não ter.
+    incluiTestes: !soReais,
 
     mes: {
       gastoTotal: num(r?.total),

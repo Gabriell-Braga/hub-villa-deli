@@ -134,6 +134,8 @@ export interface PedidoResumo {
 
 export interface Estatisticas {
   periodo: { de: string; ate: string; fuso: string };
+  /** true = entregas de teste estão somadas (dev e homologação). */
+  incluiTestes: boolean;
   mes: {
     gastoTotal: number;
     freteCobrado: number;

@@ -368,6 +368,11 @@ export interface RespostaHistorico {
 // número aqui vem em trio: cobrado (receita), custo, e a diferença.
 export interface Estatisticas {
   periodo: { de: string; ate: string; fuso: string };
+  /**
+   * true = entregas de teste estão somadas aqui (dev e homologação, onde tudo
+   * é teste e um relatório vazio não demonstraria nada). Em produção é false.
+   */
+  incluiTestes: boolean;
   mes: {
     gastoTotal: number;
     freteCobrado: number;
