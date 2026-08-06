@@ -153,6 +153,14 @@ export interface Pedido {
   /** Número do pedido no marketplace (o que o cliente vê no app do iFood). */
   numeroExterno?: string;
   /**
+   * Id interno do pedido no marketplace (UUID).
+   *
+   * Guardado desde já porque é a CHAVE para acionar a logística do iFood: o
+   * endpoint de solicitar entregador é /orders/{id}/requestDriver, e esse {id}
+   * é este UUID — não o número curto que aparece no app.
+   */
+  idExterno?: string;
+  /**
    * true = o telefone acima é o da LOJA, não o do cliente.
    *
    * Acontece nos pedidos de marketplace, que mascaram o contato. O entregador

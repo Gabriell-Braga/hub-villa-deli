@@ -37,10 +37,27 @@ const ROTULO_STATUS: Record<StatusPedido, string> = {
   despachado: "Despachado",
 };
 
-function Selo({ status }: { status: StatusPedido }) {
+/**
+ * Situação do pedido — UM selo só.
+ *
+ * Pedido não pago mostrava "Aguardando cotação" e "Aguardando pagamento" ao
+ * mesmo tempo, o que lia como duas pendências independentes. Não são: falta
+ * de pagamento é a CAUSA de não haver cotação, e o Hub nem cota até o
+ * pagamento cair. Dois selos faziam o atendente procurar o que fazer com o
+ * primeiro, quando não há nada a fazer além de esperar o segundo.
+ */
+function Selo({ status, pago }: { status: StatusPedido; pago: boolean }) {
+  if (!pago) {
+    return (
+      <span className="inline-flex whitespace-nowrap rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-300">
+        Aguardando pagamento
+      </span>
+    );
+  }
+
   return (
     <span
-      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${CORES_STATUS[status]}`}
+      className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${CORES_STATUS[status]}`}
     >
       {ROTULO_STATUS[status]}
     </span>
@@ -176,12 +193,7 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 {p.teste && <SeloTeste />}
                 <SeloOrigem canal={p.canal} numeroExterno={p.numeroExterno} />
-                <Selo status={p.status} />
-                {!p.pago && (
-                  <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-300">
-                    Aguardando pagamento
-                  </span>
-                )}
+                <Selo status={p.status} pago={p.pago} />
                 {p.bairro && (
                   <span className="text-xs text-gray-500">{p.bairro}</span>
                 )}
@@ -241,14 +253,7 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
                   </td>
 
                   <td className="px-5 py-3">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <Selo status={p.status} />
-                      {!p.pago && (
-                        <span className="whitespace-nowrap rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-300">
-                          Aguardando pagamento
-                        </span>
-                      )}
-                    </div>
+                    <Selo status={p.status} pago={p.pago} />
                   </td>
 
                   <td className="px-5 py-3 text-right">

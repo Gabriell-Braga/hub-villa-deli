@@ -48,17 +48,25 @@ const OPCOES: Array<{
     id: "carro",
     titulo: "Carro",
     descricao: "Pedido volumoso, não sobe numa garupa",
+    // Perfil de carro, não uma caixa com rodas. O desenho anterior era um
+    // trapézio simétrico que lia como caminhão ou vagão. O que faz o olho
+    // reconhecer um carro é a assimetria: capô baixo na frente, para-brisa
+    // inclinado, teto curto, traseira caindo — e a linha de cintura separando
+    // a cabine da carroceria.
     icone: (
-      <svg viewBox="0 0 32 32" className="h-7 w-7" fill="currentColor" aria-hidden="true">
-        <path
-          d="M4.5 21.5 v-3.5 l2.8-5.2 h17.4 l2.8 5.2 v3.5 Z"
+      <svg viewBox="0 0 32 32" className="h-7 w-7" aria-hidden="true">
+        <g
           fill="none"
           stroke="currentColor"
           strokeWidth="2"
+          strokeLinecap="round"
           strokeLinejoin="round"
-        />
-        <circle cx="10" cy="22.5" r="2.6" fill="none" stroke="currentColor" strokeWidth="2" />
-        <circle cx="22" cy="22.5" r="2.6" fill="none" stroke="currentColor" strokeWidth="2" />
+        >
+          <path d="M3.4 20.2v-2.7c0-.7.45-1.32 1.12-1.53l3.4-1.06 2.9-3.4c.38-.45.94-.71 1.53-.71h6.7c.62 0 1.2.28 1.58.77l2.72 3.46 3.4 1c.68.2 1.15.83 1.15 1.54v2.63" />
+          <path d="M8.1 15.1h13.4" />
+          <circle cx="9.4" cy="20.6" r="2.9" />
+          <circle cx="22.6" cy="20.6" r="2.9" />
+        </g>
       </svg>
     ),
   },

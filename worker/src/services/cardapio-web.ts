@@ -52,6 +52,11 @@ interface PedidoCW {
   display_id?: number;
   /** Número do pedido no marketplace — o que o cliente vê no app do iFood. */
   external_display_id?: string | null;
+  /**
+   * Id INTERNO do pedido no marketplace (UUID). É por ele que a API do iFood
+   * identifica o pedido — o display_id não serve para chamar endpoint.
+   */
+  external_order_id?: string | null;
   status?: string;
   /** delivery | takeout | closed_table — só o primeiro é entrega. */
   order_type?: string;
@@ -284,6 +289,7 @@ export function traduzirPedidoCW(
     formaPagamento: descreverPagamento(cw),
     canal: cw.sales_channel,
     numeroExterno: cw.external_display_id ?? undefined,
+    idExterno: cw.external_order_id ?? undefined,
     semTelefoneDoCliente,
     observacao: cw.observation ?? undefined,
     status: "recebido",
@@ -327,6 +333,7 @@ export async function revalidarPedido(
       total: atualizado.total,
       canal: atualizado.canal,
       numeroExterno: atualizado.numeroExterno,
+      idExterno: atualizado.idExterno,
       semTelefoneDoCliente: atualizado.semTelefoneDoCliente,
     });
 
@@ -341,6 +348,7 @@ export async function revalidarPedido(
       total: atualizado.total,
       canal: atualizado.canal,
       numeroExterno: atualizado.numeroExterno,
+      idExterno: atualizado.idExterno,
       semTelefoneDoCliente: atualizado.semTelefoneDoCliente,
     };
   } catch (e) {
@@ -414,6 +422,7 @@ export async function processarEventoCardapio(
         total: pedido.total,
         canal: pedido.canal,
         numeroExterno: pedido.numeroExterno,
+        idExterno: pedido.idExterno,
         semTelefoneDoCliente: pedido.semTelefoneDoCliente,
       });
     } else {

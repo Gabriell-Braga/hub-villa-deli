@@ -290,7 +290,10 @@ export default function CardEntrega({
                 <span className="text-[11px] font-medium uppercase tracking-wide text-indigo-500">
                   Código
                 </span>
-                <span className="font-mono text-base font-bold tracking-[0.2em] text-indigo-900">
+                {/* leading-5 casa a altura da linha com a do botão ao lado,
+                    que é text-sm. Sem isso o número maior estica a caixa e os
+                    dois ficam com alturas diferentes na mesma fileira. */}
+                <span className="font-mono text-base font-bold leading-5 tracking-[0.2em] text-indigo-900">
                   {despacho.codigoEntrega}
                 </span>
               </span>

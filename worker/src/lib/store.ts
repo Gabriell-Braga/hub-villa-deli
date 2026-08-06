@@ -73,6 +73,7 @@ export interface AtualizacaoCardapio {
   total: number;
   canal?: string;
   numeroExterno?: string;
+  idExterno?: string;
   semTelefoneDoCliente?: boolean;
 }
 
@@ -108,7 +109,8 @@ export async function atualizarDoCardapio(
         '$.total',          ?7,
         '$.canal',          ?8,
         '$.numeroExterno',  ?9,
-        '$.semTelefoneDoCliente', json(?10)
+        '$.idExterno',      ?10,
+        '$.semTelefoneDoCliente', json(?11)
       )
       WHERE id = ?1`
   )
@@ -123,6 +125,7 @@ export async function atualizarDoCardapio(
       a.total,
       a.canal ?? null,
       a.numeroExterno ?? null,
+      a.idExterno ?? null,
       a.semTelefoneDoCliente ? "true" : "false"
     )
     .run();

@@ -10,39 +10,27 @@
 // ---------------------------------------------------------------------------
 
 /**
- * Marca do iFood no tamanho de chip.
+ * Símbolo oficial do iFood.
  *
- * Desenhada aqui, como as dos parceiros em LogoProvedor: nada de hotlink para
- * servidor de terceiro nem binário de marca alheia no repositório. É uso
- * nominativo — identifica de onde veio o pedido, na cor deles.
+ * O traçado vem do Simple Icons (simpleicons.org), a coleção de marcas usada
+ * como referência para este tipo de uso. Fica INLINE, não como arquivo
+ * baixado: nenhuma requisição a servidor de terceiro para desenhar a tela, e
+ * nada que quebre se eles trocarem uma URL.
  *
- * O bloco vermelho com o nome funciona melhor que um símbolo isolado num chip
- * de 16px: a palavra "iFood" é lida de relance, um glifo pequeno não.
+ * Uso nominativo — identifica de onde veio o pedido. A marca é do iFood.
  */
 function MarcaIfood() {
   return (
     <svg
-      viewBox="0 0 40 16"
-      width="30"
-      height="12"
+      viewBox="0 0 24 24"
+      width="14"
+      height="14"
       role="img"
       aria-label="iFood"
+      fill="#EA1D2C"
       className="shrink-0"
     >
-      <rect width="40" height="16" rx="4" fill="#EA1D2C" />
-      <text
-        x="20"
-        y="8.6"
-        textAnchor="middle"
-        dominantBaseline="central"
-        fontSize="10"
-        fontWeight="700"
-        fontFamily="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
-        letterSpacing="-0.3"
-        fill="#FFFFFF"
-      >
-        iFood
-      </text>
+      <path d="M8.428 1.67c-4.65 0-7.184 4.149-7.184 6.998 0 2.294 2.2 3.299 4.25 3.299l-.006-.006c4.244 0 7.184-3.854 7.184-6.998 0-2.29-2.175-3.293-4.244-3.293zm11.328 0c-4.65 0-7.184 4.149-7.184 6.998 0 2.294 2.2 3.299 4.25 3.299l-.006-.006C21.061 11.96 24 8.107 24 4.963c0-2.29-2.18-3.293-4.244-3.293zM14.172 14.52l2.435 1.834c-2.17 2.07-6.124 3.525-9.353 3.17A8.913 8.913 0 01.23 14.541H0a9.598 9.598 0 008.828 7.758c3.814.24 7.323-.905 9.947-3.13l-.004.007 1.08 2.988 1.555-7.623-7.234-.02Z" />
     </svg>
   );
 }
@@ -76,17 +64,18 @@ export default function SeloOrigem({
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full py-0.5 pl-1 pr-2.5 text-xs font-medium ring-1 ring-inset ${c.classe}`}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${c.classe}`}
     >
-      {/* Com a marca desenhada o nome vira redundância; sem ela, o rótulo é
-          tudo o que o chip tem. */}
-      {Marca ? <Marca /> : <span className="pl-1.5">{c.rotulo}</span>}
-
-      {numeroExterno && (
-        // O número do pedido no app do cliente. É por ele que o atendente
-        // acha o pedido no tablet do marketplace.
-        <span className="font-mono opacity-80">#{numeroExterno}</span>
+      {/* O número vem primeiro porque é o que se procura: o atendente já sabe
+          que o pedido é do iFood pela cor do chip, e o que ele precisa ler é
+          o código para achar no tablet. A marca fecha o chip à direita. */}
+      {numeroExterno ? (
+        <span className="font-mono">#{numeroExterno}</span>
+      ) : (
+        <span>{c.rotulo}</span>
       )}
+
+      {Marca && <Marca />}
     </span>
   );
 }
