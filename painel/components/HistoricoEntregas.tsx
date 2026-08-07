@@ -12,6 +12,7 @@ import { brl, brlOuGratis, dataHora } from "@/lib/formato";
 import LogoProvedor from "./LogoProvedor";
 import SeloTeste from "./SeloTeste";
 import { SkeletonListaPedidos } from "./Skeleton";
+import { apiFetch } from "@/lib/api";
 
 // ---------------------------------------------------------------------------
 // Histórico com filtros e exportação.
@@ -123,7 +124,7 @@ export default function HistoricoEntregas() {
     setCarregando(true);
     setErro(null);
     try {
-      const res = await fetch(`/api/historico?${query()}`);
+      const res = await apiFetch(`/api/historico?${query()}`);
       const json = await res.json();
       if (!res.ok) {
         setErro(json.erro ?? `Erro ${res.status} ao carregar.`);

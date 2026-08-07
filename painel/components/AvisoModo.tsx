@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { apiFetch } from "@/lib/api";
 
 // ---------------------------------------------------------------------------
 // Faixa permanente no topo quando o Hub está em MODO TESTE.
@@ -25,7 +26,7 @@ export default function AvisoModo({ ehAdmin }: { ehAdmin: boolean }) {
 
     const buscar = async () => {
       try {
-        const res = await fetch("/api/modo");
+        const res = await apiFetch("/api/modo");
         if (!res.ok) return;
         const json = await res.json();
         if (vivo) setModo(json);

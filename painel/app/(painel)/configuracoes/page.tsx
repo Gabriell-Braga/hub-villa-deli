@@ -5,6 +5,7 @@ import { MARCA } from "@/config/marca";
 import Logo from "@/components/Logo";
 import { SkeletonDiagnostico } from "@/components/Skeleton";
 import SeletorModo from "@/components/SeletorModo";
+import { apiFetch } from "@/lib/api";
 
 // ---------------------------------------------------------------------------
 // Tela de Configurações / Diagnóstico.
@@ -54,7 +55,7 @@ export default function PaginaConfiguracoes() {
     setCarregando(true);
     setErro(null);
     try {
-      const res = await fetch("/api/diagnostico");
+      const res = await apiFetch("/api/diagnostico");
       const json = await res.json();
       if (!res.ok) {
         setErro(json.erro ?? `Erro ${res.status} ao verificar.`);

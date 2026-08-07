@@ -9,6 +9,7 @@ import StatCard from "@/components/StatCard";
 import { Skeleton, SkeletonGraficoBarras } from "@/components/Skeleton";
 import { MARCA } from "@/config/marca";
 import { EntregasPorPlataforma, FretePorDia } from "@/components/GraficoGastos";
+import { apiFetch } from "@/lib/api";
 
 const JANELAS = [7, 30, 90];
 
@@ -32,7 +33,7 @@ export default function PaginaRelatorios() {
     setCarregando(true);
     setErro(null);
     try {
-      const res = await fetch(`/api/estatisticas?dias=${dias}`);
+      const res = await apiFetch(`/api/estatisticas?dias=${dias}`);
       const json = await res.json();
       if (!res.ok) {
         setErro(json.erro ?? `Erro ${res.status} ao carregar o relatório.`);

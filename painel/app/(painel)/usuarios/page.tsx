@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { SkeletonUsuarios } from "@/components/Skeleton";
 import { useToast } from "@/components/Toast";
+import { apiFetch } from "@/lib/api";
 
 // ---------------------------------------------------------------------------
 // Gestão de atendentes.
@@ -114,7 +115,7 @@ export default function PaginaUsuarios() {
 
   const carregar = useCallback(async () => {
     try {
-      const res = await fetch("/api/usuarios");
+      const res = await apiFetch("/api/usuarios");
       const json = await res.json();
       if (!res.ok) {
         toast.erro(json.erro ?? "Erro ao carregar.");
@@ -137,7 +138,7 @@ export default function PaginaUsuarios() {
     setSalvando(true);
 
     try {
-      const res = await fetch("/api/usuarios", {
+      const res = await apiFetch("/api/usuarios", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nome, email, papel }),
@@ -166,7 +167,7 @@ export default function PaginaUsuarios() {
   async function alternarAtivo(u: Usuario) {
     setOcupado(u.id);
     try {
-      const res = await fetch(`/api/usuarios/${u.id}`, {
+      const res = await apiFetch(`/api/usuarios/${u.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ativo: !u.ativo }),
@@ -185,7 +186,7 @@ export default function PaginaUsuarios() {
   async function trocarPapel(u: Usuario) {
     setOcupado(u.id);
     try {
-      const res = await fetch(`/api/usuarios/${u.id}`, {
+      const res = await apiFetch(`/api/usuarios/${u.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -206,7 +207,7 @@ export default function PaginaUsuarios() {
   async function gerarLink(u: Usuario) {
     setOcupado(u.id);
     try {
-      const res = await fetch(`/api/usuarios/${u.id}/link-acesso`, {
+      const res = await apiFetch(`/api/usuarios/${u.id}/link-acesso`, {
         method: "POST",
       });
       const json = await res.json();

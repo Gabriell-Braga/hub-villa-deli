@@ -17,6 +17,11 @@ function FormularioLogin() {
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
+  // Quem chega aqui por sessão vencida não errou nada, e não pode ser recebido
+  // com a mesma cara de quem digitou a senha errada. O aviso some assim que a
+  // pessoa tenta entrar.
+  const expirou = parametros.get("expirou") === "1" && !erro;
+
   async function entrar(e: React.FormEvent) {
     e.preventDefault();
     setEnviando(true);
@@ -49,6 +54,15 @@ function FormularioLogin() {
             Hub Logístico. Entre para cotar e despachar entregas
           </p>
         </div>
+
+        {expirou && (
+          <div
+            role="status"
+            className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
+          >
+            Sua sessão terminou por segurança. Entre novamente para continuar.
+          </div>
+        )}
 
         <form
           onSubmit={entrar}

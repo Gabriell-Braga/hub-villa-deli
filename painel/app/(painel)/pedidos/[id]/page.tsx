@@ -20,6 +20,7 @@ import {
   SkeletonCartoesCotacao,
   SkeletonResumoPedido,
 } from "@/components/Skeleton";
+import { apiFetch } from "@/lib/api";
 
 // De onde o atendente veio, para o botão Voltar devolver ao lugar certo.
 //
@@ -97,7 +98,7 @@ export default function PaginaCotacao({
     setCarregando(true);
     setErroCarregar(null);
     try {
-      const res = await fetch(`/api/cotacao/${encodeURIComponent(idPedido)}`);
+      const res = await apiFetch(`/api/cotacao/${encodeURIComponent(idPedido)}`);
       const json = await res.json();
 
       if (!res.ok) {
@@ -130,7 +131,7 @@ export default function PaginaCotacao({
   async function despachar(provider: ProviderId, nome: string, veiculo?: Veiculo) {
     setDespachando(provider);
     try {
-      const res = await fetch("/api/despachar", {
+      const res = await apiFetch("/api/despachar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idPedido, provider, veiculo }),
@@ -159,7 +160,7 @@ export default function PaginaCotacao({
   async function concluir(status: "delivered" | "canceled") {
     setConcluindo(true);
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/entrega/${encodeURIComponent(idPedido)}/concluir`,
         {
           method: "POST",

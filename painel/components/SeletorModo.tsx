@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { dataHora } from "@/lib/formato";
+import { apiFetch } from "@/lib/api";
 
 // ---------------------------------------------------------------------------
 // Troca entre modo TESTE e PRODUÇÃO.
@@ -40,7 +41,7 @@ export default function SeletorModo({
 
   const carregar = useCallback(async () => {
     try {
-      const res = await fetch("/api/modo");
+      const res = await apiFetch("/api/modo");
       const json = await res.json();
       if (res.ok) setDados(json);
     } catch {
@@ -58,7 +59,7 @@ export default function SeletorModo({
     setSalvando(true);
     setErro(null);
     try {
-      const res = await fetch("/api/modo", {
+      const res = await apiFetch("/api/modo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ modo: alvo }),

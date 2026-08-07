@@ -9,6 +9,7 @@ import SeloTeste from "./SeloTeste";
 import SeloOrigem from "./SeloOrigem";
 import { brl, brlOuGratis, dataHora, desde } from "@/lib/formato";
 import { SkeletonListaPedidos } from "./Skeleton";
+import { apiFetch } from "@/lib/api";
 
 // ---------------------------------------------------------------------------
 // Lista de pedidos. Serve as duas telas (Aberto e Histórico) — a diferença é
@@ -111,7 +112,7 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
   const carregar = useCallback(async () => {
     setErro(null);
     try {
-      const res = await fetch(`/api/pedidos?aba=${aba}&limite=100`);
+      const res = await apiFetch(`/api/pedidos?aba=${aba}&limite=100`);
       const json = await res.json();
       if (!res.ok) {
         setErro(json.erro ?? `Erro ${res.status} ao carregar pedidos.`);
