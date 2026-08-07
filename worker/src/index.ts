@@ -37,6 +37,7 @@ import {
   limparTokensAntigos,
   obterEntregaAoVivo,
   marcarEntregaManual,
+  marcarEntregasEmLote,
   proximaSequenciaEntrega,
   prepararReenvio,
   enfileirarEventoCardapio,
@@ -673,6 +674,20 @@ app.post("/api/entrega/:idPedido/concluir", async (c) => {
 
   if (!r.ok) return c.json({ erro: r.erro }, 400);
   return c.json({ ok: true, status });
+});
+
+app.post("/api/entrega/lotes/concluir", async (c) => {
+  const body = await c.req.json<{ ids?: string[] }>().catch(() => null);
+  const ids = Array.isArray(body?.ids) ? body.ids.filter(Boolean) : [];
+
+  if (ids.length === 0) {
+    return c.json({ erro: "Selecione pelo menos um pedido." }, 400);
+  }
+
+  const r = await marcarEntregasEmLote(c.env, ids, c.get("usuario").email);
+
+  if (!r.ok) return c.json({ erro: r.erro }, 400);
+  return c.json({ ok: true, processados: r.processados, ignorados: r.ignorados });
 });
 
 // ---------------------------------------------------------------------------

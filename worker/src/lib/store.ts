@@ -362,34 +362,61 @@ export async function registrarDelivery(
   // de sandbox. Basta um para a linha não ser uma venda real.
   const teste = pedido.teste || modo === "teste" ? 1 : 0;
 
-  await env.DB.prepare(
-    `INSERT INTO deliveries (
-       id_pedido, sequencia, plataforma_escolhida, valor_pago, frete_cobrado,
-       eta_minutos, status, data_criacao, delivery_id_externo, tracking_url,
-       codigo_entrega, cliente_nome, bairro, valor_pedido, despachado_por, teste
-     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)`
-  )
-    .bind(
-      pedido.id,
-      sequencia,
-      resultado.provider,
-      cotacao.preco ?? 0,
-      // Congelado no momento do despacho, junto com o custo. Se a loja mudar a
-      // tabela de frete amanhã, o resultado de hoje continua sendo o de hoje.
-      pedido.freteCobrado ?? 0,
-      cotacao.etaMinutos,
-      resultado.status,
-      new Date().toISOString(),
-      resultado.deliveryId,
-      resultado.trackingUrl,
-      resultado.codigoEntrega ?? null,
-      pedido.cliente.nome,
-      pedido.endereco.bairro,
-      pedido.total,
-      despachadoPor,
-      teste
-    )
-    .run();
+  const colunas = await env.DB.prepare(
+    `PRAGMA table_info(deliveries)`
+  ).all<{ name: string }>();
+  const temSequencia = (colunas.results ?? []).some((c) => c.name === "sequencia");
+
+  const sql = temSequencia
+    ? `INSERT INTO deliveries (
+         id_pedido, sequencia, plataforma_escolhida, valor_pago, frete_cobrado,
+         eta_minutos, status, data_criacao, delivery_id_externo, tracking_url,
+         codigo_entrega, cliente_nome, bairro, valor_pedido, despachado_por, teste
+       ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)`
+    : `INSERT INTO deliveries (
+         id_pedido, plataforma_escolhida, valor_pago, frete_cobrado,
+         eta_minutos, status, data_criacao, delivery_id_externo, tracking_url,
+         codigo_entrega, cliente_nome, bairro, valor_pedido, despachado_por, teste
+       ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)`;
+
+  const bind = temSequencia
+    ? [
+        pedido.id,
+        sequencia,
+        resultado.provider,
+        cotacao.preco ?? 0,
+        pedido.freteCobrado ?? 0,
+        cotacao.etaMinutos,
+        resultado.status,
+        new Date().toISOString(),
+        resultado.deliveryId,
+        resultado.trackingUrl,
+        resultado.codigoEntrega ?? null,
+        pedido.cliente.nome,
+        pedido.endereco.bairro,
+        pedido.total,
+        despachadoPor,
+        teste,
+      ]
+    : [
+        pedido.id,
+        resultado.provider,
+        cotacao.preco ?? 0,
+        pedido.freteCobrado ?? 0,
+        cotacao.etaMinutos,
+        resultado.status,
+        new Date().toISOString(),
+        resultado.deliveryId,
+        resultado.trackingUrl,
+        resultado.codigoEntrega ?? null,
+        pedido.cliente.nome,
+        pedido.endereco.bairro,
+        pedido.total,
+        despachadoPor,
+        teste,
+      ];
+
+  await env.DB.prepare(sql).bind(...bind).run();
 }
 
 /** Próxima sequência de entrega para este pedido (1 se for a primeira). */
@@ -397,6 +424,11 @@ export async function proximaSequenciaEntrega(
   env: Env,
   idPedido: string
 ): Promise<number> {
+  const colunas = await env.DB.prepare(`PRAGMA table_info(deliveries)`).all<{ name: string }>();
+  const temSequencia = (colunas.results ?? []).some((c) => c.name === "sequencia");
+
+  if (!temSequencia) return 1;
+
   const l = await env.DB.prepare(
     `SELECT COALESCE(MAX(sequencia), 0) + 1 AS n FROM deliveries WHERE id_pedido = ?1`
   )
@@ -583,18 +615,122 @@ export async function aplicarEstadoEntrega(
  * uma corrida da Uber criaria um dado que discorda do parceiro — e o parceiro
  * é a fonte da verdade quando existe webhook.
  */
+export async function marcarEntregasEmLote(
+  env: Env,
+  ids: string[],
+  quem: string
+): Promise<{ ok: boolean; processados: number; ignorados: number; erro?: string }> {
+  const agora = new Date().toISOString();
+  let processados = 0;
+  let ignorados = 0;
+
+  for (const idPedido of ids) {
+    const pedido = await obterPedido(env, idPedido);
+    if (!pedido) {
+      ignorados += 1;
+      continue;
+    }
+
+    const r = await env.DB.prepare(
+      `UPDATE pedidos
+          SET status = 'despachado', despacho = NULL, despachado_em = ?2
+        WHERE id = ?1 AND status IN ('recebido', 'cotado', 'despachando')`
+    )
+      .bind(idPedido, agora)
+      .run();
+
+    if ((r.meta.changes ?? 0) === 0) {
+      ignorados += 1;
+      continue;
+    }
+
+    const colunas = await env.DB.prepare(`PRAGMA table_info(deliveries)`).all<{ name: string }>();
+    const temSequencia = (colunas.results ?? []).some((c) => c.name === "sequencia");
+    const sequencia = await proximaSequenciaEntrega(env, idPedido);
+
+    const sql = temSequencia
+      ? `INSERT INTO deliveries (
+           id_pedido, sequencia, plataforma_escolhida, valor_pago, frete_cobrado,
+           eta_minutos, status, data_criacao, delivery_id_externo, tracking_url,
+           codigo_entrega, cliente_nome, bairro, valor_pedido, despachado_por,
+           status_ao_vivo, status_atualizado_em, teste
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)`
+      : `INSERT INTO deliveries (
+           id_pedido, plataforma_escolhida, valor_pago, frete_cobrado,
+           eta_minutos, status, data_criacao, delivery_id_externo, tracking_url,
+           codigo_entrega, cliente_nome, bairro, valor_pedido, despachado_por,
+           status_ao_vivo, status_atualizado_em, teste
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)`;
+
+    const bind = temSequencia
+      ? [
+          idPedido,
+          sequencia,
+          "manual",
+          0,
+          pedido.freteCobrado ?? 0,
+          null,
+          "delivered",
+          agora,
+          null,
+          null,
+          null,
+          pedido.cliente?.nome ?? null,
+          pedido.endereco?.bairro ?? null,
+          pedido.total ?? 0,
+          quem,
+          "delivered",
+          agora,
+          pedido.teste ? 1 : 0,
+        ]
+      : [
+          idPedido,
+          "manual",
+          0,
+          pedido.freteCobrado ?? 0,
+          null,
+          "delivered",
+          agora,
+          null,
+          null,
+          null,
+          pedido.cliente?.nome ?? null,
+          pedido.endereco?.bairro ?? null,
+          pedido.total ?? 0,
+          quem,
+          "delivered",
+          agora,
+          pedido.teste ? 1 : 0,
+        ];
+
+    await env.DB.prepare(sql).bind(...bind).run();
+    processados += 1;
+  }
+
+  return { ok: true, processados, ignorados };
+}
+
 export async function marcarEntregaManual(
   env: Env,
   idPedido: string,
   status: "delivered" | "canceled",
   quem: string
 ): Promise<{ ok: boolean; erro?: string }> {
+  const colunas = await env.DB.prepare(`PRAGMA table_info(deliveries)`).all<{ name: string }>();
+  const temSequencia = (colunas.results ?? []).some((c) => c.name === "sequencia");
+
   const l = await env.DB.prepare(
-    `SELECT plataforma_escolhida, COALESCE(status_ao_vivo, status) AS atual
-       FROM deliveries
-      WHERE id_pedido = ?1
-      ORDER BY sequencia DESC
-      LIMIT 1`
+    temSequencia
+      ? `SELECT plataforma_escolhida, COALESCE(status_ao_vivo, status) AS atual
+         FROM deliveries
+        WHERE id_pedido = ?1
+        ORDER BY sequencia DESC
+        LIMIT 1`
+      : `SELECT plataforma_escolhida, COALESCE(status_ao_vivo, status) AS atual
+         FROM deliveries
+        WHERE id_pedido = ?1
+        ORDER BY id DESC
+        LIMIT 1`
   )
     .bind(idPedido)
     .first<{ plataforma_escolhida: string; atual: string }>();
@@ -614,10 +750,15 @@ export async function marcarEntregaManual(
 
   await env.DB.batch([
     env.DB.prepare(
-      `UPDATE deliveries
-          SET status_ao_vivo = ?2, status = ?2, status_atualizado_em = ?3
-        WHERE id_pedido = ?1
-          AND sequencia = (SELECT MAX(sequencia) FROM deliveries WHERE id_pedido = ?1)`
+      temSequencia
+        ? `UPDATE deliveries
+            SET status_ao_vivo = ?2, status = ?2, status_atualizado_em = ?3
+          WHERE id_pedido = ?1
+            AND sequencia = (SELECT MAX(sequencia) FROM deliveries WHERE id_pedido = ?1)`
+        : `UPDATE deliveries
+            SET status_ao_vivo = ?2, status = ?2, status_atualizado_em = ?3
+          WHERE id_pedido = ?1
+            AND id = (SELECT MAX(id) FROM deliveries WHERE id_pedido = ?1)`
     ).bind(idPedido, status, agora),
 
     // Fica na trilha de eventos igual aos do parceiro, com quem confirmou.
@@ -643,14 +784,25 @@ export async function obterEntregaAoVivo(
   env: Env,
   idPedido: string
 ): Promise<EntregaAoVivo | null> {
+  const colunas = await env.DB.prepare(`PRAGMA table_info(deliveries)`).all<{ name: string }>();
+  const temSequencia = (colunas.results ?? []).some((c) => c.name === "sequencia");
+
   const l = await env.DB.prepare(
-    `SELECT plataforma_escolhida, delivery_id_externo, status, status_ao_vivo,
-            status_atualizado_em, tracking_url, dropoff_eta,
-            courier_nome, courier_telefone, courier_veiculo, live_mode
-       FROM deliveries
-      WHERE id_pedido = ?1
-      ORDER BY sequencia DESC
-      LIMIT 1`
+    temSequencia
+      ? `SELECT plataforma_escolhida, delivery_id_externo, status, status_ao_vivo,
+              status_atualizado_em, tracking_url, dropoff_eta,
+              courier_nome, courier_telefone, courier_veiculo, live_mode
+         FROM deliveries
+        WHERE id_pedido = ?1
+        ORDER BY sequencia DESC
+        LIMIT 1`
+      : `SELECT plataforma_escolhida, delivery_id_externo, status, status_ao_vivo,
+              status_atualizado_em, tracking_url, dropoff_eta,
+              courier_nome, courier_telefone, courier_veiculo, live_mode
+         FROM deliveries
+        WHERE id_pedido = ?1
+        ORDER BY id DESC
+        LIMIT 1`
   )
     .bind(idPedido)
     .first<{
@@ -718,18 +870,33 @@ export async function listarPedidos(
     ? `p.status IN ('recebido', 'cotado', 'despachando') AND ${naoCancelado}`
     : `p.status = 'despachado'`;
 
+  const colunas = await env.DB.prepare(`PRAGMA table_info(deliveries)`).all<{ name: string }>();
+  const temSequencia = (colunas.results ?? []).some((c) => c.name === "sequencia");
+
   const { results } = await env.DB.prepare(
-    `SELECT p.id, p.criado_em, p.status, p.dados, p.cotacoes, p.despacho,
-            d.valor_pago
-       FROM pedidos p
-       LEFT JOIN deliveries d
-         ON d.id_pedido = p.id
-        AND d.sequencia = (
-          SELECT MAX(sequencia) FROM deliveries WHERE id_pedido = p.id
-        )
-      WHERE ${filtro}
-      ORDER BY p.criado_em DESC
-      LIMIT ?1`
+    temSequencia
+      ? `SELECT p.id, p.criado_em, p.status, p.dados, p.cotacoes, p.despacho,
+                d.valor_pago
+           FROM pedidos p
+           LEFT JOIN deliveries d
+             ON d.id_pedido = p.id
+            AND d.sequencia = (
+              SELECT MAX(sequencia) FROM deliveries WHERE id_pedido = p.id
+            )
+          WHERE ${filtro}
+          ORDER BY p.criado_em DESC
+          LIMIT ?1`
+      : `SELECT p.id, p.criado_em, p.status, p.dados, p.cotacoes, p.despacho,
+                d.valor_pago
+           FROM pedidos p
+           LEFT JOIN deliveries d
+             ON d.id_pedido = p.id
+            AND d.id = (
+              SELECT MAX(id) FROM deliveries WHERE id_pedido = p.id
+            )
+          WHERE ${filtro}
+          ORDER BY p.criado_em DESC
+          LIMIT ?1`
   )
     .bind(limite)
     .all<LinhaLista>();

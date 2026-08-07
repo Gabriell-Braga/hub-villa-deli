@@ -10,6 +10,7 @@ import SeloOrigem from "./SeloOrigem";
 import { brl, brlOuGratis, dataHora, desde } from "@/lib/formato";
 import { SkeletonListaPedidos } from "./Skeleton";
 import { apiFetch } from "@/lib/api";
+import { useToast } from "@/components/Toast";
 
 // ---------------------------------------------------------------------------
 // Lista de pedidos. Serve as duas telas (Aberto e Histórico) — a diferença é
@@ -108,6 +109,9 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
   const [pedidos, setPedidos] = useState<PedidoResumo[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [selecionados, setSelecionados] = useState<string[]>([]);
+  const [marcando, setMarcando] = useState(false);
+  const toast = useToast();
 
   const carregar = useCallback(async () => {
     setErro(null);
@@ -129,6 +133,7 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
 
   useEffect(() => {
     carregar();
+    setSelecionados([]);
 
     // Pedidos novos chegam por webhook, sem avisar o painel. Enquanto não há
     // WebSocket, um refresh a cada 15 s mantém a fila viva sem pesar.
@@ -136,6 +141,54 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
     const t = setInterval(carregar, 15_000);
     return () => clearInterval(t);
   }, [carregar, aba]);
+
+  async function marcarSelecionados() {
+    if (selecionados.length === 0) return;
+
+    setMarcando(true);
+    try {
+      const res = await apiFetch("/api/entrega/lotes/concluir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selecionados }),
+      });
+      const json = await res.json();
+
+      if (!res.ok) {
+        toast.erro(json.erro ?? "Não foi possível marcar os pedidos.");
+        return;
+      }
+
+      toast.sucesso(
+        json.processados > 0
+          ? `${json.processados} pedido${json.processados === 1 ? "" : "s"} marcado${json.processados === 1 ? "" : "s"} como entregue.`
+          : "Nenhum pedido foi alterado."
+      );
+      setSelecionados([]);
+      await carregar();
+    } catch {
+      toast.erro("Erro de rede ao marcar os pedidos.");
+    } finally {
+      setMarcando(false);
+    }
+  }
+
+  const todosSelecionados =
+    aba === "abertos" && pedidos.length > 0 && pedidos.every((p) => selecionados.includes(p.id));
+
+  function alternarSelecionado(id: string, checked: boolean) {
+    setSelecionados((atual) =>
+      checked ? (atual.includes(id) ? atual : [...atual, id]) : atual.filter((x) => x !== id)
+    );
+  }
+
+  function alternarTodos() {
+    if (aba !== "abertos") return;
+    setSelecionados((atual) => {
+      if (atual.length === pedidos.length) return [];
+      return pedidos.map((p) => p.id);
+    });
+  }
 
   if (carregando) return <SkeletonListaPedidos />;
 
@@ -165,15 +218,50 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
 
   return (
     <>
+      {aba === "abertos" && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+          <div className="text-sm text-gray-600">
+            {selecionados.length > 0
+              ? `${selecionados.length} pedido${selecionados.length === 1 ? "" : "s"} selecionado${selecionados.length === 1 ? "" : "s"}`
+              : "Selecione pedidos para fechar a entrega manualmente."}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={alternarTodos}
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+            >
+              {todosSelecionados ? "Desmarcar todos" : "Selecionar todos"}
+            </button>
+            <button
+              type="button"
+              onClick={marcarSelecionados}
+              disabled={marcando || selecionados.length === 0}
+              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300"
+            >
+              {marcando ? "Salvando..." : "Marcar como entregue"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ---------------- Celular: cartões ---------------- */}
       <ul className="space-y-3 sm:hidden">
         {pedidos.map((p) => (
-          <li key={p.id}>
+          <li key={p.id} className="flex items-start gap-3 rounded-xl border border-gray-200 bg-white p-4">
+            {aba === "abertos" && (
+              <input
+                type="checkbox"
+                checked={selecionados.includes(p.id)}
+                onChange={(e) => alternarSelecionado(p.id, e.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-emerald-600"
+              />
+            )}
             <Link
               // `de` carrega de qual tela veio, para o botão Voltar do detalhe
               // devolver o atendente ao lugar certo.
               href={`/pedidos/${encodeURIComponent(p.id)}?de=${aba}`}
-              className="block rounded-xl border border-gray-200 bg-white p-4 transition active:bg-gray-50"
+              className="flex-1 transition active:bg-gray-50"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -213,6 +301,7 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
           <table className="w-full text-sm">
             <thead className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
               <tr>
+                {aba === "abertos" && <th className="w-10 px-3 py-3" />}
                 <th className="px-5 py-3 font-medium">Pedido</th>
                 <th className="px-5 py-3 font-medium">Cliente</th>
                 <th className="hidden px-5 py-3 font-medium lg:table-cell">
@@ -229,6 +318,16 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
             <tbody className="divide-y divide-gray-100">
               {pedidos.map((p) => (
                 <tr key={p.id} className="transition hover:bg-gray-50">
+                  {aba === "abertos" && (
+                    <td className="px-3 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selecionados.includes(p.id)}
+                        onChange={(e) => alternarSelecionado(p.id, e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300 text-emerald-600"
+                      />
+                    </td>
+                  )}
                   <td className="px-5 py-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-medium text-gray-900">#{p.id}</p>
