@@ -8,6 +8,7 @@ import type {
 } from "../types";
 import { getUberToken } from "./tokens";
 import { distanciaKm, enderecoFormatado } from "../lib/geo";
+import { observacaoParaEntregador } from "../lib/observacao-entregador";
 import { credenciaisUber } from "../config/ambiente";
 
 // ---------------------------------------------------------------------------
@@ -290,7 +291,8 @@ export async function despacharUber(
   pedido: Pedido,
   cotacao: Cotacao,
   modo: ModoOperacao,
-  veiculo: PreferenciaVeiculo = "moto"
+  veiculo: PreferenciaVeiculo = "moto",
+  sequencia = 1
 ): Promise<ResultadoDespacho> {
   const cred = credenciaisUber(env, modo);
   const token = await getUberToken(env, modo);
@@ -304,12 +306,15 @@ export async function despacharUber(
       },
       body: JSON.stringify({
         quote_id: cotacao.quoteId,
+        // Identificador único por tentativa — evita duplicate_delivery no reenvio.
+        external_id: `${pedido.id}-${sequencia}`,
         ...pickupPayload(env),
         dropoff_address: enderecoFormatado(pedido.endereco),
         dropoff_name: pedido.cliente.nome,
         dropoff_phone_number: pedido.cliente.telefone,
         dropoff_latitude: pedido.endereco.lat,
         dropoff_longitude: pedido.endereco.lng,
+        dropoff_notes: observacaoParaEntregador(pedido),
         manifest_items: manifesto(pedido, veiculo),
 
         // CÓDIGO DE ENTREGA (PIN de 4 dígitos).

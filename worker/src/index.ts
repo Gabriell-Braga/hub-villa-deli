@@ -37,6 +37,8 @@ import {
   limparTokensAntigos,
   obterEntregaAoVivo,
   marcarEntregaManual,
+  proximaSequenciaEntrega,
+  prepararReenvio,
   enfileirarEventoCardapio,
   eventosCardapioPendentes,
 } from "./lib/store";
@@ -674,6 +676,21 @@ app.post("/api/entrega/:idPedido/concluir", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// 2d) Solicitar novo envio — quando faltou item e precisa de outra corrida
+//     POST /api/entrega/:idPedido/reenviar
+// ---------------------------------------------------------------------------
+app.post("/api/entrega/:idPedido/reenviar", async (c) => {
+  const r = await prepararReenvio(
+    c.env,
+    c.req.param("idPedido"),
+    c.get("usuario").email
+  );
+
+  if (!r.ok) return c.json({ erro: r.erro }, 400);
+  return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
 // 3) Cotação simultânea nos provedores LIGADOS
 //    GET /api/cotacao/:idPedido
 // ---------------------------------------------------------------------------
@@ -860,17 +877,27 @@ app.post("/api/despachar", async (c) => {
 
   try {
     const modo = await modoAtual(env);
+    const sequencia = await proximaSequenciaEntrega(env, idPedido);
     const resultado: ResultadoDespacho = await prov.despachar(
       env,
       pedido,
       cotacao,
       modo,
-      veiculo
+      veiculo,
+      sequencia
     );
 
     await concluirDespacho(env, idPedido, resultado);
     // Histórico para o relatório. Guarda quem clicou e se foi teste.
-    await registrarDelivery(env, pedido, cotacao, resultado, atendente.email, modo);
+    await registrarDelivery(
+      env,
+      pedido,
+      cotacao,
+      resultado,
+      atendente.email,
+      modo,
+      sequencia
+    );
 
     return c.json({ ok: true, ...resultado });
   } catch (e) {

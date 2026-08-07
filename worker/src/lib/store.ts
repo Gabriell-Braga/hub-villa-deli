@@ -345,9 +345,8 @@ export async function limparPedidosAntigos(env: Env, dias = 30): Promise<number>
 // ---------------------------------------------------------------------------
 
 /**
- * Grava a entrega no histórico. `INSERT OR IGNORE` porque UNIQUE(id_pedido) é
- * a última linha de defesa contra contar a mesma entrega duas vezes no
- * relatório, caso alguma corrida de código escape das travas do /api/despachar.
+ * Grava a entrega no histórico. UNIQUE(id_pedido, sequencia) impede duplicata
+ * da mesma tentativa; reenvios usam sequencia maior.
  */
 export async function registrarDelivery(
   env: Env,
@@ -356,21 +355,23 @@ export async function registrarDelivery(
   resultado: ResultadoDespacho,
   despachadoPor: string,
   /** Modo no momento do clique — é o que decide se saiu dinheiro de verdade. */
-  modo: ModoOperacao
+  modo: ModoOperacao,
+  sequencia: number
 ): Promise<void> {
   // Teste é qualquer um dos dois: pedido simulado, ou despacho com credencial
   // de sandbox. Basta um para a linha não ser uma venda real.
   const teste = pedido.teste || modo === "teste" ? 1 : 0;
 
   await env.DB.prepare(
-    `INSERT OR IGNORE INTO deliveries (
-       id_pedido, plataforma_escolhida, valor_pago, frete_cobrado,
+    `INSERT INTO deliveries (
+       id_pedido, sequencia, plataforma_escolhida, valor_pago, frete_cobrado,
        eta_minutos, status, data_criacao, delivery_id_externo, tracking_url,
        codigo_entrega, cliente_nome, bairro, valor_pedido, despachado_por, teste
-     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)`
+     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)`
   )
     .bind(
       pedido.id,
+      sequencia,
       resultado.provider,
       cotacao.preco ?? 0,
       // Congelado no momento do despacho, junto com o custo. Se a loja mudar a
@@ -389,6 +390,91 @@ export async function registrarDelivery(
       teste
     )
     .run();
+}
+
+/** Próxima sequência de entrega para este pedido (1 se for a primeira). */
+export async function proximaSequenciaEntrega(
+  env: Env,
+  idPedido: string
+): Promise<number> {
+  const l = await env.DB.prepare(
+    `SELECT COALESCE(MAX(sequencia), 0) + 1 AS n FROM deliveries WHERE id_pedido = ?1`
+  )
+    .bind(idPedido)
+    .first<{ n: number }>();
+
+  return l?.n ?? 1;
+}
+
+const STATUS_ENTREGA_ENCERRADA = new Set(["delivered", "canceled", "returned"]);
+
+/**
+ * Libera o pedido para nova cotação/despacho após entrega concluída.
+ *
+ * Usado quando falta item e precisa ir em outra corrida. O histórico da
+ * entrega anterior permanece em `deliveries`.
+ */
+export async function prepararReenvio(
+  env: Env,
+  idPedido: string,
+  quem: string
+): Promise<{ ok: boolean; erro?: string }> {
+  const pedido = await obterPedido(env, idPedido);
+  if (!pedido) return { ok: false, erro: "Pedido não encontrado." };
+
+  if (pedido.status !== "despachado") {
+    return {
+      ok: false,
+      erro: "Só é possível solicitar novo envio depois de despachar uma entrega.",
+    };
+  }
+
+  const entrega = await obterEntregaAoVivo(env, idPedido);
+  if (!entrega) {
+    return { ok: false, erro: "Nenhuma entrega encontrada para este pedido." };
+  }
+
+  const statusAtual = entrega.status ?? "";
+  if (!STATUS_ENTREGA_ENCERRADA.has(statusAtual)) {
+    return {
+      ok: false,
+      erro: "A entrega atual ainda está em andamento. Aguarde a conclusão.",
+    };
+  }
+
+  const r = await env.DB.prepare(
+    `UPDATE pedidos
+        SET status = 'recebido',
+            cotacoes = NULL,
+            cotado_em = NULL,
+            despacho = NULL,
+            despachado_em = NULL
+      WHERE id = ?1 AND status = 'despachado'`
+  )
+    .bind(idPedido)
+    .run();
+
+  if ((r.meta.changes ?? 0) === 0) {
+    return { ok: false, erro: "Não foi possível preparar o reenvio. Tente de novo." };
+  }
+
+  const agora = new Date().toISOString();
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO eventos_entrega
+       (id, provider, kind, status, delivery_id_externo, id_pedido,
+        criado_em_parceiro, recebido_em, live_mode, payload)
+     VALUES (?1, 'hub', 'reenvio.solicitado', NULL, ?2, ?3, ?4, ?4, NULL, ?5)`
+  )
+    .bind(
+      `reenvio:${idPedido}:${agora}`,
+      entrega.deliveryIdExterno,
+      idPedido,
+      agora,
+      JSON.stringify({ solicitadoPor: quem, statusAnterior: statusAtual })
+    )
+    .run();
+
+  return { ok: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -505,7 +591,10 @@ export async function marcarEntregaManual(
 ): Promise<{ ok: boolean; erro?: string }> {
   const l = await env.DB.prepare(
     `SELECT plataforma_escolhida, COALESCE(status_ao_vivo, status) AS atual
-       FROM deliveries WHERE id_pedido = ?1`
+       FROM deliveries
+      WHERE id_pedido = ?1
+      ORDER BY sequencia DESC
+      LIMIT 1`
   )
     .bind(idPedido)
     .first<{ plataforma_escolhida: string; atual: string }>();
@@ -527,7 +616,8 @@ export async function marcarEntregaManual(
     env.DB.prepare(
       `UPDATE deliveries
           SET status_ao_vivo = ?2, status = ?2, status_atualizado_em = ?3
-        WHERE id_pedido = ?1`
+        WHERE id_pedido = ?1
+          AND sequencia = (SELECT MAX(sequencia) FROM deliveries WHERE id_pedido = ?1)`
     ).bind(idPedido, status, agora),
 
     // Fica na trilha de eventos igual aos do parceiro, com quem confirmou.
@@ -557,7 +647,10 @@ export async function obterEntregaAoVivo(
     `SELECT plataforma_escolhida, delivery_id_externo, status, status_ao_vivo,
             status_atualizado_em, tracking_url, dropoff_eta,
             courier_nome, courier_telefone, courier_veiculo, live_mode
-       FROM deliveries WHERE id_pedido = ?1`
+       FROM deliveries
+      WHERE id_pedido = ?1
+      ORDER BY sequencia DESC
+      LIMIT 1`
   )
     .bind(idPedido)
     .first<{
@@ -629,7 +722,11 @@ export async function listarPedidos(
     `SELECT p.id, p.criado_em, p.status, p.dados, p.cotacoes, p.despacho,
             d.valor_pago
        FROM pedidos p
-       LEFT JOIN deliveries d ON d.id_pedido = p.id
+       LEFT JOIN deliveries d
+         ON d.id_pedido = p.id
+        AND d.sequencia = (
+          SELECT MAX(sequencia) FROM deliveries WHERE id_pedido = p.id
+        )
       WHERE ${filtro}
       ORDER BY p.criado_em DESC
       LIMIT ?1`

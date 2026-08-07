@@ -147,16 +147,21 @@ export default function CardEntrega({
   entrega,
   concluindo,
   onConcluir,
+  reenviando,
+  onReenviar,
 }: {
   despacho: Despacho;
   entrega: EntregaAoVivo | null;
   concluindo: boolean;
   onConcluir: (status: "delivered" | "canceled") => void;
+  reenviando?: boolean;
+  onReenviar?: () => void;
 }) {
   const status = entrega?.status ?? despacho.status;
   const rotulo = ROTULO_STATUS_ENTREGA[status] ?? status;
   const cancelado = status === "canceled" || status === "returned";
   const entregue = status === "delivered";
+  const encerrada = entregue || cancelado;
   const ehMotoboy = despacho.provider === "motoboy";
 
   // A trilha só faz sentido para quem manda status por webhook. O motoboy tem
@@ -325,6 +330,29 @@ export default function CardEntrega({
                 className={`${BOTAO} border border-red-200 bg-white text-red-700 hover:bg-red-50 disabled:opacity-50`}
               >
                 Cancelar entrega
+              </button>
+            </div>
+          </div>
+        )}
+
+        {onReenviar && (entregue || cancelado) && (
+          <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium text-amber-900">
+                  Precisou mandar outro envio?
+                </p>
+                <p className="mt-0.5 text-xs text-amber-700">
+                  Libera este pedido para uma nova cotação e despacho, caso tenha
+                  faltado algo na entrega anterior.
+                </p>
+              </div>
+              <button
+                onClick={onReenviar}
+                disabled={reenviando}
+                className={`${BOTAO} border border-amber-300 bg-white text-amber-800 hover:bg-amber-100 disabled:opacity-50`}
+              >
+                {reenviando ? "Solicitando..." : "Solicitar outro envio"}
               </button>
             </div>
           </div>

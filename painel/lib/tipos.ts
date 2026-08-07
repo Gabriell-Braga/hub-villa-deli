@@ -26,6 +26,8 @@ export interface Despacho {
   status: string;
   /** PIN que o cliente informa ao entregador na porta. Só o Uber tem. */
   codigoEntrega?: string | null;
+  /** Instruções para o motoboy (inclui Bag/Pizza Box). */
+  observacaoEntregador?: string;
 }
 
 export interface PedidoDetalhe {

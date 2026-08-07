@@ -84,6 +84,7 @@ export default function PaginaCotacao({
   const [despacho, setDespacho] = useState<Despacho | null>(null);
   const [entrega, setEntrega] = useState<EntregaAoVivo | null>(null);
   const [concluindo, setConcluindo] = useState(false);
+  const [reenviando, setReenviando] = useState(false);
   // Motivo pelo qual o servidor se recusou a cotar. Estado do pedido, não erro
   // de sistema — por isso não vai para o toast nem para o alerta vermelho.
   const [bloqueio, setBloqueio] = useState<"pagamento" | "cancelado" | null>(null);
@@ -188,6 +189,28 @@ export default function PaginaCotacao({
     }
   }
 
+  async function reenviar() {
+    setReenviando(true);
+    try {
+      const res = await apiFetch(`/api/entrega/${encodeURIComponent(idPedido)}/reenviar`, {
+        method: "POST",
+      });
+      const json = await res.json();
+
+      if (!res.ok) {
+        toast.erro(json.erro ?? "Não foi possível solicitar outro envio.");
+        return;
+      }
+
+      toast.sucesso("Outro envio preparado. O pedido voltou para cotação.");
+      await cotar();
+    } catch {
+      toast.erro("Erro de rede ao solicitar outro envio.");
+    } finally {
+      setReenviando(false);
+    }
+  }
+
   useEffect(() => {
     cotar();
   }, [cotar]);
@@ -289,6 +312,8 @@ export default function PaginaCotacao({
           entrega={entrega}
           concluindo={concluindo}
           onConcluir={concluir}
+          reenviando={reenviando}
+          onReenviar={reenviar}
         />
       )}
 

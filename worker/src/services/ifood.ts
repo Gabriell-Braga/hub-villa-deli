@@ -81,7 +81,9 @@ export async function despacharIfood(
   env: Env,
   pedido: Pedido,
   cotacao: Cotacao,
-  modo: ModoOperacao
+  modo: ModoOperacao,
+  _veiculo?: "moto" | "carro",
+  sequencia = 1
 ): Promise<ResultadoDespacho> {
   const token = await getIfoodToken(env, modo);
 
@@ -95,7 +97,7 @@ export async function despacharIfood(
       },
       body: JSON.stringify({
         quotationId: cotacao.quoteId,
-        externalOrderId: pedido.id,
+        externalOrderId: `${pedido.id}-${sequencia}`,
         customer: {
           name: pedido.cliente.nome,
           phone: pedido.cliente.telefone,

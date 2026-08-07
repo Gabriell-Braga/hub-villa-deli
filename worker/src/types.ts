@@ -222,6 +222,8 @@ export interface ResultadoDespacho {
    * Null quando o parceiro não oferece (é o caso do motoboy próprio).
    */
   codigoEntrega?: string | null;
+  /** Instruções enviadas ao entregador (motoboy próprio, sem API externa). */
+  observacaoEntregador?: string;
 }
 
 // ---------------------------------------------------------------------------

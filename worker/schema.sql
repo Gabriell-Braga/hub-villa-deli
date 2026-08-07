@@ -47,18 +47,13 @@ CREATE INDEX IF NOT EXISTS idx_pedidos_status    ON pedidos (status);
 -- propósito: `pedidos` é estado que muda e é limpo pelo cron; `deliveries` é
 -- o registro contábil que fica. Nunca sofre UPDATE de valor.
 --
--- UNIQUE(id_pedido) é a trava contra despacho duplicado no nível do banco: se
--- alguma corrida de código escapar, o INSERT falha em vez de contar duas vezes.
---
--- SEM FOREIGN KEY para `pedidos`, de propósito. A tabela `pedidos` é limpa
--- pelo cron depois de 30 dias; com FK, ou o DELETE do cron passaria a falhar,
--- ou o histórico seria apagado junto e o relatório perderia o passado. O
--- `id_pedido` aqui é uma referência histórica, não um vínculo de integridade.
+-- UNIQUE(id_pedido, sequencia) permite reenvio quando falta item no pedido.
+-- Cada tentativa vira uma linha no histórico contábil.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS deliveries (
   id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-  id_pedido             TEXT NOT NULL UNIQUE,
-  -- uber | ifood | 99 | motoboy
+  id_pedido             TEXT NOT NULL,
+  sequencia             INTEGER NOT NULL DEFAULT 1,
   plataforma_escolhida  TEXT NOT NULL,
   -- CUSTO: o que a loja pagou ao parceiro, em reais.
   valor_pago            REAL NOT NULL,
@@ -95,12 +90,14 @@ CREATE TABLE IF NOT EXISTS deliveries (
   courier_lng           REAL,
   -- false = evento de teste (credenciais de sandbox)
   live_mode             INTEGER,
-  teste                 INTEGER NOT NULL DEFAULT 0
+  teste                 INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(id_pedido, sequencia)
 );
 
 CREATE INDEX IF NOT EXISTS idx_deliveries_data       ON deliveries (data_criacao);
 CREATE INDEX IF NOT EXISTS idx_deliveries_plataforma ON deliveries (plataforma_escolhida, data_criacao);
 CREATE INDEX IF NOT EXISTS idx_deliveries_externo    ON deliveries (delivery_id_externo);
+CREATE INDEX IF NOT EXISTS idx_deliveries_pedido     ON deliveries (id_pedido, sequencia);
 
 
 -- ---------------------------------------------------------------------------

@@ -42,7 +42,9 @@ export interface Provedor {
     cotacao: Cotacao,
     modo: ModoOperacao,
     /** Veículo preferido. Provedor que não usa a informação simplesmente ignora. */
-    veiculo: PreferenciaVeiculo
+    veiculo: PreferenciaVeiculo,
+    /** Tentativa de entrega (1 = primeira corrida, 2+ = reenvio). */
+    sequencia: number
   ) => Promise<ResultadoDespacho>;
 }
 

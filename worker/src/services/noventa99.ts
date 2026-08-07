@@ -70,7 +70,9 @@ export async function despachar99(
   env: Env,
   pedido: Pedido,
   cotacao: Cotacao,
-  modo: ModoOperacao
+  modo: ModoOperacao,
+  _veiculo?: "moto" | "carro",
+  sequencia = 1
 ): Promise<ResultadoDespacho> {
   const token = await get99Token(env, modo);
 
@@ -82,7 +84,7 @@ export async function despachar99(
     },
     body: JSON.stringify({
       quoteId: cotacao.quoteId,
-      externalId: pedido.id,
+      externalId: `${pedido.id}-${sequencia}`,
       customer: {
         name: pedido.cliente.nome,
         phone: pedido.cliente.telefone,

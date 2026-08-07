@@ -1,5 +1,6 @@
 import type { Cotacao, Env, ModoOperacao, Pedido, ResultadoDespacho } from "../types";
 import { distanciaKm } from "../lib/geo";
+import { observacaoParaEntregador } from "../lib/observacao-entregador";
 import {
   ETA_BASE_MIN,
   ETA_MIN_POR_KM,
@@ -80,14 +81,19 @@ export async function despacharMotoboy(
   _env: Env,
   pedido: Pedido,
   _cotacao?: Cotacao, // assinatura uniforme com os demais provedores
-  _modo?: ModoOperacao
+  _modo?: ModoOperacao,
+  _veiculo?: "moto" | "carro",
+  sequencia = 1
 ): Promise<ResultadoDespacho> {
+  const observacaoEntregador = observacaoParaEntregador(pedido);
+
   // Aqui você notificaria seu motoboy (WhatsApp, painel interno, etc.).
   // Como é operação manual, apenas registramos e devolvemos um "tracking" interno.
   return {
     provider: "motoboy",
-    deliveryId: `motoboy-${pedido.id}`,
+    deliveryId: `motoboy-${pedido.id}-${sequencia}`,
     trackingUrl: null,
     status: "acionado",
+    observacaoEntregador,
   };
 }
