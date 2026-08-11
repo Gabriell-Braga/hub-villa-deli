@@ -210,39 +210,42 @@ Teste o fluxo inteiro:
 
 ## Parte 6 — Produção
 
-> Leia a seção **6.0** antes de rodar qualquer comando. Há duas coisas que
-> podem impedir a operação de funcionar no primeiro dia, e nenhuma delas se
-> resolve com código.
-
 O ambiente de produção é **novo e separado**: banco próprio, cache próprio,
 segredos próprios, projeto próprio na Vercel. Nada é compartilhado com
 homologação — é o que garante que um teste nunca toque em venda real.
 
+> **Os passos 6.1 a 6.6 já foram executados** em 11/08/2026. O Worker de
+> produção está no ar em `https://hub-logistico.hub-villa-deli.workers.dev`.
+> O que falta é a Vercel (6.7), o `PAINEL_ORIGIN` (6.8) e os webhooks (6.9).
+> As seções continuam aqui porque servem para o próximo cliente.
+
 ---
 
-### 6.0 Antes de começar: o que ainda depende de terceiros
+### 6.0 Antes de começar: o que depende de terceiros
 
-**1. A conta de produção do Uber não pode criar entregas.**
-Hoje o `wrangler.toml` de produção pede só o escopo `direct.organizations`. O
-escopo que autoriza despachar (`eats.deliveries`) está liberado apenas na conta
-de sandbox. Enquanto o Uber não habilitar o produto de entregas na conta real,
-**o card do Uber vai falhar em produção** e só o motoboy próprio despacha.
+**1. O raio do Uber é de 5 km em linha reta.**
+Acima disso ele recusa o endereço e só o motoboy próprio atende. É limite da
+conta, não do Hub, e aparece na mensagem de recusa deles com o número exato.
+Para ampliar, fale com o gerente (uberdirect@uber.com).
 
-Fale com o gerente da conta (uberdirect@uber.com) e peça o produto Direct
-liberado em produção. Quando liberarem, troque no `[env.producao.vars]`:
-
-```toml
-UBER_SCOPE = "direct.organizations eats.deliveries"
-```
-
-**2. O raio do Uber é de 5 km em linha reta.**
-Acima disso ele recusa o endereço, e só o motoboy próprio atende. É limite da
-conta, não do Hub. Também é assunto do gerente.
-
-**3. Rotacione os segredos antes de subir.**
+**2. Rotacione os segredos quando puder.**
 O Client Secret do Uber e o token do Cardápio Web passaram por conversa. Gere
-novos nos painéis dos parceiros e use os novos aqui. Os de homologação podem
-continuar como estão.
+novos nos painéis dos parceiros e cadastre com `wrangler secret put`.
+
+O token do Cardápio Web é o mesmo nos dois ambientes (a conta só tem um), então
+trocar exige atualizar HML e produção juntos, senão homologação para de ler
+pedidos.
+
+> **O que NÃO é problema, apesar de já ter parecido.** A conta de produção do
+> Uber tem sim o produto de entregas. Conferido em 11/08/2026 contra a API:
+> pedindo `direct.organizations eats.deliveries` o OAuth concede os dois, e uma
+> cotação real na conta de produção volta 200 com preço.
+>
+> Houve um período em que ela respondia `403 customer_blocked` e a conclusão
+> registrada aqui era de que faltava o produto. Era engano, ou a situação
+> mudou — de todo modo, `UBER_SCOPE` em produção precisa pedir **os dois**
+> escopos. Pedir menos limita o Hub sozinho, e a falha só apareceria na hora
+> de despachar.
 
 ---
 
@@ -460,17 +463,27 @@ Production** na versão que funcionava.
 
 ### Checklist final
 
-- [ ] Client Secret do Uber e token do Cardápio Web **rotacionados**
-- [ ] `JWT_SECRET` e `NEXTAUTH_SECRET` de produção diferentes dos de HML
-- [ ] Uber liberou `eats.deliveries` na conta real (senão só o motoboy despacha)
+Feito em 11/08/2026:
+
+- [x] Banco D1 e KV de produção criados, `wrangler.toml` preenchido
+- [x] Schema aplicado (sete tabelas), `seed.sql` **não** rodado
+- [x] Nove segredos cadastrados, `JWT_SECRET` diferente do de HML
+- [x] `UBER_SCOPE` de produção pedindo os dois escopos, conferido contra a API
+- [x] Worker publicado e respondendo
+- [x] Primeiro admin criado sem senha, com link de convite
+
+Falta:
+
+- [ ] Projeto do painel na Vercel, com `NEXTAUTH_SECRET` próprio
+- [ ] `PAINEL_ORIGIN` preenchido e Worker republicado
+- [ ] Primeiro login pelo link de convite
 - [ ] Webhook do Uber apontando para o Worker de produção
 - [ ] Webhook do Cardápio Web repontado (homologação para de receber)
-- [ ] `seed.sql` **não** rodado em produção
 - [ ] Tabela de raio do motoboy conferida contra as Regiões do Cardápio Web
-- [ ] Primeiro admin criado e login testado
 - [ ] Configurações 100% verde
 - [ ] Um pedido real validado ponta a ponta ainda em modo teste
 - [ ] Só então trocar o modo para produção
+- [ ] Client Secret do Uber e token do Cardápio Web rotacionados (pode ser depois)
 
 ---
 
