@@ -196,11 +196,11 @@ name = "hub-logistico"
 [[env.producao.d1_databases]]
 binding = "DB"
 database_name = "hub-logistico"
-database_id = "PREENCHER_COM_O_ID_DO_D1"
+database_id = "6b63b291-8a9f-467c-964b-082a2500ad2c"
 
 [[env.producao.kv_namespaces]]
 binding = "HUB_KV"
-id = "PREENCHER_COM_O_ID_DO_KV"
+id = "71eac8fe915d419ebb01c324687977f1"
 
 [env.producao.triggers]
 crons = ["*/5 * * * *", "0 4 * * *"]
