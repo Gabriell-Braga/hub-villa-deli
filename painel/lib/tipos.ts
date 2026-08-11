@@ -2,7 +2,14 @@
 // e o Worker são deployados separados, então um `import` entre eles criaria um
 // acoplamento de build que não existe em runtime.
 
-export type ProviderId = "uber" | "ifood" | "99" | "motoboy";
+/**
+ * Quem executou a entrega.
+ *
+ * `outra` não é parceiro integrado: marca entrega feita por fora do Hub
+ * (iFood ou 99, ainda sem integração), para o pedido sair da fila sem sumir do
+ * histórico.
+ */
+export type ProviderId = "uber" | "ifood" | "99" | "motoboy" | "outra";
 export type Papel = "atendente" | "admin";
 export type StatusPedido = "recebido" | "cotado" | "despachando" | "despachado";
 
@@ -105,6 +112,26 @@ export const COR_STATUS_ENTREGA: Record<string, string> = {
   returned: "bg-red-50 text-red-700 ring-red-200",
 };
 
+/** Corrida que já aconteceu, quando o pedido foi reenviado. Vem do banco. */
+export interface EntregaAnterior {
+  provider: ProviderId;
+  /** 1 = primeira corrida do pedido, 2 = primeiro reenvio, e assim por diante. */
+  sequencia: number;
+  status: string;
+  dataCriacao: string;
+  statusAtualizadoEm: string | null;
+  valorPago: number;
+  freteCobrado: number;
+  etaMinutos: number | null;
+  deliveryIdExterno: string | null;
+  trackingUrl: string | null;
+  codigoEntrega: string | null;
+  courierNome: string | null;
+  courierTelefone: string | null;
+  courierVeiculo: string | null;
+  despachadoPor: string | null;
+}
+
 export interface CotacaoResponse {
   idPedido: string;
   pedido: PedidoDetalhe;
@@ -112,6 +139,8 @@ export interface CotacaoResponse {
   cotacoes: Cotacao[];
   despacho: Despacho | null;
   entrega: EntregaAoVivo | null;
+  /** Preenchida só quando o pedido foi reenviado e ainda não há novo despacho. */
+  entregaAnterior: EntregaAnterior | null;
 }
 
 export interface PedidoResumo {
@@ -175,6 +204,7 @@ export interface Estatisticas {
 
 export const ROTULO_PROVEDOR: Record<ProviderId, string> = {
   uber: "Uber Direct",
+  outra: "Outra plataforma",
   ifood: "iFood Entrega Fácil",
   "99": "99 Entregas",
   motoboy: "Motoboy Próprio",
@@ -183,6 +213,8 @@ export const ROTULO_PROVEDOR: Record<ProviderId, string> = {
 /** Cores por plataforma — usadas nos gráficos e badges. */
 export const COR_PROVEDOR: Record<ProviderId, string> = {
   uber: "#111827",
+  // Cinza claro: não é marca de ninguém, é ausência de parceiro.
+  outra: "#9CA3AF",
   ifood: "#EA1D2C",
   "99": "#FFC700",
   motoboy: "#6B7280", // cinza neutro: o motoboy é "da casa", sem marca de parceiro

@@ -13,6 +13,7 @@ import CardEntrega from "@/components/CardEntrega";
 import SeloTeste from "@/components/SeloTeste";
 import SeloOrigem from "@/components/SeloOrigem";
 import ModalVeiculo, { type Veiculo } from "@/components/ModalVeiculo";
+import UltimaEntrega from "@/components/UltimaEntrega";
 import { useToast } from "@/components/Toast";
 import { brl, brlOuGratis, dataHora } from "@/lib/formato";
 import {
@@ -94,10 +95,6 @@ export default function PaginaCotacao({
     provider: ProviderId;
     nome: string;
   } | null>(null);
-  const [entregaAnterior, setEntregaAnterior] = useState<{
-    entrega: EntregaAoVivo | null;
-    despacho: Despacho | null;
-  } | null>(null);
 
   const cotar = useCallback(async () => {
     setCarregando(true);
@@ -149,7 +146,6 @@ export default function PaginaCotacao({
       }
 
       setDespacho(json);
-      setEntregaAnterior(null); // Limpa a entrega anterior quando novo despacho é feito
       toast.sucesso(
         json.jaDespachado
           ? "Este pedido já havia sido despachado. Nenhuma corrida nova foi criada."
@@ -197,10 +193,6 @@ export default function PaginaCotacao({
   async function reenviar() {
     setReenviando(true);
     try {
-      // Captura a entrega anterior antes de fazer o reenvio
-      const entregaCapturada = entrega;
-      const despachoCapturado = despacho;
-
       const res = await apiFetch(`/api/entrega/${encodeURIComponent(idPedido)}/reenviar`, {
         method: "POST",
       });
@@ -210,12 +202,6 @@ export default function PaginaCotacao({
         toast.erro(json.erro ?? "Não foi possível solicitar outro envio.");
         return;
       }
-
-      // Salva a entrega anterior no estado
-      setEntregaAnterior({
-        entrega: entregaCapturada ?? null,
-        despacho: despachoCapturado ?? null,
-      });
 
       toast.sucesso("Outro envio preparado. O pedido voltou para cotação.");
       await cotar();
@@ -449,37 +435,8 @@ export default function PaginaCotacao({
             )}
 
           {/* Detalhes da última entrega (quando há reenvio) */}
-          {entregaAnterior && entregaAnterior.despacho && (
-            <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5">
-              <h3 className="text-sm font-semibold text-amber-900">Última entrega</h3>
-              <dl className="mt-3 space-y-2 text-sm">
-                <div>
-                  <dt className="text-amber-700">Plataforma</dt>
-                  <dd className="text-amber-900">{entregaAnterior.despacho.provider}</dd>
-                </div>
-                {entregaAnterior.entrega?.status && (
-                  <div>
-                    <dt className="text-amber-700">Status</dt>
-                    <dd className="text-amber-900 capitalize">{entregaAnterior.entrega.status}</dd>
-                  </div>
-                )}
-                {entregaAnterior.despacho.trackingUrl && (
-                  <div>
-                    <dt className="text-amber-700">Rastreamento</dt>
-                    <dd>
-                      <a
-                        href={entregaAnterior.despacho.trackingUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-amber-600 hover:text-amber-900 underline"
-                      >
-                        Ver detalhes →
-                      </a>
-                    </dd>
-                  </div>
-                )}
-              </dl>
-            </div>
+          {dados?.entregaAnterior && (
+            <UltimaEntrega entrega={dados.entregaAnterior} />
           )}
         </section>
 

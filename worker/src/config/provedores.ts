@@ -75,6 +75,20 @@ export const PROVEDORES: Record<ProviderId, Provedor> = {
     cotar: cotar99,
     despachar: despachar99,
   },
+  // NÃO é um parceiro: marca entregas feitas por fora do Hub. Nunca é cotado
+  // nem despachado, por isso as funções recusam. Precisa existir aqui porque
+  // `nomeProvedor` é o que dá nome a ele nas telas e no CSV.
+  outra: {
+    id: "outra",
+    nome: "Outra plataforma",
+    ativo: false,
+    cotar: async () => {
+      throw new Error("Outra plataforma não é cotável pelo Hub.");
+    },
+    despachar: async () => {
+      throw new Error("Outra plataforma não é despachável pelo Hub.");
+    },
+  },
   motoboy: {
     id: "motoboy",
     nome: "Motoboy Próprio",

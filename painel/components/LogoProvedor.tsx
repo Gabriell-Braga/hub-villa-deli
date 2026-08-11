@@ -24,7 +24,13 @@ const CORES: Record<ProviderId, { fundo: string; texto: string }> = {
   ifood: { fundo: COR_PROVEDOR.ifood, texto: "#FFFFFF" },
   "99": { fundo: COR_PROVEDOR["99"], texto: "#000000" },
   motoboy: { fundo: "var(--marca-primaria)", texto: "var(--marca-contraste)" },
+  // "Outra plataforma" não é marca de ninguém: cinza, e um ícone de caixa em
+  // vez de wordmark.
+  outra: { fundo: COR_PROVEDOR.outra, texto: "#FFFFFF" },
 };
+
+/** Cor de emergência. Um provedor novo no banco não pode derrubar a tela. */
+const NEUTRO = { fundo: "#9CA3AF", texto: "#FFFFFF" };
 
 /** Wordmark de cada parceiro, já ajustado para caber no quadrado. */
 const MARCA: Partial<Record<ProviderId, { texto: string; tamanho: number }>> = {
@@ -42,8 +48,9 @@ export default function LogoProvedor({
   tamanho?: number;
   className?: string;
 }) {
-  const cor = CORES[provider];
+  const cor = CORES[provider] ?? NEUTRO;
   const marca = MARCA[provider];
+  const ehOutra = provider === "outra";
 
   return (
     <svg
@@ -51,12 +58,26 @@ export default function LogoProvedor({
       width={tamanho}
       height={tamanho}
       role="img"
-      aria-label={ROTULO_PROVEDOR[provider]}
+      aria-label={ROTULO_PROVEDOR[provider] ?? provider}
       className={`shrink-0 ${className}`}
     >
       <rect width="32" height="32" rx="7" fill={cor.fundo} />
 
-      {marca ? (
+      {ehOutra ? (
+        // Caixa de encomenda: entrega que aconteceu, mas não por aqui. Sem
+        // wordmark porque não há marca — é a ausência de parceiro integrado.
+        <g
+          fill="none"
+          stroke={cor.texto}
+          strokeWidth="1.9"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M6.5 11.5 L16 8 L25.5 11.5 V21 L16 24.5 L6.5 21 Z" />
+          <path d="M6.5 11.5 L16 15 L25.5 11.5" />
+          <path d="M16 15 V24.5" />
+        </g>
+      ) : marca ? (
         <text
           x="16"
           y="16"

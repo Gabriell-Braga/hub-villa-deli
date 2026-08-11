@@ -36,6 +36,7 @@ import {
   invalidarTokensDoUsuario,
   limparTokensAntigos,
   obterEntregaAoVivo,
+  obterEntregaAnterior,
   marcarEntregaManual,
   marcarEntregasEmLote,
   proximaSequenciaEntrega,
@@ -676,7 +677,17 @@ app.post("/api/entrega/:idPedido/concluir", async (c) => {
   return c.json({ ok: true, status });
 });
 
-app.post("/api/entrega/lotes/concluir", async (c) => {
+// ---------------------------------------------------------------------------
+// 2c-bis) Fechar vários pedidos como entregues por OUTRA plataforma
+//         POST /api/entrega/concluir-lote  { ids: [...] }
+//
+// O caminho tem DOIS segmentos de propósito. A primeira versão era
+// /api/entrega/lotes/concluir, que tem o mesmo formato de
+// /api/entrega/:idPedido/concluir — e o Hono casava a rota de parâmetro
+// primeiro, com idPedido="lotes". A rota de lote nunca era alcançada, e o erro
+// que voltava vinha da outra função.
+// ---------------------------------------------------------------------------
+app.post("/api/entrega/concluir-lote", async (c) => {
   const body = await c.req.json<{ ids?: string[] }>().catch(() => null);
   const ids = Array.isArray(body?.ids) ? body.ids.filter(Boolean) : [];
 
@@ -811,7 +822,19 @@ app.get("/api/cotacao/:idPedido", async (c) => {
   // Estado ao vivo vindo dos webhooks do parceiro (entregador, ETA, status).
   const entrega = await obterEntregaAoVivo(env, idPedido);
 
-  return c.json({ idPedido, pedido, maisBarato, cotacoes, despacho, entrega });
+  // Sem despacho atual mas com entrega no histórico = o pedido foi reenviado.
+  // A corrida que já aconteceu continua na tela, agora vinda do banco.
+  const entregaAnterior = despacho ? null : await obterEntregaAnterior(env, idPedido);
+
+  return c.json({
+    idPedido,
+    pedido,
+    maisBarato,
+    cotacoes,
+    despacho,
+    entrega,
+    entregaAnterior,
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -904,15 +927,7 @@ app.post("/api/despachar", async (c) => {
 
     await concluirDespacho(env, idPedido, resultado);
     // Histórico para o relatório. Guarda quem clicou e se foi teste.
-    await registrarDelivery(
-      env,
-      pedido,
-      cotacao,
-      resultado,
-      atendente.email,
-      modo,
-      sequencia
-    );
+    await registrarDelivery(env, pedido, cotacao, resultado, atendente.email, modo);
 
     return c.json({ ok: true, ...resultado });
   } catch (e) {

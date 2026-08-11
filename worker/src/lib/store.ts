@@ -1,5 +1,6 @@
 import type {
   Cotacao,
+  EntregaAnterior,
   EntregaAoVivo,
   Env,
   EstadoEntrega,
@@ -345,8 +346,15 @@ export async function limparPedidosAntigos(env: Env, dias = 30): Promise<number>
 // ---------------------------------------------------------------------------
 
 /**
- * Grava a entrega no histórico. UNIQUE(id_pedido, sequencia) impede duplicata
- * da mesma tentativa; reenvios usam sequencia maior.
+ * Grava a entrega no histórico.
+ *
+ * A sequência é calculada DENTRO do INSERT, não lida antes: dois cliques
+ * simultâneos leriam o mesmo máximo e o segundo estouraria a UNIQUE. Deixando
+ * o SQLite resolver, o pior caso vira uma linha a mais, não um erro 500.
+ *
+ * `INSERT OR IGNORE` continua sendo a última linha de defesa contra contar a
+ * mesma entrega duas vezes no relatório, caso alguma corrida de código escape
+ * das travas do /api/despachar.
  */
 export async function registrarDelivery(
   env: Env,
@@ -355,80 +363,67 @@ export async function registrarDelivery(
   resultado: ResultadoDespacho,
   despachadoPor: string,
   /** Modo no momento do clique — é o que decide se saiu dinheiro de verdade. */
-  modo: ModoOperacao,
-  sequencia: number
+  modo: ModoOperacao
 ): Promise<void> {
   // Teste é qualquer um dos dois: pedido simulado, ou despacho com credencial
   // de sandbox. Basta um para a linha não ser uma venda real.
   const teste = pedido.teste || modo === "teste" ? 1 : 0;
 
-  const colunas = await env.DB.prepare(
-    `PRAGMA table_info(deliveries)`
-  ).all<{ name: string }>();
-  const temSequencia = (colunas.results ?? []).some((c) => c.name === "sequencia");
-
-  const sql = temSequencia
-    ? `INSERT INTO deliveries (
-         id_pedido, sequencia, plataforma_escolhida, valor_pago, frete_cobrado,
-         eta_minutos, status, data_criacao, delivery_id_externo, tracking_url,
-         codigo_entrega, cliente_nome, bairro, valor_pedido, despachado_por, teste
-       ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)`
-    : `INSERT INTO deliveries (
-         id_pedido, plataforma_escolhida, valor_pago, frete_cobrado,
-         eta_minutos, status, data_criacao, delivery_id_externo, tracking_url,
-         codigo_entrega, cliente_nome, bairro, valor_pedido, despachado_por, teste
-       ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)`;
-
-  const bind = temSequencia
-    ? [
-        pedido.id,
-        sequencia,
-        resultado.provider,
-        cotacao.preco ?? 0,
-        pedido.freteCobrado ?? 0,
-        cotacao.etaMinutos,
-        resultado.status,
-        new Date().toISOString(),
-        resultado.deliveryId,
-        resultado.trackingUrl,
-        resultado.codigoEntrega ?? null,
-        pedido.cliente.nome,
-        pedido.endereco.bairro,
-        pedido.total,
-        despachadoPor,
-        teste,
-      ]
-    : [
-        pedido.id,
-        resultado.provider,
-        cotacao.preco ?? 0,
-        pedido.freteCobrado ?? 0,
-        cotacao.etaMinutos,
-        resultado.status,
-        new Date().toISOString(),
-        resultado.deliveryId,
-        resultado.trackingUrl,
-        resultado.codigoEntrega ?? null,
-        pedido.cliente.nome,
-        pedido.endereco.bairro,
-        pedido.total,
-        despachadoPor,
-        teste,
-      ];
-
-  await env.DB.prepare(sql).bind(...bind).run();
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO deliveries (
+       id_pedido, sequencia, plataforma_escolhida, valor_pago, frete_cobrado,
+       eta_minutos, status, data_criacao, delivery_id_externo, tracking_url,
+       codigo_entrega, cliente_nome, bairro, valor_pedido, despachado_por, teste
+     ) VALUES (
+       ?1,
+       (SELECT COALESCE(MAX(sequencia), 0) + 1 FROM deliveries WHERE id_pedido = ?1),
+       ?2, ?3,
+       -- FRETE COBRADO SÓ NA PRIMEIRA CORRIDA.
+       --
+       -- O cliente pagou o frete uma vez. Repetir o valor no reenvio somaria
+       -- duas receitas para uma cobrança e o relatório mostraria lucro onde
+       -- houve prejuízo — o reenvio é exatamente o caso em que a loja paga
+       -- duas corridas e recebeu por uma.
+       CASE
+         WHEN (SELECT COUNT(*) FROM deliveries WHERE id_pedido = ?1) = 0 THEN ?4
+         ELSE 0
+       END,
+       ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15
+     )`
+  )
+    .bind(
+      pedido.id,
+      resultado.provider,
+      cotacao.preco ?? 0,
+      // Congelado no momento do despacho, junto com o custo. Se a loja mudar a
+      // tabela de frete amanhã, o resultado de hoje continua sendo o de hoje.
+      pedido.freteCobrado ?? 0,
+      cotacao.etaMinutos,
+      resultado.status,
+      new Date().toISOString(),
+      resultado.deliveryId,
+      resultado.trackingUrl,
+      resultado.codigoEntrega ?? null,
+      pedido.cliente.nome,
+      pedido.endereco.bairro,
+      pedido.total,
+      despachadoPor,
+      teste
+    )
+    .run();
 }
 
-/** Próxima sequência de entrega para este pedido (1 se for a primeira). */
+/**
+ * Quantas corridas este pedido já teve.
+ *
+ * Usada só para compor identificadores externos (o `external_id` do Uber e o
+ * id interno do motoboy), que precisam ser distintos entre reenvios. A gravação
+ * do histórico não depende disto: ela resolve a sequência no próprio INSERT.
+ */
 export async function proximaSequenciaEntrega(
   env: Env,
   idPedido: string
 ): Promise<number> {
-  const colunas = await env.DB.prepare(`PRAGMA table_info(deliveries)`).all<{ name: string }>();
-  const temSequencia = (colunas.results ?? []).some((c) => c.name === "sequencia");
-
-  if (!temSequencia) return 1;
-
   const l = await env.DB.prepare(
     `SELECT COALESCE(MAX(sequencia), 0) + 1 AS n FROM deliveries WHERE id_pedido = ?1`
   )
@@ -605,15 +600,86 @@ export async function aplicarEstadoEntrega(
 }
 
 /**
- * Marca a entrega do motoboy próprio como concluída (ou cancelada).
+ * A corrida anterior de um pedido que voltou para cotação.
  *
- * Existe porque o motoboy não tem webhook: sem isto o status dele fica em
- * "Acionado" para sempre, e o histórico nunca mostra o que de fato aconteceu.
- * Quem confirma é o atendente, na tela do pedido.
+ * Só devolve algo quando o pedido NÃO está despachado e já tem entrega no
+ * histórico, que é exatamente o estado depois de um reenvio: a corrida antiga
+ * aconteceu, a nova ainda não foi escolhida.
  *
- * Restrito ao motoboy de propósito. Deixar um atendente escrever o status de
- * uma corrida da Uber criaria um dado que discorda do parceiro — e o parceiro
- * é a fonte da verdade quando existe webhook.
+ * Vem do banco de propósito. A versão anterior guardava isso no estado do
+ * React, e bastava atualizar a página para a entrega que já tinha acontecido
+ * desaparecer da tela.
+ */
+export async function obterEntregaAnterior(
+  env: Env,
+  idPedido: string
+): Promise<EntregaAnterior | null> {
+  const l = await env.DB.prepare(
+    `SELECT plataforma_escolhida, sequencia, COALESCE(status_ao_vivo, status) AS status,
+            data_criacao, status_atualizado_em, valor_pago, frete_cobrado,
+            eta_minutos, delivery_id_externo, tracking_url, codigo_entrega,
+            courier_nome, courier_telefone, courier_veiculo, despachado_por
+       FROM deliveries
+      WHERE id_pedido = ?1
+      ORDER BY sequencia DESC
+      LIMIT 1`
+  )
+    .bind(idPedido)
+    .first<{
+      plataforma_escolhida: string;
+      sequencia: number;
+      status: string;
+      data_criacao: string;
+      status_atualizado_em: string | null;
+      valor_pago: number;
+      frete_cobrado: number;
+      eta_minutos: number | null;
+      delivery_id_externo: string | null;
+      tracking_url: string | null;
+      codigo_entrega: string | null;
+      courier_nome: string | null;
+      courier_telefone: string | null;
+      courier_veiculo: string | null;
+      despachado_por: string | null;
+    }>();
+
+  if (!l) return null;
+
+  return {
+    provider: l.plataforma_escolhida as ProviderId,
+    sequencia: l.sequencia,
+    status: l.status,
+    dataCriacao: l.data_criacao,
+    statusAtualizadoEm: l.status_atualizado_em,
+    valorPago: l.valor_pago,
+    freteCobrado: l.frete_cobrado ?? 0,
+    etaMinutos: l.eta_minutos,
+    deliveryIdExterno: l.delivery_id_externo,
+    trackingUrl: l.tracking_url,
+    codigoEntrega: l.codigo_entrega,
+    courierNome: l.courier_nome,
+    courierTelefone: l.courier_telefone,
+    courierVeiculo: l.courier_veiculo,
+    despachadoPor: l.despachado_por,
+  };
+}
+
+/**
+ * Fecha vários pedidos de uma vez como entregues por OUTRA plataforma.
+ *
+ * Existe por uma lacuna real: iFood e 99 ainda não estão integrados, mas a
+ * loja entrega por eles. Sem isto, esses pedidos ficariam para sempre na fila
+ * de "em aberto", e a tela que deveria mostrar o que falta fazer viraria uma
+ * lista de coisas já feitas.
+ *
+ * DINHEIRO FICA ZERADO nos dois lados, de propósito. O Hub não cotou nem
+ * despachou esta corrida: não sabe o que a loja pagou ao parceiro. Registrar o
+ * frete cobrado sem o custo faria o relatório mostrar lucro cheio numa entrega
+ * cuja despesa ele desconhece. Zero nos dois é a única leitura honesta, e a
+ * plataforma "outra" na tela explica por que os valores estão assim.
+ *
+ * Por isso também estas linhas ficam FORA dos Relatórios (ver estatisticas.ts)
+ * e visíveis no Histórico: o pedido continua rastreável, sem contaminar conta.
  */
 export async function marcarEntregasEmLote(
   env: Env,
@@ -644,93 +710,60 @@ export async function marcarEntregasEmLote(
       continue;
     }
 
-    const colunas = await env.DB.prepare(`PRAGMA table_info(deliveries)`).all<{ name: string }>();
-    const temSequencia = (colunas.results ?? []).some((c) => c.name === "sequencia");
-    const sequencia = await proximaSequenciaEntrega(env, idPedido);
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO deliveries (
+         id_pedido, sequencia, plataforma_escolhida, valor_pago, frete_cobrado,
+         eta_minutos, status, data_criacao, cliente_nome, bairro, valor_pedido,
+         despachado_por, status_ao_vivo, status_atualizado_em, teste
+       ) VALUES (
+         ?1,
+         (SELECT COALESCE(MAX(sequencia), 0) + 1 FROM deliveries WHERE id_pedido = ?1),
+         'outra', 0, 0, NULL, 'delivered', ?2, ?3, ?4, ?5, ?6, 'delivered', ?2, ?7
+       )`
+    )
+      .bind(
+        idPedido,
+        agora,
+        pedido.cliente?.nome ?? null,
+        pedido.endereco?.bairro ?? null,
+        pedido.total ?? 0,
+        quem,
+        pedido.teste ? 1 : 0
+      )
+      .run();
 
-    const sql = temSequencia
-      ? `INSERT INTO deliveries (
-           id_pedido, sequencia, plataforma_escolhida, valor_pago, frete_cobrado,
-           eta_minutos, status, data_criacao, delivery_id_externo, tracking_url,
-           codigo_entrega, cliente_nome, bairro, valor_pedido, despachado_por,
-           status_ao_vivo, status_atualizado_em, teste
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)`
-      : `INSERT INTO deliveries (
-           id_pedido, plataforma_escolhida, valor_pago, frete_cobrado,
-           eta_minutos, status, data_criacao, delivery_id_externo, tracking_url,
-           codigo_entrega, cliente_nome, bairro, valor_pedido, despachado_por,
-           status_ao_vivo, status_atualizado_em, teste
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)`;
-
-    const bind = temSequencia
-      ? [
-          idPedido,
-          sequencia,
-          "manual",
-          0,
-          pedido.freteCobrado ?? 0,
-          null,
-          "delivered",
-          agora,
-          null,
-          null,
-          null,
-          pedido.cliente?.nome ?? null,
-          pedido.endereco?.bairro ?? null,
-          pedido.total ?? 0,
-          quem,
-          "delivered",
-          agora,
-          pedido.teste ? 1 : 0,
-        ]
-      : [
-          idPedido,
-          "manual",
-          0,
-          pedido.freteCobrado ?? 0,
-          null,
-          "delivered",
-          agora,
-          null,
-          null,
-          null,
-          pedido.cliente?.nome ?? null,
-          pedido.endereco?.bairro ?? null,
-          pedido.total ?? 0,
-          quem,
-          "delivered",
-          agora,
-          pedido.teste ? 1 : 0,
-        ];
-
-    await env.DB.prepare(sql).bind(...bind).run();
     processados += 1;
   }
 
   return { ok: true, processados, ignorados };
 }
 
+/**
+ * Marca a entrega do motoboy próprio como concluída (ou cancelada).
+ *
+ * Existe porque o motoboy não tem webhook: sem isto o status dele fica em
+ * "Acionado" para sempre, e o histórico nunca mostra o que de fato aconteceu.
+ * Quem confirma é o atendente, na tela do pedido.
+ *
+ * Restrito ao motoboy de propósito. Deixar um atendente escrever o status de
+ * uma corrida da Uber criaria um dado que discorda do parceiro, e o parceiro
+ * é a fonte da verdade quando existe webhook.
+ *
+ * Age sempre na ÚLTIMA corrida do pedido: depois de um reenvio há mais de uma,
+ * e a que o atendente tem na tela é a mais recente.
+ */
 export async function marcarEntregaManual(
   env: Env,
   idPedido: string,
   status: "delivered" | "canceled",
   quem: string
 ): Promise<{ ok: boolean; erro?: string }> {
-  const colunas = await env.DB.prepare(`PRAGMA table_info(deliveries)`).all<{ name: string }>();
-  const temSequencia = (colunas.results ?? []).some((c) => c.name === "sequencia");
-
   const l = await env.DB.prepare(
-    temSequencia
-      ? `SELECT plataforma_escolhida, COALESCE(status_ao_vivo, status) AS atual
-         FROM deliveries
-        WHERE id_pedido = ?1
-        ORDER BY sequencia DESC
-        LIMIT 1`
-      : `SELECT plataforma_escolhida, COALESCE(status_ao_vivo, status) AS atual
-         FROM deliveries
-        WHERE id_pedido = ?1
-        ORDER BY id DESC
-        LIMIT 1`
+    `SELECT plataforma_escolhida, COALESCE(status_ao_vivo, status) AS atual
+       FROM deliveries
+      WHERE id_pedido = ?1
+      ORDER BY sequencia DESC
+      LIMIT 1`
   )
     .bind(idPedido)
     .first<{ plataforma_escolhida: string; atual: string }>();
@@ -750,15 +783,10 @@ export async function marcarEntregaManual(
 
   await env.DB.batch([
     env.DB.prepare(
-      temSequencia
-        ? `UPDATE deliveries
-            SET status_ao_vivo = ?2, status = ?2, status_atualizado_em = ?3
-          WHERE id_pedido = ?1
-            AND sequencia = (SELECT MAX(sequencia) FROM deliveries WHERE id_pedido = ?1)`
-        : `UPDATE deliveries
-            SET status_ao_vivo = ?2, status = ?2, status_atualizado_em = ?3
-          WHERE id_pedido = ?1
-            AND id = (SELECT MAX(id) FROM deliveries WHERE id_pedido = ?1)`
+      `UPDATE deliveries
+          SET status_ao_vivo = ?2, status = ?2, status_atualizado_em = ?3
+        WHERE id_pedido = ?1
+          AND sequencia = (SELECT MAX(sequencia) FROM deliveries WHERE id_pedido = ?1)`
     ).bind(idPedido, status, agora),
 
     // Fica na trilha de eventos igual aos do parceiro, com quem confirmou.
@@ -784,25 +812,16 @@ export async function obterEntregaAoVivo(
   env: Env,
   idPedido: string
 ): Promise<EntregaAoVivo | null> {
-  const colunas = await env.DB.prepare(`PRAGMA table_info(deliveries)`).all<{ name: string }>();
-  const temSequencia = (colunas.results ?? []).some((c) => c.name === "sequencia");
-
+  // A MAIS RECENTE. Depois de um reenvio o pedido tem várias corridas, e a
+  // que o painel acompanha é a última.
   const l = await env.DB.prepare(
-    temSequencia
-      ? `SELECT plataforma_escolhida, delivery_id_externo, status, status_ao_vivo,
-              status_atualizado_em, tracking_url, dropoff_eta,
-              courier_nome, courier_telefone, courier_veiculo, live_mode
-         FROM deliveries
-        WHERE id_pedido = ?1
-        ORDER BY sequencia DESC
-        LIMIT 1`
-      : `SELECT plataforma_escolhida, delivery_id_externo, status, status_ao_vivo,
-              status_atualizado_em, tracking_url, dropoff_eta,
-              courier_nome, courier_telefone, courier_veiculo, live_mode
-         FROM deliveries
-        WHERE id_pedido = ?1
-        ORDER BY id DESC
-        LIMIT 1`
+    `SELECT plataforma_escolhida, delivery_id_externo, status, status_ao_vivo,
+            status_atualizado_em, tracking_url, dropoff_eta,
+            courier_nome, courier_telefone, courier_veiculo, live_mode
+       FROM deliveries
+      WHERE id_pedido = ?1
+      ORDER BY sequencia DESC
+      LIMIT 1`
   )
     .bind(idPedido)
     .first<{
@@ -870,33 +889,20 @@ export async function listarPedidos(
     ? `p.status IN ('recebido', 'cotado', 'despachando') AND ${naoCancelado}`
     : `p.status = 'despachado'`;
 
-  const colunas = await env.DB.prepare(`PRAGMA table_info(deliveries)`).all<{ name: string }>();
-  const temSequencia = (colunas.results ?? []).some((c) => c.name === "sequencia");
-
+  // O JOIN casa só a ÚLTIMA corrida de cada pedido. Sem a condição de
+  // sequência, um pedido reenviado apareceria duas vezes na lista.
   const { results } = await env.DB.prepare(
-    temSequencia
-      ? `SELECT p.id, p.criado_em, p.status, p.dados, p.cotacoes, p.despacho,
-                d.valor_pago
-           FROM pedidos p
-           LEFT JOIN deliveries d
-             ON d.id_pedido = p.id
-            AND d.sequencia = (
-              SELECT MAX(sequencia) FROM deliveries WHERE id_pedido = p.id
-            )
-          WHERE ${filtro}
-          ORDER BY p.criado_em DESC
-          LIMIT ?1`
-      : `SELECT p.id, p.criado_em, p.status, p.dados, p.cotacoes, p.despacho,
-                d.valor_pago
-           FROM pedidos p
-           LEFT JOIN deliveries d
-             ON d.id_pedido = p.id
-            AND d.id = (
-              SELECT MAX(id) FROM deliveries WHERE id_pedido = p.id
-            )
-          WHERE ${filtro}
-          ORDER BY p.criado_em DESC
-          LIMIT ?1`
+    `SELECT p.id, p.criado_em, p.status, p.dados, p.cotacoes, p.despacho,
+            d.valor_pago
+       FROM pedidos p
+       LEFT JOIN deliveries d
+         ON d.id_pedido = p.id
+        AND d.sequencia = (
+          SELECT MAX(sequencia) FROM deliveries WHERE id_pedido = p.id
+        )
+      WHERE ${filtro}
+      ORDER BY p.criado_em DESC
+      LIMIT ?1`
   )
     .bind(limite)
     .all<LinhaLista>();

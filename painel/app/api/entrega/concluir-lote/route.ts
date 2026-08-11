@@ -5,5 +5,5 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   const body = await req.text();
-  return chamarHub(req, "/api/entrega/lotes/concluir", { method: "POST", body });
+  return chamarHub(req, "/api/entrega/concluir-lote", { method: "POST", body });
 }

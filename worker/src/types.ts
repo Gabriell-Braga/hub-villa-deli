@@ -96,7 +96,14 @@ export interface Env {
 // ---------------------------------------------------------------------------
 // Domínio
 // ---------------------------------------------------------------------------
-export type ProviderId = "uber" | "ifood" | "99" | "motoboy";
+/**
+ * Quem executou a entrega.
+ *
+ * `outra` não é um parceiro integrado: é o registro de uma entrega feita por
+ * fora do Hub (iFood ou 99, hoje sem integração). Existe para o pedido sair da
+ * fila sem sumir do histórico. Ver marcarEntregasEmLote em lib/store.ts.
+ */
+export type ProviderId = "uber" | "ifood" | "99" | "motoboy" | "outra";
 
 export interface Endereco {
   logradouro: string;
@@ -291,6 +298,33 @@ export interface EstadoEntrega {
   courierLat: number | null;
   courierLng: number | null;
   liveMode: boolean | null;
+}
+
+/**
+ * Corrida anterior de um pedido que foi reenviado.
+ *
+ * Vem do banco, não da memória do painel: depois de um reenvio o atendente
+ * pode atualizar a página, e a entrega que já aconteceu tem que continuar na
+ * tela. Traz os valores porque a pergunta seguinte é sempre "quanto essa
+ * primeira corrida custou".
+ */
+export interface EntregaAnterior {
+  provider: ProviderId;
+  /** 1 = primeira corrida do pedido, 2 = primeiro reenvio, e assim por diante. */
+  sequencia: number;
+  status: string;
+  dataCriacao: string;
+  statusAtualizadoEm: string | null;
+  valorPago: number;
+  freteCobrado: number;
+  etaMinutos: number | null;
+  deliveryIdExterno: string | null;
+  trackingUrl: string | null;
+  codigoEntrega: string | null;
+  courierNome: string | null;
+  courierTelefone: string | null;
+  courierVeiculo: string | null;
+  despachadoPor: string | null;
 }
 
 /** Estado ao vivo devolvido ao painel. */

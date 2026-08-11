@@ -77,7 +77,21 @@ export async function calcularEstatisticas(
   // deixava a tela permanentemente zerada, e um relatório vazio não mostra
   // que o relatório funciona. O painel avisa na tela qual dos dois é o caso.
   const soReais = ambiente(env) === "producao";
-  const filtroTeste = soReais ? "teste = 0" : "1 = 1";
+
+  // ENTREGAS FEITAS POR FORA DO HUB ficam de fora SEMPRE.
+  //
+  // São as marcadas em lote como "outra plataforma": o Hub não cotou nem
+  // despachou, então não sabe o custo. Elas entram no banco com zero nos dois
+  // lados (ver marcarEntregasEmLote), e somar zero aqui puxaria o custo médio
+  // para baixo e inventaria uma margem que ninguém apurou. No Histórico elas
+  // continuam visíveis, que é onde a pergunta é "o que aconteceu com o
+  // pedido", não "quanto isso custou".
+  const filtroTeste = [
+    soReais ? "teste = 0" : null,
+    "plataforma_escolhida <> 'outra'",
+  ]
+    .filter(Boolean)
+    .join(" AND ");
   const [resumo, porPlataforma, serie, geral] = await env.DB.batch([
     // 1) Totais do mês corrente
     env.DB.prepare(

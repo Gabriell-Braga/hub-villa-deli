@@ -111,6 +111,7 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
   const [erro, setErro] = useState<string | null>(null);
   const [selecionados, setSelecionados] = useState<string[]>([]);
   const [marcando, setMarcando] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
   const toast = useToast();
 
   const carregar = useCallback(async () => {
@@ -134,6 +135,7 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
   useEffect(() => {
     carregar();
     setSelecionados([]);
+    setConfirmando(false);
 
     // Pedidos novos chegam por webhook, sem avisar o painel. Enquanto não há
     // WebSocket, um refresh a cada 15 s mantém a fila viva sem pesar.
@@ -147,7 +149,7 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
 
     setMarcando(true);
     try {
-      const res = await apiFetch("/api/entrega/lotes/concluir", {
+      const res = await apiFetch("/api/entrega/concluir-lote", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids: selecionados }),
@@ -161,7 +163,7 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
 
       toast.sucesso(
         json.processados > 0
-          ? `${json.processados} pedido${json.processados === 1 ? "" : "s"} marcado${json.processados === 1 ? "" : "s"} como entregue.`
+          ? `${json.processados} ${json.processados === 1 ? "pedido saiu" : "pedidos saíram"} da fila como entregues por outra plataforma.`
           : "Nenhum pedido foi alterado."
       );
       setSelecionados([]);
@@ -170,6 +172,7 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
       toast.erro("Erro de rede ao marcar os pedidos.");
     } finally {
       setMarcando(false);
+      setConfirmando(false);
     }
   }
 
@@ -218,50 +221,101 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
 
   return (
     <>
-      {aba === "abertos" && (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
-          <div className="text-sm text-gray-600">
-            {selecionados.length > 0
-              ? `${selecionados.length} pedido${selecionados.length === 1 ? "" : "s"} selecionado${selecionados.length === 1 ? "" : "s"}`
-              : "Selecione pedidos para fechar a entrega manualmente."}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={alternarTodos}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-            >
-              {todosSelecionados ? "Desmarcar todos" : "Selecionar todos"}
-            </button>
-            <button
-              type="button"
-              onClick={marcarSelecionados}
-              disabled={marcando || selecionados.length === 0}
-              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300"
-            >
-              {marcando ? "Salvando..." : "Marcar como entregue"}
-            </button>
-          </div>
+      {/* BARRA DE AÇÃO EM LOTE.
+          Só existe quando há seleção. Uma barra permanente dizendo "selecione
+          pedidos" ocuparia a tela inteira do dia a dia para uma ação que é
+          exceção — a regra é despachar pelo Hub, não fechar por fora.
+
+          Sticky porque a lista rola: quem marcou dez pedidos não deveria ter
+          que voltar ao topo para confirmar. */}
+      {aba === "abertos" && selecionados.length > 0 && (
+        <div className="sticky top-2 z-10 mb-4 rounded-xl border border-gray-300 bg-white p-3 shadow-lg">
+          {confirmando ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-gray-700">
+                Fechar{" "}
+                <strong className="text-gray-900">
+                  {selecionados.length}{" "}
+                  {selecionados.length === 1 ? "pedido" : "pedidos"}
+                </strong>{" "}
+                como entregues por outra plataforma? Eles saem da fila e vão
+                para o histórico.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmando(false)}
+                  disabled={marcando}
+                  className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={marcarSelecionados}
+                  disabled={marcando}
+                  className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {marcando ? "Salvando..." : "Confirmar"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-gray-700">
+                <strong className="text-gray-900">{selecionados.length}</strong>{" "}
+                {selecionados.length === 1
+                  ? "pedido selecionado"
+                  : "pedidos selecionados"}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelecionados([])}
+                  className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                >
+                  Limpar seleção
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmando(true)}
+                  className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                >
+                  Entregue por outra plataforma
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* ---------------- Celular: cartões ---------------- */}
       <ul className="space-y-3 sm:hidden">
         {pedidos.map((p) => (
-          <li key={p.id} className="flex items-start gap-3 rounded-xl border border-gray-200 bg-white p-4">
+          <li
+            key={p.id}
+            className={`flex items-start gap-3 rounded-xl border bg-white p-4 transition ${
+              selecionados.includes(p.id)
+                ? "border-emerald-400 ring-2 ring-emerald-100"
+                : "border-gray-200"
+            }`}
+          >
             {aba === "abertos" && (
+              // h-5/w-5: alvo de toque no celular. 16px de checkbox exige
+              // pontaria que ninguém tem com o telefone numa mão só.
               <input
                 type="checkbox"
+                aria-label={`Selecionar pedido ${p.id}`}
                 checked={selecionados.includes(p.id)}
                 onChange={(e) => alternarSelecionado(p.id, e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-gray-300 text-emerald-600"
+                className="mt-0.5 h-5 w-5 shrink-0 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
               />
             )}
             <Link
               // `de` carrega de qual tela veio, para o botão Voltar do detalhe
               // devolver o atendente ao lugar certo.
               href={`/pedidos/${encodeURIComponent(p.id)}?de=${aba}`}
-              className="flex-1 transition active:bg-gray-50"
+              className="min-w-0 flex-1"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -301,7 +355,19 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
           <table className="w-full text-sm">
             <thead className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
               <tr>
-                {aba === "abertos" && <th className="w-10 px-3 py-3" />}
+                {aba === "abertos" && (
+                  <th className="w-10 px-3 py-3">
+                    {/* Selecionar todos vive no cabeçalho, que é onde se
+                        procura por ele numa tabela. */}
+                    <input
+                      type="checkbox"
+                      aria-label="Selecionar todos os pedidos"
+                      checked={todosSelecionados}
+                      onChange={alternarTodos}
+                      className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                  </th>
+                )}
                 <th className="px-5 py-3 font-medium">Pedido</th>
                 <th className="px-5 py-3 font-medium">Cliente</th>
                 <th className="hidden px-5 py-3 font-medium lg:table-cell">
@@ -317,14 +383,20 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
 
             <tbody className="divide-y divide-gray-100">
               {pedidos.map((p) => (
-                <tr key={p.id} className="transition hover:bg-gray-50">
+                <tr
+                  key={p.id}
+                  className={`transition ${
+                    selecionados.includes(p.id) ? "bg-emerald-50/60" : "hover:bg-gray-50"
+                  }`}
+                >
                   {aba === "abertos" && (
                     <td className="px-3 py-3">
                       <input
                         type="checkbox"
+                        aria-label={`Selecionar pedido ${p.id}`}
                         checked={selecionados.includes(p.id)}
                         onChange={(e) => alternarSelecionado(p.id, e.target.checked)}
-                        className="h-4 w-4 rounded border-gray-300 text-emerald-600"
+                        className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
                       />
                     </td>
                   )}
