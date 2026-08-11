@@ -229,11 +229,11 @@ CARDAPIO_WEB_MERCHANT_ID = "14875"
 UBER_BASE_URL = "https://api.uber.com"
 UBER_AUTH_URL = "https://auth.uber.com/oauth/v2/token"
 # Escopos OAuth2. Pedir um escopo que a aplicacao NAO tem derruba o token
-# inteiro (invalid_scope). Quando o Uber liberar entregas para a sua
-# aplicacao, troque para: "direct.organizations eats.deliveries"
-UBER_SCOPE = "direct.organizations"
+# inteiro (invalid_scope), entao o valor aqui precisa refletir o que a conta
+# realmente concede.
+UBER_SCOPE = "direct.organizations eats.deliveries"
 UBER_CUSTOMER_ID = "551fca94-17d0-4acf-a3f8-05d93a0abe6a"
-# A conta de teste tem o produto de entregas liberado; a de produção ainda não.
+# Conferido em 11/08/2026: a conta de produção concede os dois escopos.
 UBER_SCOPE_TESTE = "direct.organizations eats.deliveries"
 UBER_BASE_URL_TESTE = "https://sandbox-api.uber.com"
 UBER_CUSTOMER_ID_TESTE = "c1cc78e9-6147-5db8-82be-1b0f45446e09"
