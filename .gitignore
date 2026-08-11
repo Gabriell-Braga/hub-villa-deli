@@ -14,4 +14,10 @@ dist/
 *.tsbuildinfo
 next-env.d.ts
 
+# Link local do projeto na Vercel (contem ids da conta)
+.vercel
+
 .DS_Store
+
+.vercel
+.env*
