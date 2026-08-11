@@ -210,50 +210,266 @@ Teste o fluxo inteiro:
 
 ## Parte 6 — Produção
 
-Só depois de HML validado.
+> Leia a seção **6.0** antes de rodar qualquer comando. Há duas coisas que
+> podem impedir a operação de funcionar no primeiro dia, e nenhuma delas se
+> resolve com código.
 
-### 6.1 Repetir a Parte 1 com `--env producao`
+O ambiente de produção é **novo e separado**: banco próprio, cache próprio,
+segredos próprios, projeto próprio na Vercel. Nada é compartilhado com
+homologação — é o que garante que um teste nunca toque em venda real.
 
-Recursos próprios (`hub-logistico`, `HUB_KV`), **segredos diferentes**, e mais
-o conjunto de credenciais reais do Uber:
+---
+
+### 6.0 Antes de começar: o que ainda depende de terceiros
+
+**1. A conta de produção do Uber não pode criar entregas.**
+Hoje o `wrangler.toml` de produção pede só o escopo `direct.organizations`. O
+escopo que autoriza despachar (`eats.deliveries`) está liberado apenas na conta
+de sandbox. Enquanto o Uber não habilitar o produto de entregas na conta real,
+**o card do Uber vai falhar em produção** e só o motoboy próprio despacha.
+
+Fale com o gerente da conta (uberdirect@uber.com) e peça o produto Direct
+liberado em produção. Quando liberarem, troque no `[env.producao.vars]`:
+
+```toml
+UBER_SCOPE = "direct.organizations eats.deliveries"
+```
+
+**2. O raio do Uber é de 5 km em linha reta.**
+Acima disso ele recusa o endereço, e só o motoboy próprio atende. É limite da
+conta, não do Hub. Também é assunto do gerente.
+
+**3. Rotacione os segredos antes de subir.**
+O Client Secret do Uber e o token do Cardápio Web passaram por conversa. Gere
+novos nos painéis dos parceiros e use os novos aqui. Os de homologação podem
+continuar como estão.
+
+---
+
+### 6.1 Criar banco e cache de produção
 
 ```bash
+cd worker
+npx wrangler d1 create hub-logistico
+```
+
+Copie o `database_id` que ele imprime.
+
+```bash
+npx wrangler kv namespace create HUB_KV_PROD
+```
+
+Copie o `id` que ele imprime.
+
+### 6.2 Preencher o `wrangler.toml`
+
+No bloco `[env.producao]`, troque os dois marcadores:
+
+```toml
+[[env.producao.d1_databases]]
+database_id = "<o database_id do passo 6.1>"
+
+[[env.producao.kv_namespaces]]
+id = "<o id do KV do passo 6.1>"
+```
+
+E em `[env.producao.vars]`, a origem do painel. Deixe como está por enquanto;
+você volta aqui no passo 6.8 com a URL real da Vercel.
+
+> **Cuidado com o lugar.** `database_id` vai dentro de
+> `[[env.producao.d1_databases]]`, não no `[vars]` do topo. Colar no lugar
+> errado faz o deploy falhar com uma mensagem que não explica o motivo.
+
+### 6.3 Criar as tabelas
+
+O `schema.sql` já está completo — ele traz tudo o que as sete migrações
+construíram. **Não rode as migrações num banco novo**, só o schema:
+
+```bash
+npx wrangler d1 execute hub-logistico --remote --env producao --file=./schema.sql
+```
+
+Confira:
+
+```bash
+npx wrangler d1 execute hub-logistico --remote --env producao \
+  --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"
+```
+
+Devem aparecer sete tabelas: `config`, `deliveries`, `eventos_cardapio`,
+`eventos_entrega`, `pedidos`, `tokens_senha`, `usuarios`.
+
+> **Nunca rode `seed.sql` em produção.** Ele cria pedidos de demonstração.
+
+### 6.4 Cadastrar os segredos
+
+Cada comando pede o valor e não deixa rastro no repositório:
+
+```bash
+npx wrangler secret put JWT_SECRET          --env producao
+npx wrangler secret put WEBHOOK_SECRET      --env producao
+npx wrangler secret put CARDAPIO_WEB_TOKEN  --env producao
 npx wrangler secret put UBER_CLIENT_ID      --env producao
 npx wrangler secret put UBER_CLIENT_SECRET  --env producao
 npx wrangler secret put UBER_WEBHOOK_SECRET --env producao
 ```
 
-Em `[env.producao.vars]`:
+O que é cada um:
 
-```toml
-PAINEL_ORIGIN = "https://painel.villadeli.com.br"
-UBER_CUSTOMER_ID = "<customer id de produção>"
-UBER_SCOPE = "direct.organizations eats.deliveries"   # se a conta real tiver a permissão
+| Segredo | O que é | Onde consegue |
+|---|---|---|
+| `JWT_SECRET` | assina a sessão do painel | invente um valor longo e aleatório, **diferente do de HML** |
+| `WEBHOOK_SECRET` | token que o Cardápio Web manda no header | você define; cola igual no painel deles (passo 6.9) |
+| `CARDAPIO_WEB_TOKEN` | chave para o Hub **ler** os pedidos | Cardápio Web → Configurações → Integrações → API |
+| `UBER_CLIENT_ID` / `UBER_CLIENT_SECRET` | conta real do Uber | direct.uber.com → Developer |
+| `UBER_WEBHOOK_SECRET` | assinatura do webhook do Uber | gerada ao cadastrar o webhook (passo 6.9) |
+
+Opcionais, se for usar: `UBER_CLIENT_ID_TESTE`, `UBER_CLIENT_SECRET_TESTE` e
+`UBER_WEBHOOK_SECRET_TESTE` — permitem validar o Worker de produção contra o
+sandbox antes de virar a chave. Recomendado.
+
+### 6.5 Publicar o Worker
+
+```bash
+npx wrangler deploy --env producao
 ```
 
-### 6.2 Segundo projeto na Vercel
+Anote a URL que ele imprime (algo como
+`https://hub-logistico.<sua-conta>.workers.dev`). Confira que respondeu:
 
-Mesmo repositório, `HUB_API_URL` apontando para o Worker de produção.
+```bash
+curl https://hub-logistico.<sua-conta>.workers.dev
+```
 
-### 6.3 Virar a chave
+Deve voltar `{"ok":true,...,"ambiente":"producao",...}`.
 
-O Worker de produção **sobe em modo teste**, de propósito. Depois de conferir a
-tela de Configurações, um admin troca em **Configurações → Modo de operação**
-(exige digitar `PRODUCAO`).
+### 6.6 Criar o primeiro administrador
 
-A partir daí toda entrega despachada é real e cobrada.
+Sem isto ninguém entra no painel.
+
+```bash
+node scripts/hash-senha.mjs "uma-senha-forte" "Seu Nome" seu@email.com admin
+```
+
+Ele imprime um `INSERT` pronto. Cole no comando abaixo, entre aspas:
+
+```bash
+npx wrangler d1 execute hub-logistico --remote --env producao --command "<o INSERT>"
+```
+
+> Não monte esse comando por partes no terminal. O hash tem `$` e `+`, e o
+> shell os interpreta — foi assim que uma senha ficou inválida em homologação.
+> Cole o `INSERT` inteiro de uma vez.
+
+### 6.7 Projeto do painel na Vercel
+
+Um **projeto novo**, apontando para o mesmo repositório.
+
+1. vercel.com → **Add New → Project** → importe `hub-cardapio-web`
+2. **Root Directory**: `painel`
+3. **Environment Variables**:
+
+| Nome | Valor |
+|---|---|
+| `HUB_API_URL` | a URL do Worker do passo 6.5, **sem barra no final** |
+| `NEXTAUTH_SECRET` | valor longo e aleatório, diferente do de HML |
+| `NEXTAUTH_URL` | a URL que a Vercel te der (preencha depois do primeiro deploy) |
+| `NEXT_PUBLIC_MARCA_NOME` | `Villa Deli` |
+| `NEXT_PUBLIC_MARCA_TAGLINE` | `Pizza & Burger` |
+
+4. **Deploy**
+
+> A barra no final do `HUB_API_URL` já derrubou todos os logins uma vez:
+> vira `//api/auth/login`, e o Hono devolve 404 sem explicar.
+
+### 6.8 Fechar o círculo
+
+Agora que você tem a URL do painel, volte ao `wrangler.toml`:
+
+```toml
+[env.producao.vars]
+PAINEL_ORIGIN = "https://<sua-url>.vercel.app"
+```
+
+E publique de novo:
+
+```bash
+npx wrangler deploy --env producao
+```
+
+Entre no painel e faça login com o usuário do passo 6.6.
+
+### 6.9 Ligar os webhooks
+
+**Uber Direct** — direct.uber.com → Developer → Webhooks:
+
+- URL: `https://hub-logistico.<sua-conta>.workers.dev/api/webhook/uber`
+- Eventos: `delivery_status` e `courier_update`
+- Copie a signing key e grave em `UBER_WEBHOOK_SECRET` (passo 6.4)
+
+**Cardápio Web** — Configurações → Integrações → API:
+
+- URL: `https://hub-logistico.<sua-conta>.workers.dev/api/webhook/cardapio-web`
+- Token: o mesmo valor de `WEBHOOK_SECRET`
+- Marque **Webhook ativado**
+
+> **ATENÇÃO: só existe um webhook por loja.** Ao apontar para produção,
+> homologação **para de receber pedidos**. Faça isso num horário de movimento
+> baixo, e não tente manter os dois — um pedido não chega em dois lugares.
+
+### 6.10 Conferir antes de valer dinheiro
+
+O Worker de produção **sobe em modo teste**, de propósito: ele já recebe os
+pedidos reais da loja, mas despacha contra o sandbox do Uber e **marca tudo
+como teste**, fora dos Relatórios. É a janela para validar sem gastar.
+
+No painel, vá em **Configurações** e confira que está tudo verde. Depois faça
+um pedido de verdade na loja e acompanhe: ele tem que aparecer na fila com o
+valor do frete correto e cotações nos dois parceiros.
+
+Percorra também:
+
+- [ ] Pedido chega na fila em segundos
+- [ ] Frete cobrado bate com o que o cliente pagou
+- [ ] Cotação sai nos dois parceiros
+- [ ] Despacho pelo motoboy próprio funciona
+- [ ] Histórico e CSV mostram a entrega
+- [ ] Marcar em lote como "outra plataforma" tira da fila
+
+### 6.11 Virar a chave
+
+Só depois do 6.10.
+
+**Configurações → Modo de operação → Produção.** Exige digitar `PRODUCAO` para
+confirmar.
+
+A partir daí **toda corrida despachada é real e cobrada**, e os pedidos param
+de ser marcados como teste. A faixa amarela no topo do painel desaparece.
+
+### 6.12 Se der errado
+
+Voltar é imediato e não exige deploy: **Configurações → Modo de operação →
+Teste**. As corridas já criadas continuam válidas — quem cancela é o painel do
+parceiro — mas nenhuma nova é cobrada.
+
+Se o problema for no código, `wrangler rollback --env producao` volta para a
+versão anterior do Worker. Na Vercel, **Deployments → ... → Promote to
+Production** na versão que funcionava.
+
+---
 
 ### Checklist final
 
-- [ ] Client Secret do Uber e token do Cardápio Web **rotacionados** (os atuais
-      passaram por chat)
-- [ ] `JWT_SECRET` de produção diferente do de HML
-- [ ] Credenciais **de produção** do Uber cadastradas (as de hoje no bloco de
-      produção são antigas e sem permissão de entregas)
+- [ ] Client Secret do Uber e token do Cardápio Web **rotacionados**
+- [ ] `JWT_SECRET` e `NEXTAUTH_SECRET` de produção diferentes dos de HML
+- [ ] Uber liberou `eats.deliveries` na conta real (senão só o motoboy despacha)
 - [ ] Webhook do Uber apontando para o Worker de produção
+- [ ] Webhook do Cardápio Web repontado (homologação para de receber)
 - [ ] `seed.sql` **não** rodado em produção
 - [ ] Tabela de raio do motoboy conferida contra as Regiões do Cardápio Web
+- [ ] Primeiro admin criado e login testado
 - [ ] Configurações 100% verde
+- [ ] Um pedido real validado ponta a ponta ainda em modo teste
 - [ ] Só então trocar o modo para produção
 
 ---
