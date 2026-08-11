@@ -866,6 +866,7 @@ interface LinhaLista {
   cotacoes: string | null;
   despacho: string | null;
   valor_pago: number | null;
+  sequencia: number | null;
 }
 
 export async function listarPedidos(
@@ -893,7 +894,7 @@ export async function listarPedidos(
   // sequência, um pedido reenviado apareceria duas vezes na lista.
   const { results } = await env.DB.prepare(
     `SELECT p.id, p.criado_em, p.status, p.dados, p.cotacoes, p.despacho,
-            d.valor_pago
+            d.valor_pago, d.sequencia
        FROM pedidos p
        LEFT JOIN deliveries d
          ON d.id_pedido = p.id
@@ -936,6 +937,9 @@ export async function listarPedidos(
       despacho: despacho ? { ...despacho, valorPago: l.valor_pago } : null,
       melhorPreco: precos.length ? Math.min(...precos) : null,
       teste: !!p.teste,
+      // Pedido ainda em aberto que JÁ tem corrida no histórico só acontece
+      // depois de um reenvio.
+      reenvio: !despacho && (l.sequencia ?? 0) >= 1,
     };
   });
 }

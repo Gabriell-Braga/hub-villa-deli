@@ -374,6 +374,13 @@ export interface PedidoResumo {
   melhorPreco: number | null;
   /** true = pedido simulado. O painel marca na tela para não confundir. */
   teste: boolean;
+  /**
+   * true = já houve corrida anterior e o pedido voltou para cotação.
+   *
+   * Muda a conta na tela: o frete do cliente foi consumido pela primeira
+   * entrega, então a próxima sai inteira por conta da loja.
+   */
+  reenvio: boolean;
 }
 
 // ---------------------------------------------------------------------------

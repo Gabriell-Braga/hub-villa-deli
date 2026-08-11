@@ -160,6 +160,8 @@ export interface PedidoResumo {
   melhorPreco: number | null;
   /** true = pedido simulado. Não é uma venda da loja. */
   teste: boolean;
+  /** true = já houve corrida anterior; o frete do cliente já foi consumido. */
+  reenvio: boolean;
 }
 
 export interface Estatisticas {

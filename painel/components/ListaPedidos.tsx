@@ -66,6 +66,19 @@ function Selo({ status, pago }: { status: StatusPedido; pago: boolean }) {
   );
 }
 
+/** Reenvio: a corrida seguinte sai por conta da loja, e isso muda a leitura
+ *  do valor ao lado. Sem o selo, a fila mostra um pedido igual aos outros. */
+function SeloReenvio() {
+  return (
+    <span
+      title="O frete deste pedido já foi cobrado numa entrega anterior."
+      className="inline-flex whitespace-nowrap rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-amber-800 ring-1 ring-inset ring-amber-300"
+    >
+      Reenvio
+    </span>
+  );
+}
+
 /**
  * Coluna da direita.
  *
@@ -78,7 +91,11 @@ function Valor({ p }: { p: PedidoResumo }) {
   const custo = p.despacho ? p.despacho.valorPago : p.melhorPreco;
   if (custo == null) return <span className="text-gray-400">—</span>;
 
-  const saldo = Math.round((p.freteCobrado - custo) * 100) / 100;
+  // Num reenvio o frete do cliente já foi consumido pela corrida anterior, e
+  // a próxima sai inteira por conta da loja. Descontar o mesmo valor de novo
+  // mostraria empate onde há prejuízo.
+  const receita = p.reenvio ? 0 : p.freteCobrado;
+  const saldo = Math.round((receita - custo) * 100) / 100;
 
   return (
     <div>
@@ -336,6 +353,7 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 {p.teste && <SeloTeste />}
                 <SeloOrigem canal={p.canal} numeroExterno={p.numeroExterno} />
+                {p.reenvio && <SeloReenvio />}
                 <Selo status={p.status} pago={p.pago} />
                 {p.bairro && (
                   <span className="text-xs text-gray-500">{p.bairro}</span>
@@ -405,6 +423,7 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
                       <p className="font-medium text-gray-900">#{p.id}</p>
                       {p.teste && <SeloTeste />}
                       <SeloOrigem canal={p.canal} numeroExterno={p.numeroExterno} />
+                      {p.reenvio && <SeloReenvio />}
                     </div>
                     <p className="text-xs text-gray-400">
                       {aba === "abertos"

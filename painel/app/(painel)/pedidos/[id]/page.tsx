@@ -41,8 +41,24 @@ const ORIGENS = {
  * Muda só o custo. Por isso o número que decide a escolha não é o preço do
  * card, é a diferença; e é ele que fica colorido.
  */
-function Resultado({ cobrado, custo }: { cobrado: number; custo: number }) {
-  const saldo = Math.round((cobrado - custo) * 100) / 100;
+function Resultado({
+  cobrado,
+  custo,
+  reenvio,
+}: {
+  cobrado: number;
+  custo: number;
+  /** true = já houve uma corrida antes; o frete cobrado foi gasto nela. */
+  reenvio: boolean;
+}) {
+  // NUM REENVIO NÃO HÁ RECEITA A CONSIDERAR.
+  //
+  // O cliente pagou o frete uma vez, e ele já foi consumido pela primeira
+  // corrida. Continuar descontando o mesmo valor aqui mostraria "sobra R$ 0,00"
+  // numa entrega que custa o preço cheio à loja — o card diria empate onde há
+  // prejuízo, exatamente na hora de escolher quanto gastar.
+  const receita = reenvio ? 0 : cobrado;
+  const saldo = Math.round((receita - custo) * 100) / 100;
   const positivo = saldo >= 0;
 
   return (
@@ -57,7 +73,10 @@ function Resultado({ cobrado, custo }: { cobrado: number; custo: number }) {
       </span>
       <span className="opacity-75">
         {" "}
-        · cliente pagou {brlOuGratis(cobrado)} de frete
+        ·{" "}
+        {reenvio
+          ? `frete já cobrado na entrega anterior`
+          : `cliente pagou ${brlOuGratis(cobrado)} de frete`}
       </span>
     </div>
   );
@@ -231,6 +250,11 @@ export default function PaginaCotacao({
   }, [despacho, entrega?.status, cotar]);
 
   const pedido = dados?.pedido;
+  // Há uma corrida anterior guardada = este pedido está sendo reenviado. O
+  // servidor só devolve `entregaAnterior` quando não existe despacho atual,
+  // que é exatamente esse estado.
+  const anterior = dados?.entregaAnterior ?? null;
+  const ehReenvio = anterior !== null;
   // Cancelado ou não pago também travam a tela: o servidor recusa o despacho,
   // e deixar o botão ativo só produziria um erro depois do clique.
   const cancelado = bloqueio === "cancelado" || /cancel/i.test(pedido?.statusCardapio ?? "");
@@ -251,6 +275,13 @@ export default function PaginaCotacao({
             <h1 className="text-xl font-semibold text-gray-900">Pedido #{idPedido}</h1>
             {pedido?.teste && <SeloTeste />}
             <SeloOrigem canal={pedido?.canal} numeroExterno={pedido?.numeroExterno} />
+            {/* Junto do número do pedido, não no meio da tela: é a primeira
+                coisa que se lê, e muda o significado de tudo o que vem depois. */}
+            {anterior && (
+              <span className="inline-flex items-center whitespace-nowrap rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-amber-800 ring-1 ring-inset ring-amber-300">
+                {anterior.sequencia + 1}º envio
+              </span>
+            )}
           </div>
           {pedido ? (
             <p className="mt-1 text-sm text-gray-500">
@@ -277,6 +308,24 @@ export default function PaginaCotacao({
           className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
         >
           {erroCarregar}
+        </div>
+      )}
+
+      {/* REENVIO: a conta muda, e a tela precisa dizer isso antes dos preços.
+          Sem este aviso, um card marcado "Sobra R$ 0,00" passa por empate,
+          quando na verdade a loja vai pagar a corrida inteira do próprio
+          bolso — o frete do cliente já foi gasto na entrega anterior. */}
+      {anterior && !travado && (
+        <div
+          role="status"
+          className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          <strong className="font-semibold">
+            Este é o {anterior.sequencia + 1}º envio deste pedido.
+          </strong>{" "}
+          O frete de {brlOuGratis(pedido?.freteCobrado ?? 0)} já foi cobrado do
+          cliente na {anterior.sequencia}ª entrega. Esta corrida sai por conta
+          da loja, e o valor cheio entra como prejuízo no relatório.
         </div>
       )}
 
@@ -381,6 +430,7 @@ export default function PaginaCotacao({
                             pedido — é quanto sobra para a loja. É essa a
                             comparação que o atendente precisa fazer. */}
                         <Resultado
+                          reenvio={ehReenvio}
                           cobrado={pedido?.freteCobrado ?? 0}
                           custo={c.preco ?? 0}
                         />
