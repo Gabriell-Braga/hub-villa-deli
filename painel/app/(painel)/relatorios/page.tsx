@@ -174,6 +174,34 @@ export default function PaginaRelatorios() {
         </div>
       )}
 
+      {/* ENTREGAS QUE SAÍRAM POR FORA DO HUB.
+          Fica logo abaixo dos cards por plataforma, que é onde a pergunta
+          "quem entregou" já está sendo respondida — e é o contraponto que
+          faltava: os cards de cima contam só o que passou pelo Hub.
+
+          Sem valores, e dizendo por quê. Um card com R$ 0,00 ao lado dos
+          outros seria lido como "custou zero", que é diferente de "o Hub não
+          sabe quanto custou". */}
+      {!carregando && (dados?.outrasPlataformas.entregasMes ?? 0) > 0 && (
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-gray-200 bg-white p-4">
+          <LogoProvedor provider="outra" tamanho={28} />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-gray-900">
+              {dados!.outrasPlataformas.entregasMes}{" "}
+              {dados!.outrasPlataformas.entregasMes === 1
+                ? "entrega saiu por outra plataforma"
+                : "entregas saíram por outra plataforma"}{" "}
+              este mês
+            </p>
+            <p className="mt-0.5 text-xs text-gray-500">
+              Fechadas na fila como entregues por iFood, 99 ou outro canal. Não
+              entram nos valores acima: o Hub não cotou nem despachou, então não
+              sabe quanto a loja pagou por elas.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Gráficos */}
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <section className="rounded-xl border border-gray-200 bg-white p-5">
@@ -234,6 +262,9 @@ export default function PaginaRelatorios() {
           {brl(dados.total.freteCobrado)} cobrados ·{" "}
           {brl(dados.total.gastoTotal)} de custo · resultado{" "}
           {comSinal(dados.total.margem)}
+          {dados.outrasPlataformas.entregasTotal > 0 && (
+            <> · {dados.outrasPlataformas.entregasTotal} por outra plataforma</>
+          )}
           <br />
           {dados.incluiTestes
             ? "Entregas de teste estão somadas nestes números."

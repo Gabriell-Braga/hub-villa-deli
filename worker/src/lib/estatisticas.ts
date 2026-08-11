@@ -92,7 +92,17 @@ export async function calcularEstatisticas(
   ]
     .filter(Boolean)
     .join(" AND ");
-  const [resumo, porPlataforma, serie, geral] = await env.DB.batch([
+  // Entregas que saíram POR FORA do Hub, no mesmo período. Contadas à parte,
+  // sem valores: é volume que o Hub não cotou nem despachou, e é o número que
+  // justifica (ou não) integrar iFood e 99.
+  const filtroOutras = [
+    soReais ? "teste = 0" : null,
+    "plataforma_escolhida = 'outra'",
+  ]
+    .filter(Boolean)
+    .join(" AND ");
+
+  const [resumo, porPlataforma, serie, geral, outras] = await env.DB.batch([
     // 1) Totais do mês corrente
     env.DB.prepare(
       `SELECT COUNT(*)             AS qtd,
@@ -141,6 +151,14 @@ export async function calcularEstatisticas(
          FROM deliveries
         WHERE ${filtroTeste}`
     ),
+
+    // 5) Entregas por fora do Hub. Só a contagem, no mês e no acumulado.
+    env.DB.prepare(
+      `SELECT COUNT(*) AS qtd,
+              SUM(CASE WHEN data_criacao >= ?1 THEN 1 ELSE 0 END) AS qtd_mes
+         FROM deliveries
+        WHERE ${filtroOutras}`
+    ).bind(desdeMes),
   ]);
 
   const r = (resumo.results as unknown as LinhaResumo[])[0];
@@ -158,8 +176,18 @@ export async function calcularEstatisticas(
   const mesMargem = margem(r?.cobrado, r?.total);
   const geralMargem = margem(g?.cobrado, g?.total);
 
+  const o = (outras.results as unknown as { qtd: number; qtd_mes: number }[])[0];
+
   return {
     periodo: { de: desdeMes, ate: new Date().toISOString(), fuso: FUSO },
+
+    // Sem valores de propósito: o Hub não sabe o que a loja pagou ao parceiro
+    // que fez essas entregas. Contá-las junto inventaria margem; escondê-las
+    // esconderia volume real da operação.
+    outrasPlataformas: {
+      entregasMes: o?.qtd_mes ?? 0,
+      entregasTotal: o?.qtd ?? 0,
+    },
     // O painel precisa DIZER na tela o que está somando. Um número que às
     // vezes inclui teste e às vezes não, sem avisar, é pior que não ter.
     incluiTestes: !soReais,

@@ -453,6 +453,13 @@ export interface Estatisticas {
    * é teste e um relatório vazio não demonstraria nada). Em produção é false.
    */
   incluiTestes: boolean;
+  /**
+   * Entregas fechadas como "outra plataforma", contadas à parte.
+   *
+   * Sem valores: o Hub não cotou nem despachou, então não sabe o custo. É
+   * volume que passou por fora, e o número que mede o quanto falta integrar.
+   */
+  outrasPlataformas: { entregasMes: number; entregasTotal: number };
   mes: {
     gastoTotal: number;
     freteCobrado: number;

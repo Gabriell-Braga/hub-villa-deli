@@ -168,6 +168,8 @@ export interface Estatisticas {
   periodo: { de: string; ate: string; fuso: string };
   /** true = entregas de teste estão somadas (dev e homologação). */
   incluiTestes: boolean;
+  /** Entregas fechadas por fora do Hub. Sem valores: o custo é desconhecido. */
+  outrasPlataformas: { entregasMes: number; entregasTotal: number };
   mes: {
     gastoTotal: number;
     freteCobrado: number;
