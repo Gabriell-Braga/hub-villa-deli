@@ -81,9 +81,13 @@ export interface EntregaAoVivo {
   statusAtualizadoEm: string | null;
   trackingUrl: string | null;
   dropoffEta: string | null;
+  /** Chegada do entregador NA LOJA. A cozinha usa para saber quando embalar. */
+  pickupEta: string | null;
   courierNome: string | null;
   courierTelefone: string | null;
   courierVeiculo: string | null;
+  /** Placa do veículo: identifica quem parou na porta. */
+  courierPlaca: string | null;
   /** false = evento de teste (credenciais de sandbox). */
   liveMode: boolean | null;
 }
@@ -129,6 +133,7 @@ export interface EntregaAnterior {
   courierNome: string | null;
   courierTelefone: string | null;
   courierVeiculo: string | null;
+  courierPlaca: string | null;
   despachadoPor: string | null;
 }
 

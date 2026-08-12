@@ -149,6 +149,8 @@ export default function CardEntrega({
   onConcluir,
   reenviando,
   onReenviar,
+  cancelando,
+  onCancelar,
 }: {
   despacho: Despacho;
   entrega: EntregaAoVivo | null;
@@ -156,6 +158,8 @@ export default function CardEntrega({
   onConcluir: (status: "delivered" | "canceled") => void;
   reenviando?: boolean;
   onReenviar?: () => void;
+  cancelando?: boolean;
+  onCancelar?: () => void;
 }) {
   const status = entrega?.status ?? despacho.status;
   const rotulo = ROTULO_STATUS_ENTREGA[status] ?? status;
@@ -229,6 +233,16 @@ export default function CardEntrega({
               {entrega.courierVeiculo && (
                 <dd className="text-sm text-gray-500">{entrega.courierVeiculo}</dd>
               )}
+              {/* PLACA. Duas motos pretas param na porta ao mesmo tempo, e o
+                  balcão precisa saber qual é a do pedido. Monoespaçada e com
+                  respiro entre os caracteres: é lida de longe, pela janela. */}
+              {entrega.courierPlaca && (
+                <dd className="mt-1">
+                  <span className="inline-flex rounded border border-gray-300 bg-gray-50 px-2 py-0.5 font-mono text-sm font-bold tracking-[0.15em] text-gray-800">
+                    {entrega.courierPlaca}
+                  </span>
+                </dd>
+              )}
               {entrega.courierTelefone && (
                 <dd className="mt-2">
                   {/* Mesma altura do "Acompanhar entrega" (BOTAO): dois botões
@@ -242,6 +256,22 @@ export default function CardEntrega({
                   </a>
                 </dd>
               )}
+            </div>
+          )}
+
+          {/* CHEGADA NA LOJA. Vem antes da previsão de entrega de propósito:
+              enquanto o entregador não coletou, é este o horário que importa
+              para a cozinha decidir se embala agora ou espera. Some depois da
+              coleta, quando vira informação do passado. */}
+          {entrega?.pickupEta && !entregue && !cancelado && status !== "pickup_complete" && status !== "dropoff" && (
+            <div>
+              <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                Chega na loja
+              </dt>
+              <dd className="mt-0.5 text-2xl font-semibold tracking-tight text-gray-900">
+                {hora(entrega.pickupEta)}
+              </dd>
+              <dd className="text-sm text-gray-500">{faltam(entrega.pickupEta)}</dd>
             </div>
           )}
 
@@ -303,6 +333,25 @@ export default function CardEntrega({
                 </span>
               </span>
             )}
+          </div>
+        )}
+
+        {/* CANCELAR A CORRIDA.
+            Discreto e à parte dos outros botões: é a ação que dá errado com um
+            clique acidental. E some assim que a entrega encerra, porque aí não
+            há o que cancelar.
+
+            Quem decide é o Uber. Depois da coleta ele recusa, e a mensagem que
+            volta diz isso ao atendente em vez de fingir que funcionou. */}
+        {onCancelar && !ehMotoboy && !encerrada && (
+          <div className="mt-5 border-t border-gray-100 pt-4">
+            <button
+              onClick={onCancelar}
+              disabled={cancelando}
+              className="text-sm font-medium text-red-700 underline-offset-2 transition hover:underline disabled:opacity-50"
+            >
+              {cancelando ? "Cancelando..." : "Cancelar esta corrida no Uber"}
+            </button>
           </div>
         )}
 

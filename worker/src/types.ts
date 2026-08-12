@@ -21,7 +21,22 @@ export interface Env {
 
   // Restaurante (origem)
   RESTAURANTE_NOME: string;
+  /**
+   * Endereço da loja, em partes.
+   *
+   * Separado porque o Uber pede endereço ESTRUTURADO: mandar tudo numa string
+   * (ou só o CEP, como já foi) faz o motor deles geocodificar por conta e o
+   * entregador chegar no lugar errado.
+   */
+  RESTAURANTE_LOGRADOURO: string;
+  RESTAURANTE_NUMERO: string;
+  RESTAURANTE_COMPLEMENTO: string;
+  RESTAURANTE_BAIRRO: string;
+  RESTAURANTE_CIDADE: string;
+  RESTAURANTE_UF: string;
   RESTAURANTE_CEP: string;
+  /** Instruções de coleta para o entregador (opcional). */
+  RESTAURANTE_INSTRUCOES: string;
   RESTAURANTE_LAT: string;
   RESTAURANTE_LNG: string;
   RESTAURANTE_TELEFONE: string;
@@ -292,9 +307,12 @@ export interface EstadoEntrega {
   status: string | null;
   trackingUrl: string | null;
   dropoffEta: string | null;
+  /** Chegada do entregador NA LOJA. */
+  pickupEta: string | null;
   courierNome: string | null;
   courierTelefone: string | null;
   courierVeiculo: string | null;
+  courierPlaca: string | null;
   courierLat: number | null;
   courierLng: number | null;
   liveMode: boolean | null;
@@ -324,6 +342,7 @@ export interface EntregaAnterior {
   courierNome: string | null;
   courierTelefone: string | null;
   courierVeiculo: string | null;
+  courierPlaca: string | null;
   despachadoPor: string | null;
 }
 
@@ -335,9 +354,13 @@ export interface EntregaAoVivo {
   statusAtualizadoEm: string | null;
   trackingUrl: string | null;
   dropoffEta: string | null;
+  /** Chegada do entregador NA LOJA, para a cozinha se programar. */
+  pickupEta: string | null;
   courierNome: string | null;
   courierTelefone: string | null;
   courierVeiculo: string | null;
+  /** Placa do veículo. É o que identifica quem parou na porta. */
+  courierPlaca: string | null;
   liveMode: boolean | null;
 }
 

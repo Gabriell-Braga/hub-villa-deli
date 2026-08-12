@@ -104,6 +104,7 @@ export default function PaginaCotacao({
   const [despacho, setDespacho] = useState<Despacho | null>(null);
   const [entrega, setEntrega] = useState<EntregaAoVivo | null>(null);
   const [concluindo, setConcluindo] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
   const [reenviando, setReenviando] = useState(false);
   // Motivo pelo qual o servidor se recusou a cotar. Estado do pedido, não erro
   // de sistema — por isso não vai para o toast nem para o alerta vermelho.
@@ -175,6 +176,31 @@ export default function PaginaCotacao({
     } finally {
       setDespachando(null);
       setPedindoVeiculo(null);
+    }
+  }
+
+  async function cancelarCorrida() {
+    setCancelando(true);
+    try {
+      const res = await apiFetch(
+        `/api/entrega/${encodeURIComponent(idPedido)}/cancelar`,
+        { method: "POST" }
+      );
+      const json = await res.json();
+
+      if (!res.ok) {
+        // A recusa do Uber vira a mensagem: "o entregador já coletou" é o que
+        // o atendente precisa saber para ligar para o cliente.
+        toast.erro(json.erro ?? "Não foi possível cancelar.");
+        return;
+      }
+
+      toast.sucesso("Corrida cancelada no Uber.");
+      await cotar();
+    } catch {
+      toast.erro("Erro de rede ao cancelar.");
+    } finally {
+      setCancelando(false);
     }
   }
 
@@ -364,6 +390,8 @@ export default function PaginaCotacao({
           onConcluir={concluir}
           reenviando={reenviando}
           onReenviar={reenviar}
+          cancelando={cancelando}
+          onCancelar={cancelarCorrida}
         />
       )}
 

@@ -66,6 +66,16 @@ PAINEL_ORIGIN = "http://localhost:3000"
 # de todos os anéis de preço do motoboy próprio e o ponto de coleta do Uber.
 RESTAURANTE_NOME = "Villa Deli"
 RESTAURANTE_CEP = "34006-086"
+# Endereço da loja EM PARTES. O Uber pede endereço estruturado; já foi só o
+# CEP aqui e entregador teve dificuldade real para achar a porta.
+RESTAURANTE_LOGRADOURO = "R. da Mata"
+RESTAURANTE_NUMERO = "45"
+RESTAURANTE_COMPLEMENTO = ""
+RESTAURANTE_BAIRRO = "Vila da Serra"
+RESTAURANTE_CIDADE = "Nova Lima"
+RESTAURANTE_UF = "MG"
+# Instruções de coleta para o entregador (opcional).
+RESTAURANTE_INSTRUCOES = "Retirar no balcão de entregas. Informe o número do pedido."
 RESTAURANTE_LAT = "-19.978452"
 RESTAURANTE_LNG = "-43.932128"
 # Formato E.164 obrigatório: o Uber recusa a cotação sem código de país, e é
@@ -145,6 +155,16 @@ PAINEL_ORIGIN = "https://hub-cardapio-web.vercel.app"
 
 RESTAURANTE_NOME = "Villa Deli"
 RESTAURANTE_CEP = "34006-086"
+# Endereço da loja EM PARTES. O Uber pede endereço estruturado; já foi só o
+# CEP aqui e entregador teve dificuldade real para achar a porta.
+RESTAURANTE_LOGRADOURO = "R. da Mata"
+RESTAURANTE_NUMERO = "45"
+RESTAURANTE_COMPLEMENTO = ""
+RESTAURANTE_BAIRRO = "Vila da Serra"
+RESTAURANTE_CIDADE = "Nova Lima"
+RESTAURANTE_UF = "MG"
+# Instruções de coleta para o entregador (opcional).
+RESTAURANTE_INSTRUCOES = "Retirar no balcão de entregas. Informe o número do pedido."
 RESTAURANTE_LAT = "-19.978452"
 RESTAURANTE_LNG = "-43.932128"
 RESTAURANTE_TELEFONE = "+5531984428765"
@@ -212,6 +232,16 @@ PAINEL_ORIGIN = "https://hub-villa-deli-producao.vercel.app"
 
 RESTAURANTE_NOME = "Villa Deli"
 RESTAURANTE_CEP = "34006-086"
+# Endereço da loja EM PARTES. O Uber pede endereço estruturado; já foi só o
+# CEP aqui e entregador teve dificuldade real para achar a porta.
+RESTAURANTE_LOGRADOURO = "R. da Mata"
+RESTAURANTE_NUMERO = "45"
+RESTAURANTE_COMPLEMENTO = ""
+RESTAURANTE_BAIRRO = "Vila da Serra"
+RESTAURANTE_CIDADE = "Nova Lima"
+RESTAURANTE_UF = "MG"
+# Instruções de coleta para o entregador (opcional).
+RESTAURANTE_INSTRUCOES = "Retirar no balcão de entregas. Informe o número do pedido."
 RESTAURANTE_LAT = "-19.978452"
 RESTAURANTE_LNG = "-43.932128"
 RESTAURANTE_TELEFONE = "+5531984428765"

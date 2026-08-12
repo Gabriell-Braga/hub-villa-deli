@@ -44,6 +44,7 @@ import {
   enfileirarEventoCardapio,
   eventosCardapioPendentes,
 } from "./lib/store";
+import { cancelarUber } from "./services/uber";
 import {
   cancelado,
   processarEventoCardapio,
@@ -716,6 +717,46 @@ app.post("/api/entrega/:idPedido/reenviar", async (c) => {
   return c.json({ ok: true });
 });
 
+// ---------------------------------------------------------------------------
+// 2e) Cancelar a corrida no parceiro
+//     POST /api/entrega/:idPedido/cancelar
+//
+// Só o Uber: o motoboy próprio se cancela pela tela de confirmação manual, e
+// mandar "cancelado" para um parceiro que não sabe da corrida não faz nada.
+//
+// Quem manda é o PARCEIRO. Se ele recusar (entregador já coletou), o pedido
+// continua despachado aqui — marcar como cancelado no banco criaria um estado
+// que discorda de quem está com a comida na mão.
+// ---------------------------------------------------------------------------
+app.post("/api/entrega/:idPedido/cancelar", async (c) => {
+  const env = c.env;
+  const idPedido = c.req.param("idPedido");
+
+  const despacho = await obterDespacho(env, idPedido);
+  if (!despacho) return c.json({ erro: "Este pedido não tem entrega despachada." }, 404);
+
+  if (despacho.provider !== "uber") {
+    return c.json(
+      { erro: "Cancelamento automático só existe no Uber. Use a confirmação manual." },
+      400
+    );
+  }
+
+  const entrega = await obterEntregaAoVivo(env, idPedido);
+  const atual = entrega?.status ?? despacho.status;
+  if (atual === "delivered" || atual === "canceled" || atual === "returned") {
+    return c.json({ erro: "Esta entrega já foi encerrada." }, 409);
+  }
+
+  const r = await cancelarUber(env, despacho.deliveryId, await modoAtual(env));
+  if (!r.ok) return c.json({ erro: r.erro }, 409);
+
+  // O webhook de cancelamento chega logo depois, mas pode demorar. Gravar já
+  // evita a tela mostrar "a caminho" para uma corrida que acabou de morrer.
+  await marcarEntregaManual(env, idPedido, "canceled", c.get("usuario").email, true);
+
+  return c.json({ ok: true });
+});
 // ---------------------------------------------------------------------------
 // 3) Cotação simultânea nos provedores LIGADOS
 //    GET /api/cotacao/:idPedido

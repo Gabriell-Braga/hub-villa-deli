@@ -145,6 +145,14 @@ export default function UltimaEntrega({ entrega }: { entrega: EntregaAnterior })
               </Linha>
             )}
 
+            {entrega.courierPlaca && (
+              <Linha rotulo="Placa">
+                <span className="font-mono font-bold tracking-[0.15em]">
+                  {entrega.courierPlaca}
+                </span>
+              </Linha>
+            )}
+
             {entrega.courierTelefone && (
               <Linha rotulo="Telefone do entregador">
                 <a

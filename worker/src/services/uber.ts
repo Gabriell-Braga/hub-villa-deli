@@ -1,5 +1,6 @@
 import type {
   Cotacao,
+  Endereco,
   Env,
   ModoOperacao,
   Pedido,
@@ -7,7 +8,7 @@ import type {
   ResultadoDespacho,
 } from "../types";
 import { getUberToken } from "./tokens";
-import { distanciaKm, enderecoFormatado } from "../lib/geo";
+import { distanciaKm, enderecoUber } from "../lib/geo";
 import { observacaoParaEntregador } from "../lib/observacao-entregador";
 import { credenciaisUber } from "../config/ambiente";
 
@@ -210,13 +211,55 @@ function distanciaAteOCliente(env: Env, pedido: Pedido): string | undefined {
   return `${km.toFixed(2)} km`;
 }
 
-function pickupPayload(env: Env) {
+/** O endereço da loja, montado das variáveis de ambiente. */
+export function enderecoDaLoja(env: Env): Endereco {
   return {
-    pickup_address: env.RESTAURANTE_CEP, // em prod, use o endereço estruturado completo
-    pickup_name: env.RESTAURANTE_NOME,
-    pickup_phone_number: env.RESTAURANTE_TELEFONE,
+    logradouro: env.RESTAURANTE_LOGRADOURO || "",
+    numero: env.RESTAURANTE_NUMERO || "s/n",
+    complemento: env.RESTAURANTE_COMPLEMENTO || undefined,
+    bairro: env.RESTAURANTE_BAIRRO || "",
+    cidade: env.RESTAURANTE_CIDADE || "",
+    uf: env.RESTAURANTE_UF || "",
+    cep: env.RESTAURANTE_CEP || "",
+  };
+}
+
+/**
+ * Coleta — o que a COTAÇÃO aceita.
+ *
+ * O create quote tem uma lista fechada de 14 campos. Mandar mais não dá erro,
+ * mas é descartado em silêncio: nome da loja e instruções não existem aqui.
+ * Separado do despacho para a diferença ficar visível em vez de virar um
+ * campo que alguém acha que está funcionando.
+ */
+function pickupCotacao(env: Env) {
+  return {
+    pickup_address: enderecoUber(enderecoDaLoja(env)),
     pickup_latitude: parseFloat(env.RESTAURANTE_LAT),
     pickup_longitude: parseFloat(env.RESTAURANTE_LNG),
+    pickup_phone_number: env.RESTAURANTE_TELEFONE,
+  };
+}
+
+/**
+ * Coleta — o DESPACHO, que aceita tudo.
+ *
+ * O `pickup_address` já foi só o CEP, e entregador teve dificuldade real para
+ * achar a loja. Agora vai estruturado (ver enderecoUber em lib/geo.ts).
+ *
+ * `pickup_business_name` é campo separado de `pickup_name` de propósito: o
+ * primeiro é o que o entregador procura na fachada, o segundo é com quem ele
+ * fala no balcão. Mandar o nome da loja nos dois desperdiça o campo que
+ * resolve "cheguei, e agora com quem falo".
+ */
+function pickupDespacho(env: Env) {
+  return {
+    ...pickupCotacao(env),
+    pickup_business_name: env.RESTAURANTE_NOME,
+    pickup_name: env.RESTAURANTE_NOME,
+    ...(env.RESTAURANTE_INSTRUCOES?.trim()
+      ? { pickup_notes: env.RESTAURANTE_INSTRUCOES.trim() }
+      : {}),
   };
 }
 
@@ -251,8 +294,8 @@ export async function cotarUber(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        ...pickupPayload(env),
-        dropoff_address: enderecoFormatado(pedido.endereco),
+        ...pickupCotacao(env),
+        dropoff_address: enderecoUber(pedido.endereco),
         dropoff_latitude: pedido.endereco.lat,
         dropoff_longitude: pedido.endereco.lng,
         // Nada de manifest_items aqui: o create quote aceita 14 campos e este
@@ -308,8 +351,8 @@ export async function despacharUber(
         quote_id: cotacao.quoteId,
         // Identificador único por tentativa — evita duplicate_delivery no reenvio.
         external_id: `${pedido.id}-${sequencia}`,
-        ...pickupPayload(env),
-        dropoff_address: enderecoFormatado(pedido.endereco),
+        ...pickupDespacho(env),
+        dropoff_address: enderecoUber(pedido.endereco),
         dropoff_name: pedido.cliente.nome,
         dropoff_phone_number: pedido.cliente.telefone,
         dropoff_latitude: pedido.endereco.lat,
@@ -394,4 +437,46 @@ export async function despacharUber(
     // exige um veículo maior que o precificado.
     veiculoPreferido: veiculo,
   };
+}
+
+/**
+ * Cancela uma entrega em andamento.
+ *
+ * O Uber pode recusar: depois que o entregador já coletou, a corrida não é mais
+ * cancelável (`noncancelable_delivery` na resposta deles). Nesse caso o certo é
+ * dizer isso ao atendente, não fingir que deu certo — ele precisa saber que a
+ * comida está a caminho para poder ligar para o cliente.
+ */
+export async function cancelarUber(
+  env: Env,
+  deliveryId: string,
+  modo: ModoOperacao
+): Promise<{ ok: boolean; erro?: string }> {
+  const cred = credenciaisUber(env, modo);
+  const token = await getUberToken(env, modo);
+
+  const res = await fetch(
+    `${cred.baseUrl}/v1/customers/${cred.customerId}/deliveries/${encodeURIComponent(deliveryId)}/cancel`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  if (res.ok) return { ok: true };
+
+  const corpo = await res.text();
+  // Este código tem tradução própria: é o caso comum e a mensagem genérica
+  // ("A Uber recusou") não diria ao atendente o que fazer a seguir.
+  if (corpo.includes("noncancelable_delivery")) {
+    return {
+      ok: false,
+      erro: "Esta entrega não pode mais ser cancelada: o entregador já coletou o pedido.",
+    };
+  }
+
+  return { ok: false, erro: traduzirErroUber(res.status, corpo) };
 }

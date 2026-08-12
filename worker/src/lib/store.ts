@@ -580,7 +580,9 @@ export async function aplicarEstadoEntrega(
        courier_veiculo      = COALESCE(?7,  courier_veiculo),
        courier_lat          = COALESCE(?8,  courier_lat),
        courier_lng          = COALESCE(?9,  courier_lng),
-       live_mode            = COALESCE(?11, live_mode)
+       live_mode            = COALESCE(?11, live_mode),
+       courier_placa        = COALESCE(?12, courier_placa),
+       pickup_eta           = COALESCE(?13, pickup_eta)
      WHERE delivery_id_externo = ?1`
   )
     .bind(
@@ -594,7 +596,9 @@ export async function aplicarEstadoEntrega(
       s.courierLat,
       s.courierLng,
       new Date().toISOString(),
-      s.liveMode === null ? null : s.liveMode ? 1 : 0
+      s.liveMode === null ? null : s.liveMode ? 1 : 0,
+      s.courierPlaca,
+      s.pickupEta
     )
     .run();
 }
@@ -618,7 +622,8 @@ export async function obterEntregaAnterior(
     `SELECT plataforma_escolhida, sequencia, COALESCE(status_ao_vivo, status) AS status,
             data_criacao, status_atualizado_em, valor_pago, frete_cobrado,
             eta_minutos, delivery_id_externo, tracking_url, codigo_entrega,
-            courier_nome, courier_telefone, courier_veiculo, despachado_por
+            courier_nome, courier_telefone, courier_veiculo, courier_placa,
+            despachado_por
        FROM deliveries
       WHERE id_pedido = ?1
       ORDER BY sequencia DESC
@@ -640,6 +645,7 @@ export async function obterEntregaAnterior(
       courier_nome: string | null;
       courier_telefone: string | null;
       courier_veiculo: string | null;
+      courier_placa: string | null;
       despachado_por: string | null;
     }>();
 
@@ -660,6 +666,7 @@ export async function obterEntregaAnterior(
     courierNome: l.courier_nome,
     courierTelefone: l.courier_telefone,
     courierVeiculo: l.courier_veiculo,
+    courierPlaca: l.courier_placa,
     despachadoPor: l.despachado_por,
   };
 }
@@ -756,7 +763,15 @@ export async function marcarEntregaManual(
   env: Env,
   idPedido: string,
   status: "delivered" | "canceled",
-  quem: string
+  quem: string,
+  /**
+   * Libera a trava do motoboy.
+   *
+   * Só o cancelamento pelo Uber usa: ali o PARCEIRO já confirmou que a corrida
+   * morreu, então gravar não inventa nada — só evita a tela mostrar "a
+   * caminho" enquanto o webhook não chega.
+   */
+  confirmadoPeloParceiro = false
 ): Promise<{ ok: boolean; erro?: string }> {
   const l = await env.DB.prepare(
     `SELECT plataforma_escolhida, COALESCE(status_ao_vivo, status) AS atual
@@ -769,7 +784,7 @@ export async function marcarEntregaManual(
     .first<{ plataforma_escolhida: string; atual: string }>();
 
   if (!l) return { ok: false, erro: "Entrega não encontrada." };
-  if (l.plataforma_escolhida !== "motoboy") {
+  if (!confirmadoPeloParceiro && l.plataforma_escolhida !== "motoboy") {
     return {
       ok: false,
       erro: "O status desta entrega vem do parceiro e não pode ser alterado à mão.",
@@ -794,13 +809,14 @@ export async function marcarEntregaManual(
       `INSERT OR IGNORE INTO eventos_entrega
          (id, provider, kind, status, delivery_id_externo, id_pedido,
           criado_em_parceiro, recebido_em, live_mode, payload)
-       VALUES (?1, 'motoboy', 'manual.status', ?2, ?3, ?3, ?4, ?4, NULL, ?5)`
+       VALUES (?1, ?6, 'manual.status', ?2, ?3, ?3, ?4, ?4, NULL, ?5)`
     ).bind(
       `manual:${idPedido}:${status}:${agora}`,
       status,
       idPedido,
       agora,
-      JSON.stringify({ confirmadoPor: quem, status })
+      JSON.stringify({ confirmadoPor: quem, status }),
+      l.plataforma_escolhida
     ),
   ]);
 
@@ -816,8 +832,9 @@ export async function obterEntregaAoVivo(
   // que o painel acompanha é a última.
   const l = await env.DB.prepare(
     `SELECT plataforma_escolhida, delivery_id_externo, status, status_ao_vivo,
-            status_atualizado_em, tracking_url, dropoff_eta,
-            courier_nome, courier_telefone, courier_veiculo, live_mode
+            status_atualizado_em, tracking_url, dropoff_eta, pickup_eta,
+            courier_nome, courier_telefone, courier_veiculo, courier_placa,
+            live_mode
        FROM deliveries
       WHERE id_pedido = ?1
       ORDER BY sequencia DESC
@@ -832,9 +849,11 @@ export async function obterEntregaAoVivo(
       status_atualizado_em: string | null;
       tracking_url: string | null;
       dropoff_eta: string | null;
+      pickup_eta: string | null;
       courier_nome: string | null;
       courier_telefone: string | null;
       courier_veiculo: string | null;
+      courier_placa: string | null;
       live_mode: number | null;
     }>();
 
@@ -847,9 +866,11 @@ export async function obterEntregaAoVivo(
     statusAtualizadoEm: l.status_atualizado_em,
     trackingUrl: l.tracking_url,
     dropoffEta: l.dropoff_eta,
+    pickupEta: l.pickup_eta,
     courierNome: l.courier_nome,
     courierTelefone: l.courier_telefone,
     courierVeiculo: l.courier_veiculo,
+    courierPlaca: l.courier_placa,
     liveMode: l.live_mode === null ? null : l.live_mode === 1,
   };
 }

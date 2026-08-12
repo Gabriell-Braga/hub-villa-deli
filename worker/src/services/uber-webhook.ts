@@ -46,19 +46,32 @@ interface PayloadUber {
     status?: string;
     tracking_url?: string;
     dropoff_eta?: string;
+    /** Quando o entregador chega NA LOJA. */
+    pickup_eta?: string;
     courier?: {
       name?: string;
       phone_number?: string;
       vehicle_type?: string;
       vehicle_make?: string;
       vehicle_model?: string;
+      vehicle_color?: string;
+      vehicle_license_plate?: string;
       location?: { lat?: number; lng?: number };
     } | null;
   };
 }
 
+/**
+ * Descrição do veículo para quem está no balcão: "Honda CG Vermelha".
+ *
+ * A cor entra porque é o que se enxerga primeiro de longe; marca e modelo
+ * confirmam de perto. Sem nada disso, cai no tipo ("motorcycle"), que ao menos
+ * diz se é moto ou carro.
+ */
 function veiculo(c: NonNullable<NonNullable<PayloadUber["data"]>["courier"]>): string | null {
-  const partes = [c.vehicle_make, c.vehicle_model].filter(Boolean).join(" ");
+  const partes = [c.vehicle_make, c.vehicle_model, c.vehicle_color]
+    .filter(Boolean)
+    .join(" ");
   return partes || c.vehicle_type || null;
 }
 
@@ -130,9 +143,11 @@ export async function processarWebhookUber(
     status: statusBruto,
     trackingUrl: p.data?.tracking_url ?? null,
     dropoffEta: p.data?.dropoff_eta ?? null,
+    pickupEta: p.data?.pickup_eta ?? null,
     courierNome: cour?.name ?? null,
     courierTelefone: cour?.phone_number ?? null,
     courierVeiculo: cour ? veiculo(cour) : null,
+    courierPlaca: cour?.vehicle_license_plate ?? null,
     // O courier_update traz a posição na raiz; o delivery_status, dentro de courier.
     courierLat: p.location?.lat ?? cour?.location?.lat ?? null,
     courierLng: p.location?.lng ?? cour?.location?.lng ?? null,

@@ -86,6 +86,12 @@ CREATE TABLE IF NOT EXISTS deliveries (
   courier_nome          TEXT,
   courier_telefone      TEXT,
   courier_veiculo       TEXT,
+  -- Placa: duas motos pretas na porta ao mesmo tempo, e o balcao precisa saber
+  -- qual e a do pedido.
+  courier_placa         TEXT,
+  -- Quando o entregador chega NA LOJA (o dropoff_eta e a chegada no cliente).
+  -- A cozinha usa para saber se embala agora ou espera.
+  pickup_eta            TEXT,
   courier_lat           REAL,
   courier_lng           REAL,
   -- false = evento de teste (credenciais de sandbox)
