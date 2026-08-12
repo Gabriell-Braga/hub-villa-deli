@@ -352,6 +352,15 @@ export default function CardEntrega({
             >
               {cancelando ? "Cancelando..." : "Cancelar esta corrida no Uber"}
             </button>
+            {/* CANCELAR PODE CUSTAR DINHEIRO.
+                Cláusula 6.2 do contrato brasileiro do Uber Direct: R$ 5,00 se o
+                cancelamento acontecer depois de o entregador chegar na loja. O
+                atendente decide melhor sabendo disso — e o custo aparece na
+                fatura de qualquer forma, então esconder só adiaria a surpresa. */}
+            <p className="mt-1.5 text-xs text-gray-500">
+              Se o entregador já tiver chegado na loja, a Uber cobra R$ 5,00 de
+              taxa de cancelamento.
+            </p>
           </div>
         )}
 
