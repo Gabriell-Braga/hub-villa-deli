@@ -150,13 +150,18 @@ export default function PaginaCotacao({
     }
   }, [idPedido]);
 
-  async function despachar(provider: ProviderId, nome: string, veiculo?: Veiculo) {
+  async function despachar(
+    provider: ProviderId,
+    nome: string,
+    veiculo?: Veiculo,
+    prontoEmMin = 0
+  ) {
     setDespachando(provider);
     try {
       const res = await apiFetch("/api/despachar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idPedido, provider, veiculo }),
+        body: JSON.stringify({ idPedido, provider, veiculo, prontoEmMin }),
       });
       const json = await res.json();
 
@@ -625,9 +630,14 @@ export default function PaginaCotacao({
         aberto={pedindoVeiculo !== null}
         ocupado={despachando !== null}
         onCancelar={() => setPedindoVeiculo(null)}
-        onConfirmar={(veiculo) =>
+        onConfirmar={(veiculo, prontoEmMin) =>
           pedindoVeiculo &&
-          despachar(pedindoVeiculo.provider, pedindoVeiculo.nome, veiculo)
+          despachar(
+            pedindoVeiculo.provider,
+            pedindoVeiculo.nome,
+            veiculo,
+            prontoEmMin
+          )
         }
       />
     </div>

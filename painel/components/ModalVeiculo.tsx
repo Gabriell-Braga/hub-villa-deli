@@ -73,6 +73,28 @@ const OPCOES: Array<{
   },
 ];
 
+// ---------------------------------------------------------------------------
+// Quando a comida fica pronta.
+//
+// A queixa era demora para achar entregador. Medindo a cotação daqui, o Uber
+// estima 13 minutos entre criar a corrida e o entregador encostar na porta.
+// Despachando com a comida pronta, esses 13 minutos são de comida esfriando.
+//
+// Avisando o horário, a busca corre junto com o preparo. A documentação da
+// Uber é explícita: "the courier will arrive around the pickup_ready_dt". E o
+// preço não muda — testado, mesma cotação com e sem horário marcado.
+//
+// "Agora" é o padrão e é exatamente o que o sistema sempre fez. Os degraus
+// começam em 10 porque abaixo disso a API recusa a janela.
+// ---------------------------------------------------------------------------
+const PRONTO: Array<{ min: number; rotulo: string }> = [
+  { min: 0, rotulo: "Agora" },
+  { min: 10, rotulo: "10 min" },
+  { min: 15, rotulo: "15 min" },
+  { min: 20, rotulo: "20 min" },
+  { min: 30, rotulo: "30 min" },
+];
+
 export default function ModalVeiculo({
   aberto,
   ocupado,
@@ -82,9 +104,10 @@ export default function ModalVeiculo({
   aberto: boolean;
   ocupado: boolean;
   onCancelar: () => void;
-  onConfirmar: (v: Veiculo) => void;
+  onConfirmar: (v: Veiculo, prontoEmMin: number) => void;
 }) {
   const [escolhido, setEscolhido] = useState<Veiculo>("moto");
+  const [prontoEm, setProntoEm] = useState(0);
   const caixa = useRef<HTMLDivElement>(null);
 
   // Esc fecha. Sem isso o único jeito de sair é achar o botão — e o modal
@@ -99,9 +122,14 @@ export default function ModalVeiculo({
   }, [aberto, ocupado, onCancelar]);
 
   // Volta para "moto" a cada abertura: a escolha é por pedido, e herdar a do
-  // pedido anterior faria alguém despachar de carro sem perceber.
+  // pedido anterior faria alguém despachar de carro sem perceber. Mesma razão
+  // para o horário: herdar "30 min" de um pedido grande faria o próximo, já
+  // pronto, esperar meia hora na bancada.
   useEffect(() => {
-    if (aberto) setEscolhido("moto");
+    if (aberto) {
+      setEscolhido("moto");
+      setProntoEm(0);
+    }
   }, [aberto]);
 
   useEffect(() => {
@@ -131,14 +159,52 @@ export default function ModalVeiculo({
         <div className="flex items-center gap-2.5">
           <LogoProvedor provider="uber" tamanho={26} />
           <h2 id="titulo-veiculo" className="text-lg font-semibold text-gray-900">
-            Preferência de veículo
+            Despachar pelo Uber
           </h2>
         </div>
-        <p className="mt-1.5 text-sm text-gray-500">
-          Escolha o veículo mais adequado a este pedido.
+
+        <p className="mt-4 text-sm font-medium text-gray-900">
+          A comida fica pronta em
+        </p>
+        <p className="mt-0.5 text-xs text-gray-500">
+          O entregador é chamado agora e chega perto desse horário.
         </p>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          {PRONTO.map((p) => {
+            const ativo = prontoEm === p.min;
+            return (
+              <button
+                key={p.min}
+                type="button"
+                onClick={() => setProntoEm(p.min)}
+                aria-pressed={ativo}
+                className={`rounded-lg border px-3.5 py-2 text-sm font-medium transition ${
+                  ativo
+                    ? "border-[var(--marca-primaria)] bg-gray-50 text-gray-900 ring-2 ring-gray-200"
+                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                {p.rotulo}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Só aparece quando há o que avisar. Em "Agora" não existe espera
+            possível, e um aviso permanente vira ruído que ninguém lê. */}
+        {prontoEm > 0 && (
+          <p className="mt-2.5 text-xs leading-relaxed text-gray-500">
+            Se a comida atrasar e o entregador esperar mais de 10 minutos na
+            loja, a Uber cobra pela espera.
+          </p>
+        )}
+
+        <p className="mt-5 text-sm font-medium text-gray-900">
+          Preferência de veículo
+        </p>
+
+        <div className="mt-2.5 grid gap-3 sm:grid-cols-2">
           {OPCOES.map((o) => {
             const ativo = escolhido === o.id;
             return (
@@ -186,7 +252,7 @@ export default function ModalVeiculo({
           </button>
           <button
             type="button"
-            onClick={() => onConfirmar(escolhido)}
+            onClick={() => onConfirmar(escolhido, prontoEm)}
             disabled={ocupado}
             className="rounded-lg bg-[var(--marca-primaria)] px-4 py-2.5 text-sm font-semibold text-[var(--marca-contraste)] transition hover:bg-[var(--marca-primaria-hover)] disabled:opacity-50"
           >

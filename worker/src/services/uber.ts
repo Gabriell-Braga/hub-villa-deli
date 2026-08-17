@@ -329,13 +329,53 @@ export async function cotarUber(
   };
 }
 
+// ---------------------------------------------------------------------------
+// JANELA DE COLETA — despachar antes de a comida ficar pronta.
+//
+// O problema medido: numa cotação ASAP daqui, o `pickup_duration` volta em 13
+// minutos. Esse é o tempo entre criar a corrida e o entregador encostar na
+// porta — busca mais deslocamento. Despachando com a comida pronta, esses 13
+// minutos são 13 minutos de comida esfriando no balcão.
+//
+// `pickup_ready_dt` resolve isso. Na documentação deles: "the courier will
+// arrive around the pickup_ready_dt". Despachando na entrada do pedido com a
+// janela apontando para quando a cozinha termina, a busca acontece EM PARALELO
+// com o preparo, e o entregador chega junto com a comida.
+//
+// Medido antes de escrever, três cotações no mesmo instante: R$14,30 com
+// janela e sem janela. Agendar não custa nada.
+//
+// Os limites são da API, e o 400 é real (`pickup_window_too_small`):
+//   - a janela precisa ter no mínimo 10 minutos;
+//   - `pickup_deadline_dt` precisa estar no mínimo 20 minutos à frente.
+// Por isso o fim da janela é o mais tarde entre os dois — pedir 10 minutos de
+// preparo com prazo em 20 é válido, pedir com prazo em 20 quando o preparo é
+// 15 não seria.
+//
+// O risco fica com quem escolhe, e a tela avisa: se o entregador chegar e a
+// comida atrasar, a espera passa a correr contra a loja depois de 10 minutos
+// (cláusula 6.3 do contrato). Por isso zero significa ASAP, exatamente como
+// era antes — quem não escolhe nada não muda de comportamento.
+// ---------------------------------------------------------------------------
+function janelaDeColeta(prontoEmMin: number) {
+  if (!Number.isFinite(prontoEmMin) || prontoEmMin < 10) return {};
+  const agora = Date.now();
+  const pronto = agora + prontoEmMin * 60_000;
+  const fim = Math.max(pronto + 10 * 60_000, agora + 20 * 60_000);
+  return {
+    pickup_ready_dt: new Date(pronto).toISOString(),
+    pickup_deadline_dt: new Date(fim).toISOString(),
+  };
+}
+
 export async function despacharUber(
   env: Env,
   pedido: Pedido,
   cotacao: Cotacao,
   modo: ModoOperacao,
   veiculo: PreferenciaVeiculo = "moto",
-  sequencia = 1
+  sequencia = 1,
+  prontoEmMin = 0
 ): Promise<ResultadoDespacho> {
   const cred = credenciaisUber(env, modo);
   const token = await getUberToken(env, modo);
@@ -359,6 +399,7 @@ export async function despacharUber(
         dropoff_longitude: pedido.endereco.lng,
         dropoff_notes: observacaoParaEntregador(pedido),
         manifest_items: manifesto(pedido, veiculo),
+        ...janelaDeColeta(prontoEmMin),
 
         // CÓDIGO DE ENTREGA (PIN de 4 dígitos).
         //

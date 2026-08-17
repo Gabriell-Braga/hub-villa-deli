@@ -44,7 +44,13 @@ export interface Provedor {
     /** Veículo preferido. Provedor que não usa a informação simplesmente ignora. */
     veiculo: PreferenciaVeiculo,
     /** Tentativa de entrega (1 = primeira corrida, 2+ = reenvio). */
-    sequencia: number
+    sequencia: number,
+    /**
+     * Minutos até a comida ficar pronta. Zero = coletar agora, que é o padrão.
+     * Quem aceita a informação usa para o entregador chegar junto com a comida
+     * em vez de começar a busca só depois dela pronta; quem não aceita ignora.
+     */
+    prontoEmMin: number
   ) => Promise<ResultadoDespacho>;
 }
 

@@ -768,6 +768,28 @@ app.get("/api/cotacao/:idPedido", async (c) => {
   let pedido = await obterPedido(env, idPedido);
   if (!pedido) return c.json({ erro: "pedido não encontrado" }, 404);
 
+  // PEDIDO JÁ DESPACHADO NÃO COTA.
+  //
+  // Depois do despacho a tela vira acompanhamento, e ela revalida a cada 20 s
+  // para pegar o status do webhook. Cada uma dessas voltas estava cotando o
+  // Uber de novo — 4 a 8 segundos de espera e uma cotação criada na conta da
+  // loja a cada 20 segundos, para uma decisão que já foi tomada.
+  //
+  // Sai antes de tudo: sem chamada a parceiro, a tela de acompanhamento
+  // responde no tempo do banco.
+  const jaDespachado = await obterDespacho(env, idPedido);
+  if (jaDespachado) {
+    return c.json({
+      idPedido,
+      pedido,
+      maisBarato: null,
+      cotacoes: (await obterCotacoes(env, idPedido)) ?? [],
+      despacho: jaDespachado,
+      entrega: await obterEntregaAoVivo(env, idPedido),
+      entregaAnterior: null,
+    });
+  }
+
   // Antes de recusar por falta de pagamento, PERGUNTA de novo ao Cardápio Web.
   //
   // O pedido no Pix entra com o pagamento pendente e compensa segundos depois.
@@ -887,7 +909,12 @@ app.post("/api/despachar", async (c) => {
   const atendente = c.get("usuario");
 
   const body = await c.req
-    .json<{ idPedido?: string; provider?: ProviderId; veiculo?: string }>()
+    .json<{
+      idPedido?: string;
+      provider?: ProviderId;
+      veiculo?: string;
+      prontoEmMin?: number;
+    }>()
     .catch(() => null);
 
   const idPedido = body?.idPedido;
@@ -897,6 +924,15 @@ app.post("/api/despachar", async (c) => {
   // preferência é uma dica para a transportadora, não uma trava — travar a
   // corrida por causa dela seria trocar um problema pequeno por um grande.
   const veiculo: PreferenciaVeiculo = body?.veiculo === "carro" ? "carro" : "moto";
+
+  // Minutos até a comida ficar pronta. Zero, ausente ou lixo = ASAP, que é o
+  // comportamento de sempre. O teto de 120 existe porque isto vem da tela: um
+  // dedo errado num campo de minutos não pode virar uma corrida marcada para
+  // depois do jantar.
+  const prontoEmMin = Math.min(
+    120,
+    Math.max(0, Math.trunc(Number(body?.prontoEmMin) || 0))
+  );
   if (!idPedido || !provider) {
     return c.json({ erro: "idPedido e provider são obrigatórios" }, 400);
   }
@@ -963,7 +999,8 @@ app.post("/api/despachar", async (c) => {
       cotacao,
       modo,
       veiculo,
-      sequencia
+      sequencia,
+      prontoEmMin
     );
 
     await concluirDespacho(env, idPedido, resultado);
