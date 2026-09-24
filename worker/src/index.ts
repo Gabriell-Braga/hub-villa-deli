@@ -53,6 +53,8 @@ import {
 import { historicoCsv, listarHistorico, nomeArquivoCsv } from "./lib/historico";
 import { assinaturaValida } from "./lib/assinatura";
 import { processarWebhookUber } from "./services/uber-webhook";
+import { cancelarIfood } from "./services/ifood";
+import { processarWebhookIfood } from "./services/ifood-webhook";
 import {
   entregarLink,
   gerarTokenCru,
@@ -598,6 +600,59 @@ app.post("/api/webhook/uber", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// 1d) Webhook do iFood — eventos de entrega (entregador, coleta, conclusão)
+//     POST /api/webhook/ifood
+//
+// URL cadastrada no Portal do Desenvolvedor, na aplicação > Webhook.
+// A assinatura (X-IFood-Signature) é HMAC-SHA256 do corpo cru com o CLIENT
+// SECRET — não há chave separada. O iFood exige a recusa de assinatura
+// inválida para homologar a aplicação.
+//
+// Responder rápido e com 2xx: o iFood reenvia o que não recebeu 2xx, e a loja
+// recebe eventos de TODOS os pedidos, não só os despachados pelo Hub.
+// ---------------------------------------------------------------------------
+app.post("/api/webhook/ifood", async (c) => {
+  const corpoBruto = await c.req.text();
+  const recebida = c.req.header("x-ifood-signature") ?? null;
+
+  // Os dois modos, pela mesma razão do Uber: entrega criada em teste continua
+  // mandando eventos depois de virar a chave.
+  const chaves = [c.env.IFOOD_CLIENT_SECRET, c.env.IFOOD_CLIENT_SECRET_TESTE].filter(
+    (k): k is string => !!k && k.trim() !== ""
+  );
+  if (chaves.length === 0) {
+    console.warn("[ifood-webhook] nenhum client secret configurado");
+    return c.json({ erro: "webhook não configurado" }, 500);
+  }
+
+  let autenticado = false;
+  for (const chave of chaves) {
+    if (await assinaturaValida(chave, corpoBruto, recebida)) {
+      autenticado = true;
+      break;
+    }
+  }
+  if (!autenticado) {
+    console.warn("[ifood-webhook] assinatura inválida");
+    return c.json({ erro: "assinatura inválida" }, 401);
+  }
+
+  try {
+    const r = await processarWebhookIfood(c.env, corpoBruto);
+    if ("erro" in r) {
+      console.warn(`[ifood-webhook] ${r.erro}`);
+      return c.json({ ok: true, ignorado: r.erro }, 202);
+    }
+    return c.json({ ok: true, ...r }, 202);
+  } catch (e) {
+    console.error(
+      `[ifood-webhook] falha ao processar: ${e instanceof Error ? e.message : e}`
+    );
+    return c.json({ erro: "falha ao processar" }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // 2) Listagem de pedidos
 //    GET /api/pedidos?aba=abertos|historico&limite=50
 // ---------------------------------------------------------------------------
@@ -721,8 +776,8 @@ app.post("/api/entrega/:idPedido/reenviar", async (c) => {
 // 2e) Cancelar a corrida no parceiro
 //     POST /api/entrega/:idPedido/cancelar
 //
-// Só o Uber: o motoboy próprio se cancela pela tela de confirmação manual, e
-// mandar "cancelado" para um parceiro que não sabe da corrida não faz nada.
+// Uber e iFood: o motoboy próprio se cancela pela tela de confirmação manual,
+// e mandar "cancelado" para um parceiro que não sabe da corrida não faz nada.
 //
 // Quem manda é o PARCEIRO. Se ele recusar (entregador já coletou), o pedido
 // continua despachado aqui — marcar como cancelado no banco criaria um estado
@@ -735,9 +790,9 @@ app.post("/api/entrega/:idPedido/cancelar", async (c) => {
   const despacho = await obterDespacho(env, idPedido);
   if (!despacho) return c.json({ erro: "Este pedido não tem entrega despachada." }, 404);
 
-  if (despacho.provider !== "uber") {
+  if (despacho.provider !== "uber" && despacho.provider !== "ifood") {
     return c.json(
-      { erro: "Cancelamento automático só existe no Uber. Use a confirmação manual." },
+      { erro: "Cancelamento automático só existe no Uber e no iFood. Use a confirmação manual." },
       400
     );
   }
@@ -748,7 +803,15 @@ app.post("/api/entrega/:idPedido/cancelar", async (c) => {
     return c.json({ erro: "Esta entrega já foi encerrada." }, 409);
   }
 
-  const r = await cancelarUber(env, despacho.deliveryId, await modoAtual(env));
+  const modo = await modoAtual(env);
+  let r: { ok: boolean; erro?: string };
+  if (despacho.provider === "ifood") {
+    const pedido = await obterPedido(env, idPedido);
+    if (!pedido) return c.json({ erro: "pedido não encontrado" }, 404);
+    r = await cancelarIfood(env, pedido, despacho.deliveryId, modo);
+  } else {
+    r = await cancelarUber(env, despacho.deliveryId, modo);
+  }
   if (!r.ok) return c.json({ erro: r.erro }, 409);
 
   // O webhook de cancelamento chega logo depois, mas pode demorar. Gravar já

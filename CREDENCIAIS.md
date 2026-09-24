@@ -192,6 +192,41 @@ O script assina igual ao Uber (HMAC-SHA256 do corpo cru, header
 
 ---
 
+## 1b. iFood Entrega Fácil (módulo Shipping)
+
+Portal: `developer.ifood.com.br`. O Hub usa só o módulo **Shipping** — pedir
+entregador do iFood. Não recebe nem confirma pedido do iFood (isso continua com
+o Cardápio Web).
+
+| Valor do portal | Modo TESTE | Modo PRODUÇÃO | É segredo? |
+|---|---|---|---|
+| Client ID | `IFOOD_CLIENT_ID_TESTE` | `IFOOD_CLIENT_ID` | ✅ |
+| Client Secret | `IFOOD_CLIENT_SECRET_TESTE` | `IFOOD_CLIENT_SECRET` | ✅ |
+| ID da loja (merchantId, UUID) | `IFOOD_MERCHANT_ID_TESTE` | `IFOOD_MERCHANT_ID` | ❌ (`wrangler.toml`) |
+
+- **Não existe sandbox.** Teste e produção usam a mesma URL; o que muda é a
+  **loja**. O portal cria uma loja de teste junto com a aplicação — o
+  merchantId dela vai no `_TESTE`.
+- **O Client Secret também assina o webhook** (`X-IFood-Signature`,
+  HMAC-SHA256). Não há "signing key" separada como no Uber.
+- **Webhook:** na aplicação, aba Webhook, cadastre
+  `https://<worker>/api/webhook/ifood`. Sem ele a entrega é criada, mas o
+  painel não vê entregador, coleta nem conclusão.
+- **A loja precisa autorizar o aplicativo** no Portal do Parceiro. Sem isso o
+  token funciona e toda cotação volta 403 — o diagnóstico acusa.
+- **Entrega Fácil precisa estar habilitado na loja** (contrato com o iFood).
+  Sem ele a cotação volta `MerchantEasyDeliveryDisabled`.
+- Para ligar: `PROVEDORES_ATIVOS = "uber,ifood,motoboy"`.
+
+Dois caminhos, escolhidos sozinhos pelo canal do pedido:
+
+| Pedido veio de | Cotação | Despacho |
+|---|---|---|
+| iFood (`canal = ifood`) | `GET /shipping/v1.0/orders/{id}/deliveryAvailabilities` | `POST .../requestDriver` |
+| Cardápio próprio / outros | `GET /shipping/v1.0/merchants/{merchantId}/deliveryAvailabilities` | `POST /shipping/v1.0/merchants/{merchantId}/orders` |
+
+---
+
 ## 2. Cardápio Web
 
 O Cardápio Web **chama o Hub**, não o contrário. Então o que importa é o segredo

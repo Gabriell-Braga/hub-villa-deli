@@ -77,6 +77,47 @@ export function credenciaisUber(env: Env, modo: ModoOperacao): CredenciaisUber {
   };
 }
 
+export interface CredenciaisIfood {
+  clientId: string;
+  clientSecret: string;
+  /** Id da loja no iFood (UUID). É ele que vai na URL da cotação e do pedido. */
+  merchantId: string;
+  baseUrl: string;
+}
+
+/**
+ * Credenciais do iFood para o modo pedido.
+ *
+ * O iFood NÃO tem host de sandbox: teste e produção falam com a mesma API. O
+ * que separa os dois mundos é a LOJA — o portal de desenvolvedor entrega uma
+ * loja de teste junto com a aplicação, e é o merchant id dela que vai no modo
+ * teste. Por isso o merchant id também é por modo, não só o client.
+ *
+ * O Client Secret tem dupla função: gera o token e assina o webhook
+ * (X-IFood-Signature). Não existe "signing key" separada como no Uber.
+ */
+export function credenciaisIfood(env: Env, modo: ModoOperacao): CredenciaisIfood {
+  const teste = modo === "teste";
+  const ou = (a: string | undefined, b: string | undefined) =>
+    (a && a.trim()) || (b && b.trim()) || "";
+  const base = "https://merchant-api.ifood.com.br";
+
+  return {
+    clientId: teste
+      ? ou(env.IFOOD_CLIENT_ID_TESTE, env.IFOOD_CLIENT_ID)
+      : ou(env.IFOOD_CLIENT_ID, undefined),
+    clientSecret: teste
+      ? ou(env.IFOOD_CLIENT_SECRET_TESTE, env.IFOOD_CLIENT_SECRET)
+      : ou(env.IFOOD_CLIENT_SECRET, undefined),
+    merchantId: teste
+      ? ou(env.IFOOD_MERCHANT_ID_TESTE, env.IFOOD_MERCHANT_ID)
+      : ou(env.IFOOD_MERCHANT_ID, undefined),
+    baseUrl: teste
+      ? ou(env.IFOOD_BASE_URL_TESTE, env.IFOOD_BASE_URL || base)
+      : ou(env.IFOOD_BASE_URL, base),
+  };
+}
+
 /** O modo teste está caindo nas credenciais de produção por falta das de teste? */
 export function testeUsandoCredencialDeProducao(env: Env): boolean {
   return (

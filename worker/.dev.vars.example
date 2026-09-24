@@ -48,9 +48,15 @@ UBER_WEBHOOK_SECRET=
 # Só necessário se o Hub for CHAMAR a API deles (hoje só recebemos webhook).
 CARDAPIO_WEB_TOKEN=
 
-# --- Só quando ligar os outros provedores ----------------------------------
+# --- iFood Entrega Fácil ----------------------------------------------------
+# Portal do Desenvolvedor iFood > sua aplicação > Credenciais.
+# O Client Secret também assina o webhook (X-IFood-Signature).
+IFOOD_CLIENT_ID_TESTE=
+IFOOD_CLIENT_SECRET_TESTE=
 IFOOD_CLIENT_ID=
 IFOOD_CLIENT_SECRET=
+
+# --- Só quando ligar a 99 ---------------------------------------------------
 NOVA99_CLIENT_ID=
 NOVA99_CLIENT_SECRET=
 

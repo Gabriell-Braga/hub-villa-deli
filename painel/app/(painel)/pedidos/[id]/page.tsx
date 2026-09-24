@@ -200,7 +200,9 @@ export default function PaginaCotacao({
         return;
       }
 
-      toast.sucesso("Corrida cancelada no Uber.");
+      toast.sucesso(
+        `Corrida cancelada no ${despacho?.provider === "ifood" ? "iFood" : "Uber"}.`
+      );
       await cotar();
     } catch {
       toast.erro("Erro de rede ao cancelar.");

@@ -1,5 +1,5 @@
 import type { Env, ModoOperacao } from "../types";
-import { credenciaisUber, prefixoCache } from "../config/ambiente";
+import { credenciaisIfood, credenciaisUber, prefixoCache } from "../config/ambiente";
 
 // ---------------------------------------------------------------------------
 // Cache de tokens OAuth2 no Cloudflare KV.
@@ -59,20 +59,24 @@ export async function getCachedToken(
 
 // --- Fetchers específicos (client_credentials) --------------------------------
 
-export function getIfoodToken(env: Env, modo: ModoOperacao): Promise<string> {
-  return getCachedToken(env, modo, "token:ifood", async () => {
+export async function getIfoodToken(
+  env: Env,
+  modo: ModoOperacao
+): Promise<string> {
+  const cred = credenciaisIfood(env, modo);
+  // Mesma razão do Uber (ver marcaDaCredencial): trocar de aplicação no iFood
+  // tem que invalidar o token guardado, não reaproveitá-lo por 6 horas.
+  const marca = await marcaDaCredencial(cred.clientId);
+
+  return getCachedToken(env, modo, `token:ifood:${marca}`, async () => {
+    // camelCase de propósito: o iFood NÃO aceita grant_type/client_id aqui.
     const body = new URLSearchParams({
       grantType: "client_credentials",
-      clientId: env.IFOOD_CLIENT_ID,
-      clientSecret: env.IFOOD_CLIENT_SECRET,
+      clientId: cred.clientId,
+      clientSecret: cred.clientSecret,
     });
 
-    const base =
-      modo === "teste"
-        ? env.IFOOD_BASE_URL_TESTE || env.IFOOD_BASE_URL
-        : env.IFOOD_BASE_URL;
-
-    const res = await fetch(`${base}/authentication/v1.0/oauth/token`, {
+    const res = await fetch(`${cred.baseUrl}/authentication/v1.0/oauth/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body,

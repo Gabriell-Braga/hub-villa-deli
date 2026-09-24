@@ -1,12 +1,13 @@
 import type { Env } from "../types";
 import {
   ambiente,
+  credenciaisIfood,
   credenciaisUber,
   testeUsandoCredencialDeProducao,
 } from "../config/ambiente";
 import { modoAtual, podeUsarProducao } from "../config/modo";
 import { nomeProvedor, provedoresAtivos } from "../config/provedores";
-import { getUberToken } from "../services/tokens";
+import { getIfoodToken, getUberToken } from "../services/tokens";
 
 // ---------------------------------------------------------------------------
 // DIAGNÓSTICO DE CONFIGURAÇÃO
@@ -288,6 +289,73 @@ export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
       comoResolver:
         "No painel do Uber Direct, cadastre a URL de webhook do Hub e envie a chave de assinatura ao suporte.",
     });
+  }
+
+  // --- iFood Entrega Fácil --------------------------------------------------
+  if (ativos.includes("ifood")) {
+    const ci = credenciaisIfood(env, modo);
+    const faltando: string[] = [];
+    if (!preenchido(ci.clientId)) faltando.push("Client ID");
+    if (!preenchido(ci.clientSecret)) faltando.push("Client Secret");
+    if (!preenchido(ci.merchantId)) faltando.push("ID da loja (Merchant ID)");
+
+    if (faltando.length > 0) {
+      itens.push({
+        chave: "ifood",
+        titulo: "iFood Entrega Fácil",
+        status: "erro",
+        detalhe: `Credenciais incompletas. Faltando: ${faltando.join(", ")}.`,
+        comoResolver:
+          "Pegue esses valores no Portal do Desenvolvedor do iFood e envie ao suporte.",
+      });
+    } else {
+      // Token + leitura da loja. Nenhuma das duas cria entrega; a segunda
+      // confirma que a loja autorizou o aplicativo, que é o passo que mais
+      // fica esquecido.
+      try {
+        const token = await getIfoodToken(env, modo);
+        const res = await fetch(
+          `${ci.baseUrl}/merchant/v1.0/merchants/${encodeURIComponent(ci.merchantId)}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        itens.push(
+          res.ok
+            ? {
+                chave: "ifood",
+                titulo: "iFood Entrega Fácil",
+                status: "ok",
+                detalhe:
+                  modo === "producao"
+                    ? "Conectado à loja real no iFood."
+                    : "Conectado à loja de teste do iFood.",
+              }
+            : res.status === 401 || res.status === 403 || res.status === 404
+              ? {
+                  chave: "ifood",
+                  titulo: "iFood Entrega Fácil",
+                  status: "erro",
+                  detalhe: "Credenciais aceitas, mas a loja não autorizou este aplicativo.",
+                  comoResolver:
+                    "No Portal do Parceiro iFood, autorize o aplicativo do Hub para a loja e confira o ID da loja.",
+                }
+              : {
+                  chave: "ifood",
+                  titulo: "iFood Entrega Fácil",
+                  status: "aviso",
+                  detalhe: `Credenciais aceitas. O iFood respondeu de forma inesperada (código ${res.status}).`,
+                  comoResolver: "Tente novamente em alguns minutos.",
+                }
+        );
+      } catch {
+        itens.push({
+          chave: "ifood",
+          titulo: "iFood Entrega Fácil",
+          status: "erro",
+          detalhe: "O iFood recusou as credenciais cadastradas.",
+          comoResolver: "Confira Client ID e Client Secret no Portal do Desenvolvedor do iFood.",
+        });
+      }
+    }
   }
 
   // --- Provedores ativos ----------------------------------------------------

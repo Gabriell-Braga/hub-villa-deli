@@ -68,7 +68,8 @@ export const PROVEDORES: Record<ProviderId, Provedor> = {
   ifood: {
     id: "ifood",
     nome: "iFood Entrega Fácil",
-    // Desligado: endpoints de logística ainda não confirmados no contrato B2B.
+    // Desligado até ter credenciais: liga com PROVEDORES_ATIVOS="uber,ifood,motoboy".
+    // Implementado sobre o módulo Shipping (ver services/ifood.ts).
     ativo: false,
     cotar: cotarIfood,
     despachar: despacharIfood,

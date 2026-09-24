@@ -69,6 +69,8 @@ export interface Env {
   /** Escopos da conta de TESTE — podem diferir dos de produção. */
   UBER_SCOPE_TESTE: string;
   IFOOD_MERCHANT_ID: string;
+  /** Loja de TESTE do iFood (o portal cria uma junto com a aplicação). */
+  IFOOD_MERCHANT_ID_TESTE: string;
 
   // Cardápio Web — quem manda o pedido para cá.
   /** Nome do header que o Cardápio Web usa para assinar o webhook. */
@@ -103,6 +105,8 @@ export interface Env {
   UBER_CLIENT_ID_TESTE: string;
   UBER_CLIENT_SECRET_TESTE: string;
   UBER_WEBHOOK_SECRET_TESTE: string;
+  IFOOD_CLIENT_ID_TESTE: string;
+  IFOOD_CLIENT_SECRET_TESTE: string;
 
   // Geocodificação (opcional). Sem chave, usa Nominatim/OpenStreetMap grátis.
   GOOGLE_MAPS_API_KEY: string;
