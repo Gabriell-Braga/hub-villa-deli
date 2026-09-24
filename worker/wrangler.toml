@@ -153,8 +153,8 @@ crons = ["*/5 * * * *", "0 4 * * *"]
 
 [env.hml.vars]
 AMBIENTE = "hml"
-PROVEDORES_ATIVOS = "uber,motoboy"
-PAINEL_ORIGIN = "https://hub-cardapio-web.vercel.app"
+PROVEDORES_ATIVOS = "uber,ifood,motoboy"
+PAINEL_ORIGIN = "https://hub-villa-deli-braga-s-team.vercel.app"
 
 RESTAURANTE_NOME = "Villa Deli"
 RESTAURANTE_CEP = "34006-086"
