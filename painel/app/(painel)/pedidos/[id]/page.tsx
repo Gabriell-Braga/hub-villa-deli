@@ -116,14 +116,22 @@ export default function PaginaCotacao({
     nome: string;
   } | null>(null);
 
-  const cotar = useCallback(async () => {
-    setCarregando(true);
-    setErroCarregar(null);
+  // `silencioso` = a revalidação automática do acompanhamento. Ela NÃO mostra
+  // o esqueleto de carregamento: trocar os cards por placeholder a cada 20 s,
+  // para devolver os mesmos cards, fazia a tela piscar sem nada ter mudado.
+  // E se falhar, mantém o que está na tela — uma oscilação de rede não pode
+  // apagar o pedido diante do atendente.
+  const cotar = useCallback(async ({ silencioso = false } = {}) => {
+    if (!silencioso) {
+      setCarregando(true);
+      setErroCarregar(null);
+    }
     try {
       const res = await apiFetch(`/api/cotacao/${encodeURIComponent(idPedido)}`);
       const json = await res.json();
 
       if (!res.ok) {
+        if (silencioso) return;
         // Recusa por regra de negócio (não pago, cancelado) vem COM o pedido:
         // dá para manter o resumo na tela em vez de deixar o atendente diante
         // de uma página em branco com uma frase.
@@ -146,10 +154,11 @@ export default function PaginaCotacao({
       setDespacho(json.despacho ?? null);
       setEntrega(json.entrega ?? null);
     } catch {
+      if (silencioso) return;
       setDados(null);
       setErroCarregar("Não foi possível falar com o servidor.");
     } finally {
-      setCarregando(false);
+      if (!silencioso) setCarregando(false);
     }
   }, [idPedido]);
 
@@ -281,7 +290,7 @@ export default function PaginaCotacao({
       entrega?.status === "returned";
     if (terminou) return;
 
-    const t = setInterval(cotar, 20_000);
+    const t = setInterval(() => cotar({ silencioso: true }), 20_000);
     return () => clearInterval(t);
   }, [despacho, entrega?.status, cotar]);
 
@@ -330,7 +339,7 @@ export default function PaginaCotacao({
         </div>
 
         <button
-          onClick={cotar}
+          onClick={() => cotar()}
           disabled={carregando || travado}
           className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50 sm:w-auto sm:py-2"
         >
