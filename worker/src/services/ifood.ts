@@ -236,6 +236,20 @@ export async function cotarIfood(
   };
 
   const cred = credenciaisIfood(env, modo);
+
+  // Sem loja configurada para o modo, nem chama o iFood. Em produção isso
+  // significa "o aplicativo ainda não foi homologado e autorizado pela loja
+  // real" — e o erro que viria da API ("auth falhou: 403") não diz isso.
+  if (!cred.merchantId || !cred.clientId) {
+    return {
+      ...base,
+      erro:
+        modo === "producao"
+          ? "Aguardando homologação do iFood. Use o modo teste para experimentar."
+          : "iFood não configurado para o modo teste. Veja em Configurações.",
+    };
+  }
+
   pedido = await emModoTeste(env, pedido, modo);
   let caminho: string;
 

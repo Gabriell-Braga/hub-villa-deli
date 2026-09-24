@@ -81,7 +81,12 @@ export async function getIfoodToken(
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body,
     });
-    if (!res.ok) throw new Error(`iFood auth falhou: ${res.status}`);
+    // 403 no token = credencial certa, mas nenhuma loja autorizou o aplicativo
+    // ("No permissions granted to client"). É o estado antes da homologação.
+    if (res.status === 403) {
+      throw new Error("Nenhuma loja autorizou o aplicativo do iFood ainda. Veja em Configurações.");
+    }
+    if (!res.ok) throw new Error(`O iFood recusou as credenciais (código ${res.status}).`);
 
     const data = (await res.json()) as { accessToken: string; expiresIn: number };
     // Normaliza o formato do iFood para o esperado pelo getCachedToken

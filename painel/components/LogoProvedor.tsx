@@ -1,5 +1,6 @@
 import type { ProviderId } from "@/lib/tipos";
 import { COR_PROVEDOR, ROTULO_PROVEDOR } from "@/lib/tipos";
+import { PATH_IFOOD } from "./marcas";
 
 // ---------------------------------------------------------------------------
 // Marca de cada transportadora, para o atendente reconhecer o card de relance.
@@ -9,8 +10,8 @@ import { COR_PROVEDOR, ROTULO_PROVEDOR } from "@/lib/tipos";
 // a URL) e nada de binário de marca alheia no repositório.
 //
 // Uso da marca aqui é nominativo: identifica de quem é o serviço cotado, que é
-// como todo agregador de entrega faz. Não é aproximação da tipografia oficial
-// — é o bloco na cor da marca com o nome dela.
+// como todo agregador de entrega faz. O iFood usa o símbolo oficial (ver
+// marcas.ts); os demais, o bloco na cor da marca com o nome dela.
 //
 // O Motoboy Próprio não é parceiro: usa a cor da marca do restaurante e um
 // ícone de moto, porque "a entrega é da casa".
@@ -32,10 +33,12 @@ const CORES: Record<ProviderId, { fundo: string; texto: string }> = {
 /** Cor de emergência. Um provedor novo no banco não pode derrubar a tela. */
 const NEUTRO = { fundo: "#9CA3AF", texto: "#FFFFFF" };
 
-/** Wordmark de cada parceiro, já ajustado para caber no quadrado. */
+/**
+ * Wordmark de cada parceiro, já ajustado para caber no quadrado.
+ * O iFood não está aqui: usa o símbolo oficial (PATH_IFOOD), não texto.
+ */
 const MARCA: Partial<Record<ProviderId, { texto: string; tamanho: number }>> = {
   uber: { texto: "Uber", tamanho: 11 },
-  ifood: { texto: "iFood", tamanho: 9.5 },
   "99": { texto: "99", tamanho: 15 },
 };
 
@@ -63,7 +66,12 @@ export default function LogoProvedor({
     >
       <rect width="32" height="32" rx="7" fill={cor.fundo} />
 
-      {ehOutra ? (
+      {provider === "ifood" ? (
+        // Símbolo oficial em branco sobre o vermelho da marca — o ícone do app
+        // deles. O traçado tem viewBox 24; escala 0.75 + margem de 7 centraliza
+        // em 18px dentro do quadrado de 32.
+        <path d={PATH_IFOOD} fill={cor.texto} transform="translate(7 7) scale(0.75)" />
+      ) : ehOutra ? (
         // Caixa de encomenda: entrega que aconteceu, mas não por aqui. Sem
         // wordmark porque não há marca — é a ausência de parceiro integrado.
         <g
