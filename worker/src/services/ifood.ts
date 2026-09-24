@@ -144,6 +144,49 @@ async function emModoTeste(env: Env, pedido: Pedido, modo: ModoOperacao): Promis
   };
 }
 
+/**
+ * DESPACHO em modo teste: o destino vai para ~200 m da loja de teste, com
+ * cotação nova para esse ponto.
+ *
+ * A translação serve para a COTAÇÃO (preço comparável ao real), mas o pedido
+ * transladado não pode ser criado: o iFood confere se o endereço escrito bate
+ * com as coordenadas. Medido na loja de teste em 24/09/2026:
+ *   - rua da loja + coordenadas a ~4 km  -> 400 "Não foi possível validar o endereço"
+ *   - rua da loja + coordenadas a ~270 m -> 202, pedido criado (até com o CEP
+ *     fictício 12345678 que a loja de teste tem)
+ *
+ * Então o que se testa no despacho é o FLUXO (criar, eventos, cancelar), não o
+ * preço — que já foi mostrado no card.
+ */
+async function pertoDaLojaDeTeste(
+  env: Env,
+  pedido: Pedido,
+  modo: ModoOperacao
+): Promise<{ pedido: Pedido; quoteId: string }> {
+  const loja = await lojaIfood(env, modo);
+  if (!loja) throw new Error("Não consegui ler o endereço da loja de teste do iFood.");
+
+  // 0,002° de latitude ≈ 220 m ao norte.
+  const lat = loja.latitude + 0.002;
+  const lng = loja.longitude;
+  const cred = credenciaisIfood(env, modo);
+
+  const res = await chamar(
+    env,
+    modo,
+    "GET",
+    `/shipping/v1.0/merchants/${encodeURIComponent(cred.merchantId)}/deliveryAvailabilities` +
+      `?latitude=${lat}&longitude=${lng}`
+  );
+  if (!res.ok) throw new Error(traduzirErroIfood(res.status, await res.text()));
+  const q = (await res.json()) as DisponibilidadeIfood;
+
+  return {
+    pedido: { ...pedido, endereco: { ...pedido.endereco, lat, lng } },
+    quoteId: q.id,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Tradução dos erros. Mesma ideia do Uber: o atendente precisa saber se dá
 // para despachar por ali, não ler JSON. Códigos da tabela oficial.
@@ -164,7 +207,12 @@ const ERROS: Record<string, string> = {
 };
 
 export function traduzirErroIfood(status: number, corpo: string): string {
-  let e: { code?: string; message?: string; error?: { code?: string; message?: string } };
+  let e: {
+    code?: string;
+    message?: string;
+    details?: string[];
+    error?: { code?: string; message?: string };
+  };
   try {
     e = JSON.parse(corpo);
   } catch {
@@ -175,6 +223,17 @@ export function traduzirErroIfood(status: number, corpo: string): string {
   const code = e.code ?? e.error?.code;
   const message = e.message ?? e.error?.message;
   console.warn(`[ifood] ${status} ${code ?? "?"}: ${message ?? corpo.slice(0, 200)}`);
+
+  // `details` é onde está o motivo de verdade num BadRequest ("ID deve ser um
+  // UUID válido"). A `message` sozinha é genérica: "Verifique as informações
+  // enviadas" não diz O QUÊ.
+  const detalhes = [...new Set(e.details ?? [])].filter(Boolean);
+  if (code === "BadRequest" && detalhes.length > 0) {
+    return `O iFood recusou: ${detalhes.join("; ")}.`;
+  }
+  // BadRequestCustomer cobre cliente E endereço, e a mensagem deles (em
+  // português) diz qual dos dois. A tradução fixa chutava "nome e telefone".
+  if (code === "BadRequestCustomer" && message) return `O iFood recusou: ${message}`;
 
   if (code && ERROS[code]) return ERROS[code];
   if (status === 401 || status === 403) {
@@ -381,13 +440,18 @@ export async function despacharIfood(
 
   // --- Pedido de outro canal: cria o pedido no iFood ------------------------
   const cred = credenciaisIfood(env, modo);
+
+  let quoteId = cotacao.quoteId;
+  if (modo === "teste") {
+    ({ pedido, quoteId } = await pertoDaLojaDeTeste(env, pedido, modo));
+  }
   const e = pedido.endereco;
   const obs = observacaoParaEntregador(pedido);
 
   const itens =
     pedido.itens.length > 0
-      ? pedido.itens.map((i, idx) => ({
-          id: `${pedido.id}-${idx + 1}`,
+      ? pedido.itens.map((i) => ({
+          id: crypto.randomUUID(),
           name: i.nome,
           quantity: i.quantidade,
           unitPrice: i.preco,
@@ -397,7 +461,7 @@ export async function despacharIfood(
         }))
       : [
           {
-            id: `${pedido.id}-1`,
+            id: crypto.randomUUID(),
             name: "Pedido",
             quantity: 1,
             unitPrice: pedido.subtotal,
@@ -423,7 +487,7 @@ export async function despacharIfood(
       delivery: {
         // O frete que o CLIENTE pagou. Informativo para o iFood.
         merchantFee: pedido.freteCobrado,
-        quoteId: cotacao.quoteId,
+        quoteId,
         // Segura a alocação do entregador até perto de a comida ficar pronta —
         // o equivalente à janela de coleta do Uber.
         preparationTime: preparoEmSegundos(prontoEmMin),
@@ -503,7 +567,13 @@ export async function cancelarIfood(
     code?: string | number;
     description?: string;
   }>;
-  const motivo = Array.isArray(lista) ? lista[0] : undefined;
+  // A lista vem ordenada por código, e o primeiro é "Problemas de sistema na
+  // loja" — falso na maioria das vezes, e fica registrado contra a loja. O
+  // caso comum de cancelar a corrida é o pedido ter sido cancelado (817).
+  const opcoes = Array.isArray(lista) ? lista : [];
+  const motivo =
+    opcoes.find((m) => String(m.cancelCodeId ?? m.cancellationCode ?? m.code) === "817") ??
+    opcoes[0];
   const codigo = motivo?.cancelCodeId ?? motivo?.cancellationCode ?? motivo?.code;
 
   if (codigo == null) {
