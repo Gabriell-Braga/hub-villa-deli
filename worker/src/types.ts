@@ -287,6 +287,7 @@ export type ModoOperacao = "teste" | "producao";
 export type StatusEntregaUber =
   | "pending"
   | "pickup"
+  | "at_pickup"
   | "pickup_complete"
   | "dropoff"
   | "delivered"

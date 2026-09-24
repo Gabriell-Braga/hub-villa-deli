@@ -210,6 +210,7 @@ const horaSP = (iso: string) =>
 const ROTULO_STATUS: Record<string, string> = {
   pending: "Procurando entregador",
   pickup: "A caminho da loja",
+  at_pickup: "Entregador na loja",
   pickup_complete: "Coletado",
   dropoff: "Saiu para entrega",
   delivered: "Entregue",

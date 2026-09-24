@@ -96,6 +96,7 @@ export interface EntregaAoVivo {
 export const ROTULO_STATUS_ENTREGA: Record<string, string> = {
   pending: "Procurando entregador",
   pickup: "A caminho da loja",
+  at_pickup: "Entregador na loja",
   pickup_complete: "Pedido coletado",
   dropoff: "Saiu para entrega",
   delivered: "Entregue",
@@ -109,6 +110,7 @@ export const ROTULO_STATUS_ENTREGA: Record<string, string> = {
 export const COR_STATUS_ENTREGA: Record<string, string> = {
   pending: "bg-amber-50 text-amber-700 ring-amber-200",
   pickup: "bg-blue-50 text-blue-700 ring-blue-200",
+  at_pickup: "bg-blue-50 text-blue-700 ring-blue-200",
   pickup_complete: "bg-blue-50 text-blue-700 ring-blue-200",
   dropoff: "bg-indigo-50 text-indigo-700 ring-indigo-200",
   delivered: "bg-emerald-50 text-emerald-700 ring-emerald-200",

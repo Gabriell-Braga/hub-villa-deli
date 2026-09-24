@@ -23,7 +23,7 @@ import LogoProvedor from "./LogoProvedor";
 /** Etapas do ciclo de vida, para quem tem rastreio por webhook. */
 const ETAPAS = [
   { rotulo: "Procurando", status: ["pending"] },
-  { rotulo: "Na loja", status: ["pickup", "pickup_complete"] },
+  { rotulo: "Na loja", status: ["pickup", "at_pickup", "pickup_complete"] },
   { rotulo: "A caminho", status: ["dropoff"] },
   { rotulo: "Entregue", status: ["delivered"] },
 ];
@@ -263,7 +263,7 @@ export default function CardEntrega({
               enquanto o entregador não coletou, é este o horário que importa
               para a cozinha decidir se embala agora ou espera. Some depois da
               coleta, quando vira informação do passado. */}
-          {entrega?.pickupEta && !entregue && !cancelado && status !== "pickup_complete" && status !== "dropoff" && (
+          {entrega?.pickupEta && !entregue && !cancelado && status !== "at_pickup" && status !== "pickup_complete" && status !== "dropoff" && (
             <div>
               <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">
                 Chega na loja
