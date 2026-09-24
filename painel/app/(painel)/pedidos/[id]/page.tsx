@@ -140,7 +140,10 @@ export default function PaginaCotacao({
 
       setBloqueio(null);
       setDados(json);
-      if (json.despacho) setDespacho(json.despacho);
+      // Espelha o servidor, inclusive quando ele diz que NÃO há despacho: depois
+      // de "Solicitar outro envio" a corrida antiga deixa de ser a atual, e
+      // manter o estado velho travava a tela em "Já despachado" até um F5.
+      setDespacho(json.despacho ?? null);
       setEntrega(json.entrega ?? null);
     } catch {
       setDados(null);
