@@ -1,5 +1,8 @@
 import type { Env, EventoEntrega, StatusEntregaUber } from "../types";
 import { registrarEvento, aplicarEstadoEntrega } from "../lib/store";
+import { credenciaisIfood } from "../config/ambiente";
+import { modoAtual } from "../config/modo";
+import { getIfoodToken } from "./tokens";
 
 // ---------------------------------------------------------------------------
 // Recebimento dos eventos do iFood (webhook).
@@ -136,7 +139,18 @@ export async function processarWebhookIfood(
     return { erro: "corpo não é JSON" };
   }
 
-  const eventos = (Array.isArray(bruto) ? bruto : [bruto]) as EventoIfood[];
+  return aplicarEventosIfood(env, (Array.isArray(bruto) ? bruto : [bruto]) as EventoIfood[]);
+}
+
+/**
+ * Aplica uma lista de eventos do iFood. Usado pelo webhook e pela busca de
+ * reserva (buscarEventosIfood) — os dois caminhos passam pelo mesmo filtro,
+ * pela mesma trava de idempotência e pela mesma régua de status.
+ */
+async function aplicarEventosIfood(
+  env: Env,
+  eventos: EventoIfood[]
+): Promise<ResultadoWebhookIfood> {
   const r: ResultadoWebhookIfood = { recebidos: eventos.length, aplicados: 0, ignorados: 0 };
 
   for (const ev of eventos) {
@@ -219,5 +233,79 @@ export async function processarWebhookIfood(
     r.aplicados++;
   }
 
+  return r;
+}
+
+// ---------------------------------------------------------------------------
+// RESERVA DO WEBHOOK — busca na fila de eventos do iFood (polling).
+//
+// Roda na tarefa agendada de 5 em 5 minutos. Existe porque o webhook pode
+// falhar calado: em 24/09/2026 ele ficou com a URL errada no portal, e o card
+// da entrega simplesmente não andava — nenhum erro em lugar nenhum.
+//
+// Não compete com o webhook: o evento que chegar pelos dois caminhos é gravado
+// uma vez só (a PRIMARY KEY de eventos_entrega é o id do evento).
+//
+// CONFIRMAR É OBRIGATÓRIO. O iFood devolve o mesmo evento em toda busca até
+// receber o acknowledgment — sem ele, a fila cresce sem parar. Por isso se
+// confirma TUDO que veio, inclusive o que o Hub ignora (pedido novo,
+// confirmado...): ignorar é uma decisão tomada, não um evento pendente.
+// ---------------------------------------------------------------------------
+
+export async function buscarEventosIfood(
+  env: Env
+): Promise<ResultadoWebhookIfood | { pulado: string }> {
+  const modo = await modoAtual(env);
+  const cred = credenciaisIfood(env, modo);
+  if (!cred.clientId || !cred.clientSecret || !cred.merchantId) {
+    return { pulado: `iFood sem credencial ou loja no modo ${modo}` };
+  }
+
+  let token: string;
+  try {
+    token = await getIfoodToken(env, modo);
+  } catch (e) {
+    // Antes da homologação o token de produção é recusado (403). Não é erro
+    // desta rotina, e ela não tem o que fazer a respeito.
+    return { pulado: e instanceof Error ? e.message : "sem token do iFood" };
+  }
+
+  const res = await fetch(`${cred.baseUrl}/events/v1.0/events:polling`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      // Sem este header o iFood devolve eventos de TODAS as lojas do app.
+      "x-polling-merchants": cred.merchantId,
+    },
+  });
+
+  // 204 = fila vazia, o caso mais comum.
+  if (res.status === 204) return { recebidos: 0, aplicados: 0, ignorados: 0 };
+  if (!res.ok) {
+    console.warn(`[ifood-polling] fila respondeu ${res.status}`);
+    return { pulado: `fila respondeu ${res.status}` };
+  }
+
+  const eventos = (await res.json().catch(() => [])) as EventoIfood[];
+  if (!Array.isArray(eventos) || eventos.length === 0) {
+    return { recebidos: 0, aplicados: 0, ignorados: 0 };
+  }
+
+  const r = await aplicarEventosIfood(env, eventos);
+
+  // Só confirma depois de aplicar: se aplicar falhar (exceção), o evento fica
+  // na fila e volta na próxima rodada.
+  const ids = eventos.filter((e) => e.id).map((e) => ({ id: e.id }));
+  if (ids.length > 0) {
+    const ack = await fetch(`${cred.baseUrl}/events/v1.0/events/acknowledgment`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(ids),
+    });
+    if (!ack.ok) console.warn(`[ifood-polling] acknowledgment respondeu ${ack.status}`);
+  }
+
+  if (r.aplicados > 0) {
+    console.log(`[ifood-polling] ${r.aplicados} evento(s) aplicado(s) pela reserva`);
+  }
   return r;
 }

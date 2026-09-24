@@ -54,7 +54,7 @@ import { historicoCsv, listarHistorico, nomeArquivoCsv } from "./lib/historico";
 import { assinaturaValida } from "./lib/assinatura";
 import { processarWebhookUber } from "./services/uber-webhook";
 import { cancelarIfood } from "./services/ifood";
-import { processarWebhookIfood } from "./services/ifood-webhook";
+import { buscarEventosIfood, processarWebhookIfood } from "./services/ifood-webhook";
 import {
   entregarLink,
   gerarTokenCru,
@@ -1176,6 +1176,16 @@ export default {
     }
 
     ctx.waitUntil(reprocessarEventosCardapio(env));
+
+    // Reserva do webhook do iFood. Separado e com catch próprio: uma falha na
+    // API do iFood não pode levar junto a fila do Cardápio Web.
+    if (provedorAtivo(env, "ifood")) {
+      ctx.waitUntil(
+        buscarEventosIfood(env).catch((e) =>
+          console.error(`[ifood-polling] ${e instanceof Error ? e.message : e}`)
+        )
+      );
+    }
   },
 };
 

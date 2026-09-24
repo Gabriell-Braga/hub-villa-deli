@@ -366,6 +366,16 @@ export default function CardEntrega({
                 taxa de cancelamento.
               </p>
             )}
+            {/* iFood: o evento de cancelamento de uma corrida com entregador
+                já designado veio marcado IFOOD_ENTREGAS_COBRAR_FRETE_PARCIAL
+                (teste de 24/09/2026). O valor exato não vem no evento, por
+                isso "parte do frete" e não um número. */}
+            {despacho.provider === "ifood" && (
+              <p className="mt-1.5 text-xs text-gray-500">
+                Se o entregador já tiver sido designado, o iFood cobra parte do
+                frete.
+              </p>
+            )}
           </div>
         )}
 
