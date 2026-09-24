@@ -73,6 +73,22 @@ const STATUS_POR_EVENTO: Record<string, StatusEntregaUber | null> = {
   DELIVERY_ADDRESS_CHANGE_REQUESTED: null,
 };
 
+/**
+ * Ordem das etapas. Um evento só muda o status se não for para trás.
+ * Finais empatam no topo: depois de cancelada, entregue ou devolvida, nenhum
+ * evento atrasado reabre a entrega.
+ */
+const ETAPA: Record<string, number> = {
+  pending: 0,
+  pickup: 1,
+  at_pickup: 2,
+  pickup_complete: 3,
+  dropoff: 4,
+  delivered: 5,
+  returned: 5,
+  canceled: 5,
+};
+
 interface EventoIfood {
   id?: string;
   code?: string;
@@ -156,9 +172,39 @@ export async function processarWebhookIfood(
       continue;
     }
 
+    // O STATUS SÓ AVANÇA. O iFood manda eventos no mesmo milissegundo e fora
+    // de ordem — visto em 24/09/2026: DISPATCHED antes de COLLECTED, e o
+    // "coletado" que chegou por último rebaixou "saiu para entrega". O evento
+    // atrasado continua valendo para os outros campos (entregador, veículo).
+    const atual = await env.DB.prepare(
+      `SELECT status_ao_vivo FROM deliveries WHERE delivery_id_externo = ?1 LIMIT 1`
+    )
+      .bind(ev.orderId)
+      .first<{ status_ao_vivo: string | null }>();
+    let statusAplicado: string | null =
+      status && ETAPA[status] < (ETAPA[atual?.status_ao_vivo ?? ""] ?? -1) ? null : status;
+
+    // CANCELAMENTO RECUSADO. O Hub marca "cancelada" no clique, sem esperar o
+    // iFood (ver /cancelar). Se ele recusar, a corrida continua — e como
+    // "cancelada" é final na régua acima, nenhum evento seguinte a reabriria.
+    // Volta para a etapa mais avançada que a corrida já tinha atingido.
+    if (nome === "DELIVERY_CANCELLATION_REQUEST_REJECTED" && atual?.status_ao_vivo === "canceled") {
+      const anteriores = await env.DB.prepare(
+        `SELECT status FROM eventos_entrega
+          WHERE delivery_id_externo = ?1 AND provider = 'ifood'
+            AND status IS NOT NULL AND status <> 'canceled'`
+      )
+        .bind(ev.orderId)
+        .all<{ status: string }>();
+      statusAplicado = (anteriores.results ?? []).reduce<string>(
+        (max, l) => ((ETAPA[l.status] ?? -1) > (ETAPA[max] ?? -1) ? l.status : max),
+        "pending"
+      );
+    }
+
     const m = ev.metadata;
     await aplicarEstadoEntrega(env, ev.orderId, {
-      status,
+      status: statusAplicado,
       trackingUrl: meta(m, "trackingUrl", "TRACKING_URL"),
       dropoffEta: meta(m, "expectedDeliveryDate", "deliveryEta", "ETA_TO_DESTINATION"),
       pickupEta: meta(m, "expectedArrivalDate", "pickupEta", "ETA_TO_ORIGIN"),
