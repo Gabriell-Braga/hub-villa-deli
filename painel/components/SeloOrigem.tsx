@@ -54,9 +54,9 @@ const CANAIS: Record<
 
 export default function SeloOrigem({
   canal,
-  numeroExterno,
 }: {
   canal?: string;
+  /** Não é mais exibido; aceito para as chamadas continuarem iguais. */
   numeroExterno?: string;
 }) {
   const c = canal ? CANAIS[canal] : undefined;
@@ -68,16 +68,10 @@ export default function SeloOrigem({
     <span
       className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${c.classe}`}
     >
-      {/* O número vem primeiro porque é o que se procura: o atendente já sabe
-          que o pedido é do iFood pela cor do chip, e o que ele precisa ler é
-          o código para achar no tablet. A marca fecha o chip à direita. */}
-      {numeroExterno ? (
-        <span className="font-mono">#{numeroExterno}</span>
-      ) : (
-        <span>{c.rotulo}</span>
-      )}
-
+      {/* Só a origem. O número do pedido no marketplace chegou a aparecer
+          aqui, mas no balcão ninguém procurava por ele — só poluía a lista. */}
       {Marca && <Marca />}
+      <span>{c.rotulo}</span>
     </span>
   );
 }

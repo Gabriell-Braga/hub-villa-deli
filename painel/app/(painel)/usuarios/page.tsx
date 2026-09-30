@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { SkeletonUsuarios } from "@/components/Skeleton";
 import { useToast } from "@/components/Toast";
 import { apiFetch } from "@/lib/api";
+import { IconeFechar } from "@/components/Icones";
 
 // ---------------------------------------------------------------------------
 // Gestão de atendentes.
@@ -65,9 +66,9 @@ function CaixaLink({
         <button
           onClick={aoFechar}
           aria-label="Fechar"
-          className="shrink-0 text-emerald-700 hover:text-emerald-900"
+          className="shrink-0 rounded-md p-1 text-emerald-700 transition hover:bg-emerald-100 hover:text-emerald-900"
         >
-          ✕
+          <IconeFechar />
         </button>
       </div>
 

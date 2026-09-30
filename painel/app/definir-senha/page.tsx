@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LogoComNome } from "@/components/Logo";
+import LayoutAcesso from "@/components/LayoutAcesso";
 import { Skeleton } from "@/components/Skeleton";
 import CampoSenha from "@/components/CampoSenha";
 import IconeDestaque from "@/components/IconeDestaque";
@@ -97,13 +97,8 @@ function Formulario() {
 
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4 sm:p-6">
-      <div className="w-full max-w-sm">
-        <div className="mb-6">
-          <LogoComNome tamanho={72} empilhado />
-        </div>
-
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
+    <LayoutAcesso>
+        <div>
           {verificando ? (
             <div aria-busy="true">
               <Skeleton className="h-5 w-40" />
@@ -117,7 +112,7 @@ function Formulario() {
           ) : tokenInvalido ? (
             <>
               <IconeDestaque nome="link" />
-              <h1 className="mt-3 text-center font-semibold text-gray-900">
+              <h1 className="mt-4 text-center text-xl font-semibold tracking-tight text-gray-900">
                 Link inválido
               </h1>
               <p className="mt-2 text-center text-sm text-gray-500">
@@ -125,7 +120,7 @@ function Formulario() {
               </p>
               <Link
                 href="/esqueci-senha"
-                className="mt-6 block rounded-lg bg-[var(--marca-primaria)] py-2.5 text-center text-sm font-semibold text-[var(--marca-contraste)] transition hover:bg-[var(--marca-primaria-hover)]"
+                className="mt-6 flex h-10 items-center justify-center rounded-lg bg-[var(--marca-primaria)] text-center text-sm font-medium text-[var(--marca-contraste)] transition hover:bg-[var(--marca-primaria-hover)]"
               >
                 Pedir um novo link
               </Link>
@@ -133,7 +128,7 @@ function Formulario() {
           ) : pronto ? (
             <>
               <IconeDestaque nome="ok" tom="sucesso" />
-              <h1 className="mt-3 text-center font-semibold text-gray-900">
+              <h1 className="mt-4 text-center text-xl font-semibold tracking-tight text-gray-900">
                 Senha criada
               </h1>
               <p className="mt-2 text-center text-sm text-gray-500">
@@ -141,14 +136,14 @@ function Formulario() {
               </p>
               <Link
                 href="/login"
-                className="mt-6 block rounded-lg bg-[var(--marca-primaria)] py-2.5 text-center text-sm font-semibold text-[var(--marca-contraste)] transition hover:bg-[var(--marca-primaria-hover)]"
+                className="mt-6 flex h-10 items-center justify-center rounded-lg bg-[var(--marca-primaria)] text-center text-sm font-medium text-[var(--marca-contraste)] transition hover:bg-[var(--marca-primaria-hover)]"
               >
                 Entrar agora
               </Link>
             </>
           ) : (
             <form onSubmit={enviar}>
-              <h1 className="font-semibold text-gray-900">
+              <h1 className="text-2xl font-semibold tracking-tight text-gray-900">
                 {info?.tipo === "convite"
                   ? `Bem-vindo, ${info.nome.split(" ")[0]}!`
                   : "Criar nova senha"}
@@ -206,15 +201,14 @@ function Formulario() {
               <button
                 type="submit"
                 disabled={enviando}
-                className="mt-6 w-full rounded-lg bg-[var(--marca-primaria)] py-2.5 text-sm font-semibold text-[var(--marca-contraste)] transition hover:bg-[var(--marca-primaria-hover)] disabled:opacity-60"
+                className="mt-6 h-10 w-full rounded-lg bg-[var(--marca-primaria)] text-sm font-medium text-[var(--marca-contraste)] shadow-sm transition hover:bg-[var(--marca-primaria-hover)] disabled:opacity-60"
               >
                 {enviando ? "Salvando..." : "Salvar senha"}
               </button>
             </form>
           )}
         </div>
-      </div>
-    </div>
+    </LayoutAcesso>
   );
 }
 

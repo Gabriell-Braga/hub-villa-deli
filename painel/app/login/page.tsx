@@ -4,7 +4,7 @@ import { Suspense, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { LogoComNome } from "@/components/Logo";
+import LayoutAcesso from "@/components/LayoutAcesso";
 import CampoSenha from "@/components/CampoSenha";
 
 function FormularioLogin() {
@@ -46,99 +46,83 @@ function FormularioLogin() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 p-6">
-      <div className="w-full max-w-sm">
-        <div className="mb-6">
-          <LogoComNome tamanho={72} empilhado />
-          <p className="mt-4 text-center text-sm text-gray-500">
-            Hub Logístico. Entre para cotar e despachar entregas
-          </p>
+    <LayoutAcesso>
+      <h1 className="text-2xl font-semibold tracking-tight text-gray-900">Entrar</h1>
+      <p className="mt-1.5 text-sm text-gray-500">
+        Acesse com o e-mail cadastrado pelo administrador.
+      </p>
+
+      {expirou && (
+        <div
+          role="status"
+          className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900"
+        >
+          Sua sessão terminou por segurança. Entre novamente para continuar.
+        </div>
+      )}
+
+      <form onSubmit={entrar} className="mt-8">
+        <label className="block text-sm font-medium text-gray-700" htmlFor="email">
+          E-mail
+        </label>
+        <input
+          id="email"
+          type="email"
+          autoComplete="username"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="voce@restaurante.com"
+          className="mt-1.5 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm shadow-sm outline-none transition placeholder:text-gray-400 focus:border-gray-900 focus:ring-4 focus:ring-gray-900/5"
+        />
+
+        <div className="mt-5 flex items-baseline justify-between gap-2">
+          <label className="block text-sm font-medium text-gray-700" htmlFor="senha">
+            Senha
+          </label>
+          <Link
+            href="/esqueci-senha"
+            className="text-sm font-medium text-gray-500 transition hover:text-gray-900"
+          >
+            Esqueci a senha
+          </Link>
+        </div>
+        <div className="mt-1.5">
+          <CampoSenha
+            id="senha"
+            autoComplete="current-password"
+            required
+            value={senha}
+            onChange={setSenha}
+            placeholder="Sua senha"
+          />
         </div>
 
-        {expirou && (
-          <div
-            role="status"
-            className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
+        {erro && (
+          <p
+            role="alert"
+            className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700"
           >
-            Sua sessão terminou por segurança. Entre novamente para continuar.
-          </div>
+            {erro}
+          </p>
         )}
 
-        <form
-          onSubmit={entrar}
-          className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"
-        >
-          <label className="block text-sm font-medium text-gray-700" htmlFor="email">
-            E-mail
-          </label>
-          <input
-            id="email"
-            type="email"
-            autoComplete="username"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="voce@restaurante.com"
-            className="mt-1.5 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none transition focus:border-[var(--marca-primaria)] focus:ring-2 focus:ring-gray-200"
-          />
+        <button type="submit" disabled={enviando} className="mt-6 h-10 w-full rounded-lg bg-[var(--marca-primaria)] text-sm font-medium text-[var(--marca-contraste)] shadow-sm transition hover:bg-[var(--marca-primaria-hover)] disabled:opacity-60">
+          {enviando ? "Entrando..." : "Entrar"}
+        </button>
+      </form>
 
-          <div className="mt-4 flex items-baseline justify-between gap-2">
-            <label className="block text-sm font-medium text-gray-700" htmlFor="senha">
-              Senha
-            </label>
-            <Link
-              href="/esqueci-senha"
-              className="text-xs font-medium text-gray-500 transition hover:text-gray-900"
-            >
-              Esqueci minha senha
-            </Link>
-          </div>
-          <div className="mt-1.5">
-            <CampoSenha
-              id="senha"
-              autoComplete="current-password"
-              required
-              value={senha}
-              onChange={setSenha}
-              placeholder="••••••••"
-            />
-          </div>
-
-          <p className="mt-3 text-xs text-gray-400">
-            Primeiro acesso? Use o link que o administrador enviou para criar sua
-            senha.
-          </p>
-
-          {erro && (
-            <p
-              role="alert"
-              className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700"
-            >
-              {erro}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={enviando}
-            className="mt-6 w-full rounded-lg bg-[var(--marca-primaria)] py-2.5 text-sm font-semibold text-[var(--marca-contraste)] transition hover:bg-[var(--marca-primaria-hover)] disabled:opacity-60"
-          >
-            {enviando ? "Entrando..." : "Entrar"}
-          </button>
-        </form>
-
-        <p className="mt-4 text-center text-xs text-gray-400">
-          Acesso restrito aos atendentes do restaurante.
-        </p>
-      </div>
-    </div>
+      <p className="mt-8 border-t border-gray-100 pt-6 text-sm text-gray-500">
+        Primeiro acesso? Use o link que o administrador enviou para criar sua senha.
+      </p>
+    </LayoutAcesso>
   );
 }
 
 export default function PaginaLogin() {
   // useSearchParams exige Suspense no App Router.
   return (
-    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+    <Suspense fallback={<div className="min-h-screen bg-white" />}>
       <FormularioLogin />
     </Suspense>
   );

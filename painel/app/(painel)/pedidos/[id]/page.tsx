@@ -12,6 +12,7 @@ import LogoProvedor from "@/components/LogoProvedor";
 import CardEntrega from "@/components/CardEntrega";
 import SeloTeste from "@/components/SeloTeste";
 import SeloOrigem from "@/components/SeloOrigem";
+import { IconeVoltar } from "@/components/Icones";
 import ModalVeiculo, { type Veiculo } from "@/components/ModalVeiculo";
 import UltimaEntrega from "@/components/UltimaEntrega";
 import { useToast } from "@/components/Toast";
@@ -307,7 +308,8 @@ export default function PaginaCotacao({
         href={voltar.href}
         className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition hover:text-gray-900"
       >
-        ← {voltar.rotulo}
+        <IconeVoltar />
+        {voltar.rotulo}
       </Link>
 
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { LogoComNome } from "@/components/Logo";
+import LayoutAcesso from "@/components/LayoutAcesso";
+import { IconeVoltar } from "@/components/Icones";
 import IconeDestaque from "@/components/IconeDestaque";
 
 export default function PaginaEsqueciSenha() {
@@ -36,30 +37,25 @@ export default function PaginaEsqueciSenha() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4 sm:p-6">
-      <div className="w-full max-w-sm">
-        <div className="mb-6">
-          <LogoComNome tamanho={72} empilhado />
-        </div>
-
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
+    <LayoutAcesso>
+        <div>
           {mensagem ? (
             <>
               <IconeDestaque nome="email" />
-              <h1 className="mt-3 text-center font-semibold text-gray-900">
+              <h1 className="mt-4 text-center text-xl font-semibold tracking-tight text-gray-900">
                 Solicitação registrada
               </h1>
               <p className="mt-2 text-center text-sm text-gray-500">{mensagem}</p>
               <Link
                 href="/login"
-                className="mt-6 block rounded-lg bg-[var(--marca-primaria)] py-2.5 text-center text-sm font-semibold text-[var(--marca-contraste)] transition hover:bg-[var(--marca-primaria-hover)]"
+                className="mt-6 flex h-10 items-center justify-center rounded-lg bg-[var(--marca-primaria)] text-center text-sm font-medium text-[var(--marca-contraste)] transition hover:bg-[var(--marca-primaria-hover)]"
               >
                 Voltar ao login
               </Link>
             </>
           ) : (
             <form onSubmit={enviar}>
-              <h1 className="font-semibold text-gray-900">Esqueceu a senha?</h1>
+              <h1 className="text-2xl font-semibold tracking-tight text-gray-900">Esqueceu a senha?</h1>
               <p className="mt-1 text-sm text-gray-500">
                 Informe seu e-mail e o administrador do restaurante receberá um
                 link de acesso para lhe repassar.
@@ -79,27 +75,27 @@ export default function PaginaEsqueciSenha() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="voce@restaurante.com"
-                className="mt-1.5 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none transition focus:border-[var(--marca-primaria)] focus:ring-2 focus:ring-gray-200"
+                className="mt-1.5 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm shadow-sm outline-none transition placeholder:text-gray-400 focus:border-gray-900 focus:ring-4 focus:ring-gray-900/5"
               />
 
               <button
                 type="submit"
                 disabled={enviando}
-                className="mt-6 w-full rounded-lg bg-[var(--marca-primaria)] py-2.5 text-sm font-semibold text-[var(--marca-contraste)] transition hover:bg-[var(--marca-primaria-hover)] disabled:opacity-60"
+                className="mt-6 h-10 w-full rounded-lg bg-[var(--marca-primaria)] text-sm font-medium text-[var(--marca-contraste)] shadow-sm transition hover:bg-[var(--marca-primaria-hover)] disabled:opacity-60"
               >
                 {enviando ? "Enviando..." : "Solicitar link de acesso"}
               </button>
 
               <Link
                 href="/login"
-                className="mt-4 block text-center text-sm text-gray-500 transition hover:text-gray-900"
+                className="mt-6 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition hover:text-gray-900"
               >
+                <IconeVoltar />
                 Voltar ao login
               </Link>
             </form>
           )}
         </div>
-      </div>
-    </div>
+    </LayoutAcesso>
   );
 }

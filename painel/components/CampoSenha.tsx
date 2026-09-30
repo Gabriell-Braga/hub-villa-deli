@@ -72,7 +72,7 @@ export default function CampoSenha({
         placeholder={placeholder}
         // pr-11 abre espaço para o botão: sem isso a senha longa passa por
         // baixo do ícone.
-        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 pr-11 text-sm outline-none transition focus:border-[var(--marca-primaria)] focus:ring-2 focus:ring-gray-200"
+        className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 pr-11 text-sm shadow-sm outline-none transition placeholder:text-gray-400 focus:border-gray-900 focus:ring-4 focus:ring-gray-900/5"
       />
 
       <button
