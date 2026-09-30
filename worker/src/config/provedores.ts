@@ -11,6 +11,7 @@ import { cotarUber, despacharUber } from "../services/uber";
 import { cotarIfood, despacharIfood } from "../services/ifood";
 import { cotar99, despachar99 } from "../services/noventa99";
 import { cotarMotoboy, despacharMotoboy } from "../services/motoboy";
+import { motoboyLigado } from "./motoboy";
 
 // ---------------------------------------------------------------------------
 // TRAVA DE PROVEDORES
@@ -138,4 +139,20 @@ export function provedorAtivo(env: Env, id: string): Provedor | null {
 /** Nome amigável mesmo para provedor desligado (mensagens de erro). */
 export function nomeProvedor(id: ProviderId): string {
   return PROVEDORES[id]?.nome ?? id;
+}
+
+/**
+ * Provedores ativos AGORA: a trava acima menos o que um admin desligou pela
+ * tela de Configurações (hoje, só o motoboy — ver config/motoboy.ts).
+ * É esta que cotação, despacho e diagnóstico usam.
+ */
+export async function provedoresLigados(env: Env): Promise<Provedor[]> {
+  const ativos = provedoresAtivos(env);
+  if (!ativos.some((p) => p.id === "motoboy") || (await motoboyLigado(env))) return ativos;
+  return ativos.filter((p) => p.id !== "motoboy");
+}
+
+/** Versão de provedorAtivo que respeita a chave da tela. Trava do /api/despachar. */
+export async function provedorLigado(env: Env, id: string): Promise<Provedor | null> {
+  return (await provedoresLigados(env)).find((p) => p.id === id) ?? null;
 }

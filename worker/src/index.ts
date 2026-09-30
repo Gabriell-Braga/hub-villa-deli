@@ -68,7 +68,14 @@ import { gerarHash } from "./lib/senha";
 import { garantirCoordenadas } from "./lib/geocode";
 import { distanciaKm } from "./lib/geo";
 import { faixaPara } from "./config/faixas-motoboy";
-import { provedoresAtivos, provedorAtivo, nomeProvedor } from "./config/provedores";
+import {
+  provedoresAtivos,
+  provedorAtivo,
+  provedoresLigados,
+  provedorLigado,
+  nomeProvedor,
+} from "./config/provedores";
+import { definirMotoboy, motoboyLigado, quemTrocouMotoboy } from "./config/motoboy";
 import { tokenDoRequest, validarToken } from "./lib/auth";
 import { conferirSenha } from "./lib/senha";
 import { emitirToken, exigirAdmin, exigirLogin, VALIDADE_SEGUNDOS } from "./lib/sessao";
@@ -124,6 +131,7 @@ app.use("/api/pedidos/simular", exigirLogin, exigirAdmin);
 // Modo de operação: ler exige login; TROCAR exige admin.
 app.use("/api/modo", exigirLogin);
 app.use("/api/modo/trocar", exigirLogin, exigirAdmin);
+app.use("/api/config/motoboy", exigirLogin);
 
 // Healthcheck — público de propósito, não devolve nada sensível.
 app.get("/", (c) =>
@@ -967,7 +975,7 @@ app.get("/api/cotacao/:idPedido", async (c) => {
     );
   }
 
-  const ativos = provedoresAtivos(env);
+  const ativos = await provedoresLigados(env);
   if (ativos.length === 0) {
     return c.json(
       { erro: "Nenhuma transportadora ativa. Veja em Configurações." },
@@ -1066,7 +1074,7 @@ app.post("/api/despachar", async (c) => {
   }
 
   // Trava 1 — provedor desligado não despacha, nem via chamada direta na API.
-  const prov = provedorAtivo(env, provider);
+  const prov = await provedorLigado(env, provider);
   if (!prov) {
     return c.json(
       { erro: `provedor "${nomeProvedor(provider as ProviderId)}" está desativado` },
@@ -1213,6 +1221,34 @@ app.post("/api/modo/trocar", async (c) => {
 
   console.log(`[modo] ${c.get("usuario").email} trocou para ${alvo}`);
   return c.json({ ok: true, modo: alvo });
+});
+
+// ---------------------------------------------------------------------------
+// 5c) MOTOBOY PRÓPRIO — liga/desliga sem deploy
+//     GET  /api/config/motoboy             (qualquer usuário logado)
+//     POST /api/config/motoboy  { ativo }  (admin)
+//
+// Ver config/motoboy.ts. Só desliga: se a trava de provedores do ambiente não
+// inclui o motoboy, a chave aparece travada na tela.
+// ---------------------------------------------------------------------------
+app.get("/api/config/motoboy", async (c) => {
+  return c.json({
+    ativo: await motoboyLigado(c.env),
+    permitidoNoAmbiente: !!provedorAtivo(c.env, "motoboy"),
+    ultimaTroca: await quemTrocouMotoboy(c.env),
+  });
+});
+
+app.post("/api/config/motoboy", async (c) => {
+  const usuario = c.get("usuario");
+  if (usuario.papel !== "admin") return c.json({ erro: "Só administradores podem mudar isto." }, 403);
+
+  const body = await c.req.json<{ ativo?: unknown }>().catch(() => null);
+  if (typeof body?.ativo !== "boolean") return c.json({ erro: "ativo deve ser true ou false" }, 400);
+
+  await definirMotoboy(c.env, body.ativo, usuario.email);
+  console.log(`[config] ${usuario.email} ${body.ativo ? "ligou" : "desligou"} o motoboy próprio`);
+  return c.json({ ok: true, ativo: body.ativo });
 });
 
 // ---------------------------------------------------------------------------

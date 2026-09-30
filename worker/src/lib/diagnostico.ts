@@ -7,7 +7,7 @@ import {
   testeUsandoCredencialDeProducao,
 } from "../config/ambiente";
 import { modoAtual, podeUsarProducao } from "../config/modo";
-import { nomeProvedor, provedoresAtivos } from "../config/provedores";
+import { nomeProvedor, provedoresLigados } from "../config/provedores";
 import { get99Token, getIfoodToken, getUberToken } from "../services/tokens";
 
 // ---------------------------------------------------------------------------
@@ -52,7 +52,7 @@ export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
   const amb = ambiente(env);
   const modo = await modoAtual(env);
   const cred = credenciaisUber(env, modo);
-  const ativos = provedoresAtivos(env).map((p) => p.id);
+  const ativos = (await provedoresLigados(env)).map((p) => p.id);
 
   // --- Modo de operação -----------------------------------------------------
   // É o que decide se a corrida é cobrada. Primeiro item da lista de propósito.

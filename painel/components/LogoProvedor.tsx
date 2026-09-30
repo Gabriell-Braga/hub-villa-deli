@@ -1,6 +1,6 @@
 import type { ProviderId } from "@/lib/tipos";
 import { COR_PROVEDOR, ROTULO_PROVEDOR } from "@/lib/tipos";
-import { PATH_IFOOD } from "./marcas";
+import { PATH_99, PATH_IFOOD } from "./marcas";
 
 // ---------------------------------------------------------------------------
 // Marca de cada transportadora, para o atendente reconhecer o card de relance.
@@ -11,7 +11,7 @@ import { PATH_IFOOD } from "./marcas";
 //
 // Uso da marca aqui é nominativo: identifica de quem é o serviço cotado, que é
 // como todo agregador de entrega faz. O iFood usa o símbolo oficial (ver
-// marcas.ts); os demais, o bloco na cor da marca com o nome dela.
+// marcas.ts), assim como a 99; o Uber, o bloco na cor da marca com o nome.
 //
 // O Motoboy Próprio não é parceiro: usa a cor da marca do restaurante e um
 // ícone de moto, porque "a entrega é da casa".
@@ -23,7 +23,8 @@ import { PATH_IFOOD } from "./marcas";
 const CORES: Record<ProviderId, { fundo: string; texto: string }> = {
   uber: { fundo: COR_PROVEDOR.uber, texto: "#FFFFFF" },
   ifood: { fundo: COR_PROVEDOR.ifood, texto: "#FFFFFF" },
-  "99": { fundo: COR_PROVEDOR["99"], texto: "#000000" },
+  // Amarelo e preto do logotipo oficial, não o COR_PROVEDOR (dos gráficos).
+  "99": { fundo: "#FFDD00", texto: "#212121" },
   motoboy: { fundo: "var(--marca-primaria)", texto: "var(--marca-contraste)" },
   // "Outra plataforma" não é marca de ninguém: cinza, e um ícone de caixa em
   // vez de wordmark.
@@ -39,7 +40,6 @@ const NEUTRO = { fundo: "#9CA3AF", texto: "#FFFFFF" };
  */
 const MARCA: Partial<Record<ProviderId, { texto: string; tamanho: number }>> = {
   uber: { texto: "Uber", tamanho: 11 },
-  "99": { texto: "99", tamanho: 15 },
 };
 
 export default function LogoProvedor({
@@ -71,6 +71,10 @@ export default function LogoProvedor({
         // deles. O traçado tem viewBox 24; escala 0.75 + margem de 7 centraliza
         // em 18px dentro do quadrado de 32.
         <path d={PATH_IFOOD} fill={cor.texto} transform="translate(7 7) scale(0.75)" />
+      ) : provider === "99" ? (
+        // Os "99" do logotipo oficial. O traçado tem viewBox 500 e já inclui a
+        // margem do ícone deles, então a escala é direta: 32 / 500.
+        <path d={PATH_99} fill={cor.texto} transform="scale(0.064)" />
       ) : ehOutra ? (
         // Caixa de encomenda: entrega que aconteceu, mas não por aqui. Sem
         // wordmark porque não há marca — é a ausência de parceiro integrado.

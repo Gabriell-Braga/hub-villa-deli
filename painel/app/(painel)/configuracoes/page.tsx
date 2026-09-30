@@ -5,6 +5,7 @@ import { MARCA } from "@/config/marca";
 import Logo from "@/components/Logo";
 import { SkeletonDiagnostico } from "@/components/Skeleton";
 import SeletorModo from "@/components/SeletorModo";
+import ChaveMotoboy from "@/components/ChaveMotoboy";
 import { apiFetch } from "@/lib/api";
 
 // ---------------------------------------------------------------------------
@@ -97,6 +98,8 @@ export default function PaginaConfiguracoes() {
       {/* Modo de operação — primeiro de propósito: é o que decide se a
           entrega é cobrada de verdade. */}
       <SeletorModo aoTrocar={verificar} />
+
+      <ChaveMotoboy aoTrocar={verificar} />
 
       {/* Identidade do cliente */}
       <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5">

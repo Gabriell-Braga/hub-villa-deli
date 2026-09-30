@@ -1,7 +1,7 @@
 "use client";
 
 import type { Despacho, EntregaAoVivo } from "@/lib/tipos";
-import { ROTULO_STATUS_ENTREGA } from "@/lib/tipos";
+import { ROTULO_PROVEDOR, ROTULO_STATUS_ENTREGA } from "@/lib/tipos";
 import { faltam, hora, telefone } from "@/lib/formato";
 import LogoProvedor from "./LogoProvedor";
 
@@ -20,11 +20,17 @@ import LogoProvedor from "./LogoProvedor";
 // código da entrega.
 // ---------------------------------------------------------------------------
 
-/** Etapas do ciclo de vida, para quem tem rastreio por webhook. */
+/**
+ * Etapas do ciclo de vida, para quem tem rastreio.
+ *
+ * "A caminho da loja" é etapa própria: juntar com "Na loja" fazia a trilha
+ * dizer "Na loja" com o entregador ainda do outro lado da cidade.
+ */
 const ETAPAS = [
   { rotulo: "Procurando", status: ["pending"] },
-  { rotulo: "Na loja", status: ["pickup", "at_pickup", "pickup_complete"] },
-  { rotulo: "A caminho", status: ["dropoff"] },
+  { rotulo: "Indo à loja", status: ["pickup"] },
+  { rotulo: "Na loja", status: ["at_pickup", "pickup_complete"] },
+  { rotulo: "Saiu para entrega", status: ["dropoff"] },
   { rotulo: "Entregue", status: ["delivered"] },
 ];
 
@@ -111,26 +117,48 @@ function Trilha({ status, ativo }: { status: string; ativo: boolean }) {
   const atual = etapaAtual(status);
 
   return (
-    <ol className="mt-4 flex items-center gap-1" aria-label="Progresso da entrega">
+    <ol className="flex items-start" aria-label="Progresso da entrega">
       {ETAPAS.map((e, i) => {
-        const feito = i <= atual;
-        const andando = ativo && i === atual;
+        const feito = i < atual || (!ativo && i === atual);
+        const agora = ativo && i === atual;
 
         return (
-          <li key={e.rotulo} className="flex flex-1 flex-col gap-1.5">
+          <li key={e.rotulo} className="relative flex flex-1 flex-col items-center text-center">
+            {/* Traço até a etapa anterior. Verde quando já foi cumprido; na
+                etapa atual, a faixa clara varre o verde — "é aqui que estamos". */}
+            {i > 0 && (
+              <span
+                aria-hidden="true"
+                className={`absolute right-1/2 top-3 h-1 w-full -translate-y-1/2 overflow-hidden ${
+                  i <= atual ? "bg-emerald-500" : "bg-gray-200"
+                }`}
+              >
+                {agora && (
+                  <span className="absolute inset-y-0 -left-full w-full bg-emerald-200/90 motion-safe:animate-[trilha_1.6s_ease-in-out_infinite]" />
+                )}
+              </span>
+            )}
             <span
               aria-hidden="true"
-              className={`relative h-1.5 overflow-hidden rounded-full transition ${
-                feito ? "bg-emerald-500" : "bg-gray-200"
+              className={`relative z-10 flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold ${
+                feito
+                  ? "bg-emerald-500 text-white"
+                  : agora
+                    ? "bg-white text-emerald-700 ring-[3px] ring-emerald-500"
+                    : "bg-white text-gray-400 ring-2 ring-gray-200"
               }`}
             >
-              {andando && (
-                <span className="absolute inset-y-0 -left-full w-full bg-emerald-200/90 motion-safe:animate-[trilha_1.6s_ease-in-out_infinite]" />
+              {feito ? (
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="m5 12 5 5 9-10" />
+                </svg>
+              ) : (
+                i + 1
               )}
             </span>
             <span
-              className={`text-[11px] leading-tight ${
-                i === atual ? "font-semibold text-gray-900" : "text-gray-400"
+              className={`mt-2 px-1 text-[11px] leading-tight sm:text-xs ${
+                agora ? "font-semibold text-gray-900" : feito ? "text-gray-600" : "text-gray-400"
               }`}
             >
               {e.rotulo}
@@ -140,6 +168,12 @@ function Trilha({ status, ativo }: { status: string; ativo: boolean }) {
       })}
     </ol>
   );
+}
+
+/** Iniciais do entregador para o avatar ("sandbox driver name" -> "SD"). */
+function iniciais(nome: string): string {
+  const p = nome.trim().split(/s+/).filter(Boolean);
+  return ((p[0]?.[0] ?? "") + (p.length > 1 ? p[p.length - 1][0] : "")).toUpperCase() || "?";
 }
 
 export default function CardEntrega({
@@ -173,215 +207,192 @@ export default function CardEntrega({
   const temTrilha = !ehMotoboy && !cancelado;
   const link = entrega?.trackingUrl ?? despacho.trackingUrl;
 
+  const emAndamento = !entregue && !cancelado;
+  const mostraChegadaLoja =
+    !!entrega?.pickupEta && emAndamento && (status === "pending" || status === "pickup");
+  const mostraPrevisao = !!entrega?.dropoffEta && emAndamento;
+  const mostraCodigo = !!despacho.codigoEntrega && emAndamento;
+  const mostraLink = !!link && emAndamento;
+  const temPainelLateral = mostraChegadaLoja || mostraPrevisao || mostraCodigo || mostraLink;
+  const cancelarRotulo =
+    despacho.provider === "ifood"
+      ? "Cancelar corrida no iFood"
+      : despacho.provider === "99"
+        ? "Cancelar corrida na 99"
+        : "Cancelar corrida no Uber";
+
   return (
     <section
-      className={`mb-6 overflow-hidden rounded-xl border bg-white ${
+      className={`mb-6 overflow-hidden rounded-xl border bg-white shadow-sm ${
         cancelado ? "border-red-200" : entregue ? "border-emerald-300" : "border-gray-200"
       }`}
     >
-      {/* Faixa de status — o título do card é o ESTADO, não "Entrega despachada",
-          que é sempre verdade e não informa nada. */}
-      <div
-        className={`flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-3 ${
-          cancelado
-            ? "bg-red-50"
-            : entregue
-            ? "bg-emerald-50"
-            : "bg-gray-50"
+      {/* CABEÇALHO — quem leva e em que pé está. O título é o ESTADO, não
+          "Entrega despachada", que é sempre verdade e não informa nada. */}
+      <header
+        className={`flex flex-wrap items-center gap-3 px-5 py-4 ${
+          cancelado ? "bg-red-50" : entregue ? "bg-emerald-50" : "bg-gray-50/70"
         }`}
       >
-        <span
-          className={`flex items-center gap-2 text-base font-semibold ${
-            cancelado ? "text-red-800" : entregue ? "text-emerald-800" : "text-gray-900"
-          }`}
-        >
-          {entregue && <IconeEntregue />}
-          {cancelado && <IconeAlerta />}
-          {rotulo}
-        </span>
-
-        <span className="flex items-center gap-1.5 text-sm text-gray-500">
-          <LogoProvedor provider={despacho.provider} tamanho={16} />
-          via {despacho.provider === "motoboy" ? "motoboy próprio" : "parceiro"}
-        </span>
+        <LogoProvedor provider={despacho.provider} tamanho={36} />
+        <div className="min-w-0">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+            {ROTULO_PROVEDOR[despacho.provider] ?? despacho.provider}
+          </p>
+          <h2
+            className={`flex items-center gap-1.5 text-lg font-semibold leading-tight ${
+              cancelado ? "text-red-800" : entregue ? "text-emerald-800" : "text-gray-900"
+            }`}
+          >
+            {entregue && <IconeEntregue />}
+            {cancelado && <IconeAlerta />}
+            {rotulo}
+          </h2>
+        </div>
 
         {entrega?.liveMode === false && (
-          <span className="ml-auto rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
+          <span className="ml-auto rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800 ring-1 ring-amber-200">
             Ambiente de teste
           </span>
         )}
-      </div>
+      </header>
 
-      <div className="p-5">
-        {temTrilha && <Trilha status={status} ativo={!entregue && !cancelado} />}
+      <div className="space-y-6 p-5">
+        {temTrilha && <Trilha status={status} ativo={emAndamento} />}
 
-        {/* LINHA DE DADOS.
-            Sem col-start fixo: o primeiro bloco existente ocupa a coluna da
-            esquerda. Enquanto a Uber ainda procura entregador, a previsão é a
-            única informação que existe e fica à esquerda, encostada no início
-            da leitura. Quando o entregador aparece, ele assume a esquerda e a
-            previsão vai para a direita — que é a ordem pedida. */}
-        <dl className={`grid gap-5 sm:grid-cols-2 ${temTrilha ? "mt-6" : ""}`}>
-          {entrega?.courierNome && (
-            <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                Entregador
-              </dt>
-              <dd className="mt-0.5 font-medium text-gray-900">
-                {entrega.courierNome}
-              </dd>
-              {entrega.courierVeiculo && (
-                <dd className="text-sm text-gray-500">{entrega.courierVeiculo}</dd>
-              )}
-              {/* PLACA. Duas motos pretas param na porta ao mesmo tempo, e o
-                  balcão precisa saber qual é a do pedido. Monoespaçada e com
-                  respiro entre os caracteres: é lida de longe, pela janela. */}
-              {entrega.courierPlaca && (
-                <dd className="mt-1">
-                  <span className="inline-flex rounded border border-gray-300 bg-gray-50 px-2 py-0.5 font-mono text-sm font-bold tracking-[0.15em] text-gray-800">
-                    {entrega.courierPlaca}
-                  </span>
-                </dd>
-              )}
-              {entrega.courierTelefone && (
-                <dd className="mt-2">
-                  {/* Mesma altura do "Acompanhar entrega" (BOTAO): dois botões
-                      vizinhos com alturas diferentes ficam desalinhados. */}
-                  <a
-                    href={`tel:${entrega.courierTelefone}`}
-                    className={`${BOTAO} border border-gray-200 bg-white text-gray-700 hover:bg-gray-50`}
+        {(entrega?.courierNome || temPainelLateral || (emAndamento && !ehMotoboy)) && (
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* ENTREGADOR — quem vai parar na porta. */}
+            {entrega?.courierNome ? (
+              <div className="rounded-xl border border-gray-200 p-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                  Entregador
+                </p>
+                <div className="mt-3 flex items-center gap-3">
+                  <span
+                    aria-hidden="true"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gray-900 text-sm font-semibold text-white"
                   >
-                    <IconeTelefone className="h-4 w-4 text-gray-400" />
-                    {telefone(entrega.courierTelefone)}
+                    {iniciais(entrega.courierNome)}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold capitalize text-gray-900">
+                      {entrega.courierNome}
+                    </p>
+                    {entrega.courierVeiculo && (
+                      <p className="text-sm text-gray-500">{entrega.courierVeiculo}</p>
+                    )}
+                  </div>
+                </div>
+
+                {(entrega.courierPlaca || entrega.courierTelefone) && (
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    {/* PLACA. Duas motos pretas param na porta ao mesmo tempo, e o
+                        balcão precisa saber qual é a do pedido. Monoespaçada e com
+                        respiro: é lida de longe, pela janela. */}
+                    {entrega.courierPlaca && (
+                      <span
+                        title="Placa do veículo"
+                        className="inline-flex h-10 items-center rounded-lg border-2 border-gray-800 bg-white px-3 font-mono text-sm font-bold tracking-[0.18em] text-gray-900"
+                      >
+                        {entrega.courierPlaca}
+                      </span>
+                    )}
+                    {entrega.courierTelefone && (
+                      <a
+                        href={`tel:${entrega.courierTelefone}`}
+                        className={`${BOTAO} h-10 border border-gray-200 bg-white py-0 text-gray-700 hover:bg-gray-50`}
+                      >
+                        <IconeTelefone className="h-4 w-4 text-gray-400" />
+                        {telefone(entrega.courierTelefone)}
+                      </a>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              emAndamento &&
+              !ehMotoboy && (
+                <div className="flex items-center gap-3 rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500">
+                  <span className="relative flex h-2.5 w-2.5 shrink-0">
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60 motion-safe:animate-ping" />
+                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                  </span>
+                  Aguardando um entregador aceitar a corrida.
+                </div>
+              )
+            )}
+
+            {temPainelLateral && (
+              <div className="flex flex-col gap-4 rounded-xl border border-gray-200 p-4">
+                {(mostraChegadaLoja || mostraPrevisao) && (
+                  <dl className="grid grid-cols-2 gap-4">
+                    {/* CHEGADA NA LOJA. Enquanto o entregador não chegou, é o
+                        horário que a cozinha usa para decidir se embala agora. */}
+                    {mostraChegadaLoja && (
+                      <div>
+                        <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                          Chega na loja
+                        </dt>
+                        <dd className="mt-0.5 text-2xl font-semibold tracking-tight text-gray-900">
+                          {hora(entrega!.pickupEta!)}
+                        </dd>
+                        <dd className="text-sm text-gray-500">{faltam(entrega!.pickupEta!)}</dd>
+                      </div>
+                    )}
+                    {mostraPrevisao && (
+                      <div>
+                        <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                          Previsão de entrega
+                        </dt>
+                        <dd className="mt-0.5 text-2xl font-semibold tracking-tight text-gray-900">
+                          {hora(entrega!.dropoffEta!)}
+                        </dd>
+                        <dd className="text-sm text-gray-500">{faltam(entrega!.dropoffEta!)}</dd>
+                      </div>
+                    )}
+                  </dl>
+                )}
+
+                {/* CÓDIGO DE ENTREGA. O entregador só fecha a entrega depois que o
+                    cliente diz este número na porta. Grande e espaçado: é ditado
+                    por telefone, e um dígito lido errado é entrega que não fecha. */}
+                {mostraCodigo && (
+                  <div
+                    title="O cliente informa este número ao entregador na porta. Sem ele a entrega não é concluída."
+                    className="flex items-center justify-between gap-3 rounded-lg bg-indigo-50 px-4 py-3 ring-1 ring-indigo-100"
+                  >
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-indigo-500">
+                        Código de entrega
+                      </p>
+                      <p className="text-xs text-indigo-400">O cliente informa na porta</p>
+                    </div>
+                    <span className="font-mono text-2xl font-bold tracking-[0.3em] text-indigo-900">
+                      {despacho.codigoEntrega}
+                    </span>
+                  </div>
+                )}
+
+                {/* Rastreio só enquanto a entrega está em andamento. */}
+                {mostraLink && (
+                  <a
+                    href={link!}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`${BOTAO} bg-emerald-600 text-white hover:bg-emerald-700`}
+                  >
+                    Acompanhar entrega
                   </a>
-                </dd>
-              )}
-            </div>
-          )}
-
-          {/* CHEGADA NA LOJA. Vem antes da previsão de entrega de propósito:
-              enquanto o entregador não coletou, é este o horário que importa
-              para a cozinha decidir se embala agora ou espera. Some depois da
-              coleta, quando vira informação do passado. */}
-          {entrega?.pickupEta && !entregue && !cancelado && status !== "at_pickup" && status !== "pickup_complete" && status !== "dropoff" && (
-            <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                Chega na loja
-              </dt>
-              <dd className="mt-0.5 text-2xl font-semibold tracking-tight text-gray-900">
-                {hora(entrega.pickupEta)}
-              </dd>
-              <dd className="text-sm text-gray-500">{faltam(entrega.pickupEta)}</dd>
-            </div>
-          )}
-
-          {entrega?.dropoffEta && !entregue && !cancelado && (
-            <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                Previsão de entrega
-              </dt>
-              <dd className="mt-0.5 text-2xl font-semibold tracking-tight text-gray-900">
-                {hora(entrega.dropoffEta)}
-              </dd>
-              <dd className="text-sm text-gray-500">{faltam(entrega.dropoffEta)}</dd>
-            </div>
-          )}
-        </dl>
-
-        {/* LINHA DE AÇÕES — o que o atendente USA fica junto, numa faixa só.
-            O código andava solto no meio do card e o botão sozinho lá embaixo,
-            com um vão entre os dois. Agrupados, o olho encontra os dois de uma
-            vez, e nenhum deles muda de lugar quando o entregador é atribuído. */}
-        {((link && !cancelado && !entregue) ||
-          (despacho.codigoEntrega && !entregue && !cancelado)) && (
-          <div className="mt-5 flex flex-wrap items-center gap-3">
-            {/* Rastreio só enquanto a entrega está em andamento: depois de
-                entregue ou cancelada não há o que acompanhar, e o botão verde
-                grande sugeria que ainda havia. */}
-            {link && !cancelado && !entregue && (
-              <a
-                href={link}
-                target="_blank"
-                rel="noreferrer"
-                className={`${BOTAO} bg-emerald-600 text-white hover:bg-emerald-700`}
-              >
-                Acompanhar entrega
-              </a>
-            )}
-
-            {/* CÓDIGO DE ENTREGA. O entregador só fecha a entrega depois que o
-                cliente diz este número na porta — é o que impede o pedido de
-                ser deixado com a pessoa errada.
-
-                Monoespaçado e com respiro entre os dígitos: é um número que o
-                atendente dita por telefone, e 5499 lido errado é uma entrega
-                que não fecha. Some quando a entrega termina; aí já não protege
-                nada e só atrapalha quem lê o histórico. */}
-            {despacho.codigoEntrega && !entregue && !cancelado && (
-              <span
-                title="O cliente informa este número ao entregador na porta. Sem ele a entrega não é concluída."
-                className={`${BOTAO} border border-indigo-200 bg-indigo-50`}
-              >
-                <span className="text-[11px] font-medium uppercase tracking-wide text-indigo-500">
-                  Código
-                </span>
-                {/* leading-5 casa a altura da linha com a do botão ao lado,
-                    que é text-sm. Sem isso o número maior estica a caixa e os
-                    dois ficam com alturas diferentes na mesma fileira. */}
-                <span className="font-mono text-base font-bold leading-5 tracking-[0.2em] text-indigo-900">
-                  {despacho.codigoEntrega}
-                </span>
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* CANCELAR A CORRIDA.
-            Discreto e à parte dos outros botões: é a ação que dá errado com um
-            clique acidental. E some assim que a entrega encerra, porque aí não
-            há o que cancelar.
-
-            Quem decide é o Uber. Depois da coleta ele recusa, e a mensagem que
-            volta diz isso ao atendente em vez de fingir que funcionou. */}
-        {onCancelar && !ehMotoboy && !encerrada && (
-          <div className="mt-5 border-t border-gray-100 pt-4">
-            <button
-              onClick={onCancelar}
-              disabled={cancelando}
-              className="text-sm font-medium text-red-700 underline-offset-2 transition hover:underline disabled:opacity-50"
-            >
-              {cancelando
-                ? "Cancelando..."
-                : `Cancelar esta corrida ${despacho.provider === "ifood" ? "no iFood" : despacho.provider === "99" ? "na 99" : "no Uber"}`}
-            </button>
-            {/* CANCELAR PODE CUSTAR DINHEIRO.
-                Cláusula 6.2 do contrato brasileiro do Uber Direct: R$ 5,00 se o
-                cancelamento acontecer depois de o entregador chegar na loja. O
-                atendente decide melhor sabendo disso — e o custo aparece na
-                fatura de qualquer forma, então esconder só adiaria a surpresa.
-                É cláusula do contrato do Uber — no iFood não se aplica. */}
-            {despacho.provider === "uber" && (
-              <p className="mt-1.5 text-xs text-gray-500">
-                Se o entregador já tiver chegado na loja, a Uber cobra R$ 5,00 de
-                taxa de cancelamento.
-              </p>
-            )}
-            {/* iFood: o evento de cancelamento de uma corrida com entregador
-                já designado veio marcado IFOOD_ENTREGAS_COBRAR_FRETE_PARCIAL
-                (teste de 24/09/2026). O valor exato não vem no evento, por
-                isso "parte do frete" e não um número. */}
-            {despacho.provider === "ifood" && (
-              <p className="mt-1.5 text-xs text-gray-500">
-                Se o entregador já tiver sido designado, o iFood cobra parte do
-                frete.
-              </p>
+                )}
+              </div>
             )}
           </div>
         )}
 
         {/* Confirmação manual — só motoboy, que não tem webhook. */}
-        {ehMotoboy && !entregue && !cancelado && (
-          <div className="mt-5 rounded-lg bg-gray-50 p-4">
+        {ehMotoboy && emAndamento && (
+          <div className="rounded-xl bg-gray-50 p-4">
             <p className="text-sm font-medium text-gray-700">
               O motoboy já entregou este pedido?
             </p>
@@ -408,8 +419,8 @@ export default function CardEntrega({
           </div>
         )}
 
-        {onReenviar && (entregue || cancelado) && (
-          <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4">
+        {onReenviar && encerrada && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm font-medium text-amber-900">
@@ -432,13 +443,37 @@ export default function CardEntrega({
         )}
       </div>
 
-      {/* Rodapé técnico: só é consultado quando alguém abre chamado. */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-gray-100 px-5 py-2.5 text-xs text-gray-400">
-        <span className="break-all font-mono">{despacho.deliveryId}</span>
-        {entrega?.statusAtualizadoEm && (
-          <span>· atualizado às {hora(entrega.statusAtualizadoEm)}</span>
+      {/* RODAPÉ — id técnico (só serve para suporte) e o cancelamento, discreto
+          e longe dos botões de uso: é a ação que dá errado com clique acidental.
+          Quem decide é o parceiro; depois da coleta ele recusa, e a mensagem
+          que volta diz isso ao atendente. */}
+      <footer className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-gray-100 px-5 py-3 text-xs text-gray-400">
+        <span>
+          ID <span className="break-all font-mono text-gray-500">{despacho.deliveryId}</span>
+        </span>
+        {entrega?.statusAtualizadoEm && <span>atualizado às {hora(entrega.statusAtualizadoEm)}</span>}
+
+        {onCancelar && !ehMotoboy && !encerrada && (
+          <div className="ml-auto text-right">
+            <button
+              onClick={onCancelar}
+              disabled={cancelando}
+              className="text-sm font-medium text-red-700 underline-offset-2 transition hover:underline disabled:opacity-50"
+            >
+              {cancelando ? "Cancelando..." : cancelarRotulo}
+            </button>
+            {/* Cláusula 6.2 do contrato do Uber Direct: R$ 5,00 depois de o
+                entregador chegar na loja. No iFood, o cancelamento com
+                entregador designado veio marcado FRETE_PARCIAL (24/09/2026). */}
+            {despacho.provider === "uber" && (
+              <p className="mt-0.5">Após a chegada na loja, a Uber cobra R$ 5,00.</p>
+            )}
+            {despacho.provider === "ifood" && (
+              <p className="mt-0.5">Com entregador designado, o iFood cobra parte do frete.</p>
+            )}
+          </div>
         )}
-      </div>
+      </footer>
     </section>
   );
 }
