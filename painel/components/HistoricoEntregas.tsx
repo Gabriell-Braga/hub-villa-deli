@@ -13,6 +13,7 @@ import LogoProvedor from "./LogoProvedor";
 import SeloTeste from "./SeloTeste";
 import { SkeletonListaPedidos } from "./Skeleton";
 import { apiFetch } from "@/lib/api";
+import IconeDestaque from "@/components/IconeDestaque";
 
 // ---------------------------------------------------------------------------
 // Histórico com filtros e exportação.
@@ -158,7 +159,7 @@ export default function HistoricoEntregas() {
       {/* Cabeçalho com o seletor de período à direita, igual ao de Relatórios. */}
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Histórico</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-gray-900">Histórico</h1>
           <p className="mt-1 text-sm text-gray-500">
             Entregas despachadas, com a transportadora e o frete pago. Filtre e
             exporte para o Excel.
@@ -183,7 +184,7 @@ export default function HistoricoEntregas() {
       </header>
 
       {/* ---------------- Filtros ---------------- */}
-      <section className="mb-5 rounded-xl border border-gray-200 bg-white p-4 sm:p-5">
+      <section className="mb-5 rounded-xl border border-gray-200 bg-white p-4 sm:p-5 shadow-cartao">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <div>
             <label className="block text-xs font-medium text-gray-500" htmlFor="de">
@@ -357,8 +358,8 @@ export default function HistoricoEntregas() {
       ) : carregando ? (
         <SkeletonListaPedidos />
       ) : !dados || dados.itens.length === 0 ? (
-        <div className="rounded-xl border border-gray-200 bg-white p-8 text-center sm:p-12">
-          <p className="text-3xl">🔎</p>
+        <div className="rounded-xl border border-gray-200 bg-white p-8 text-center sm:p-12 shadow-cartao">
+          <IconeDestaque nome="busca" />
           <p className="mt-3 font-medium text-gray-900">
             {temFiltro ? "Nada encontrado com esses filtros" : "Nada no histórico ainda"}
           </p>
@@ -375,7 +376,7 @@ export default function HistoricoEntregas() {
             {dados.itens.map((i) => (
               <li
                 key={i.idPedido}
-                className="rounded-xl border border-gray-200 bg-white p-4"
+                className="rounded-xl border border-gray-200 bg-white p-4 shadow-cartao"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -406,7 +407,7 @@ export default function HistoricoEntregas() {
                   {i.teste && <SeloTeste />}
                   <LogoProvedor provider={i.plataforma} tamanho={16} />
                   <span
-                    className={`rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
+                    className={`rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
                       COR_STATUS_ENTREGA[i.status] ??
                       "bg-gray-100 text-gray-700 ring-gray-300"
                     }`}
@@ -422,10 +423,10 @@ export default function HistoricoEntregas() {
           </ul>
 
           {/* Tablet e desktop: tabela */}
-          <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white sm:block">
+          <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white sm:block shadow-cartao">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                <thead className="border-b border-gray-200 bg-gray-50/70 text-left text-xs font-medium text-gray-500">
                   <tr>
                     <th className="px-5 py-3 font-medium">Pedido</th>
                     <th className="px-5 py-3 font-medium">Cliente</th>
@@ -450,7 +451,7 @@ export default function HistoricoEntregas() {
                     <tr key={i.idPedido} className="transition hover:bg-gray-50">
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-2">
-                          <p className="font-medium text-gray-900">#{i.idPedido}</p>
+                          <p className="whitespace-nowrap font-medium text-gray-900">#{i.idPedido}</p>
                           {i.teste && <SeloTeste />}
                         </div>
                         <p className="text-xs text-gray-400">
@@ -471,7 +472,7 @@ export default function HistoricoEntregas() {
                       </td>
                       <td className="px-5 py-3">
                         <span
-                          className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
+                          className={`inline-flex whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
                             COR_STATUS_ENTREGA[i.status] ??
                             "bg-gray-100 text-gray-700 ring-gray-300"
                           }`}

@@ -12,7 +12,7 @@ export default function Carregando() {
       <SkeletonCabecalho acao />
 
       {/* Cartão de filtros */}
-      <section className="mb-5 rounded-xl border border-gray-200 bg-white p-4 sm:p-5">
+      <section className="mb-5 rounded-xl border border-gray-200 bg-white p-4 sm:p-5 shadow-cartao">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {[0, 1, 2, 3, 4].map((i) => (
             <div key={i}>

@@ -11,6 +11,7 @@ import { brl, brlOuGratis, dataHora, desde } from "@/lib/formato";
 import { SkeletonListaPedidos } from "./Skeleton";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/components/Toast";
+import IconeDestaque from "@/components/IconeDestaque";
 
 // ---------------------------------------------------------------------------
 // Lista de pedidos. Serve as duas telas (Aberto e Histórico) — a diferença é
@@ -59,7 +60,7 @@ function Selo({ status, pago }: { status: StatusPedido; pago: boolean }) {
 
   return (
     <span
-      className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${CORES_STATUS[status]}`}
+      className={`inline-flex whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${CORES_STATUS[status]}`}
     >
       {ROTULO_STATUS[status]}
     </span>
@@ -72,7 +73,7 @@ function SeloReenvio() {
   return (
     <span
       title="O frete deste pedido já foi cobrado numa entrega anterior."
-      className="inline-flex whitespace-nowrap rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-amber-800 ring-1 ring-inset ring-amber-300"
+      className="inline-flex whitespace-nowrap rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-300"
     >
       Reenvio
     </span>
@@ -222,8 +223,8 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
 
   if (pedidos.length === 0) {
     return (
-      <div className="rounded-xl border border-gray-200 bg-white p-8 text-center sm:p-12">
-        <p className="text-3xl">📭</p>
+      <div className="rounded-xl border border-gray-200 bg-white p-8 text-center sm:p-12 shadow-cartao">
+        <IconeDestaque nome="caixa" />
         <p className="mt-3 font-medium text-gray-900">
           {aba === "abertos" ? "Nenhum pedido na fila" : "Nada no histórico ainda"}
         </p>
@@ -368,10 +369,10 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
       </ul>
 
       {/* ---------------- Tablet e desktop: tabela ---------------- */}
-      <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white sm:block">
+      <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white sm:block shadow-cartao">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+            <thead className="border-b border-gray-200 bg-gray-50/70 text-left text-xs font-medium text-gray-500">
               <tr>
                 {aba === "abertos" && (
                   <th className="w-10 px-3 py-3">

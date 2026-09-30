@@ -7,7 +7,7 @@ export default function Carregando() {
   return (
     <div className="mx-auto max-w-6xl">
       <header className="mb-5">
-        <h1 className="text-xl font-semibold text-gray-900">Pedidos em Aberto</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-gray-900">Pedidos em Aberto</h1>
         <p className="mt-1 text-sm text-gray-500">
           Pedidos recebidos do Cardápio Web que ainda não foram despachados.
         </p>

@@ -96,7 +96,7 @@ export default function UltimaEntrega({ entrega }: { entrega: EntregaAnterior })
           <dl className="divide-y divide-gray-100 text-sm">
             <Linha rotulo="Situação">
               <span
-                className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
+                className={`inline-flex rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
                   COR_STATUS_ENTREGA[entrega.status] ??
                   "bg-gray-100 text-gray-700 ring-gray-300"
                 }`}

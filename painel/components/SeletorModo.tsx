@@ -82,7 +82,7 @@ export default function SeletorModo({
 
   if (carregando) {
     return (
-      <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
+      <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-cartao">
         <div className="h-4 w-40 rounded bg-gray-200/80 motion-safe:animate-pulse" />
         <div className="mt-4 h-20 rounded bg-gray-200/80 motion-safe:animate-pulse" />
       </section>
@@ -104,9 +104,15 @@ export default function SeletorModo({
           emProducao ? "bg-red-50 text-red-800" : "bg-amber-50 text-amber-900"
         }`}
       >
-        {emProducao
-          ? "🔴 Modo produção: entregas são reais e cobradas"
-          : "🟡 Modo teste: nenhuma entrega é cobrada"}
+        <span className="inline-flex items-center gap-2">
+          <span
+            className={`h-2 w-2 rounded-full ${emProducao ? "bg-red-500" : "bg-amber-500"}`}
+            aria-hidden="true"
+          />
+          {emProducao
+            ? "Modo produção: entregas são reais e cobradas"
+            : "Modo teste: nenhuma entrega é cobrada"}
+        </span>
       </div>
 
       <div className="p-5">

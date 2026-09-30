@@ -68,7 +68,7 @@ export default function ChaveMotoboy({ aoTrocar }: { aoTrocar?: () => void }) {
   const ligado = dados.ativo && dados.permitidoNoAmbiente;
 
   return (
-    <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
+    <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-cartao">
       <div className="flex items-center gap-4">
         <LogoProvedor provider="motoboy" tamanho={36} />
         <div className="min-w-0 flex-1">

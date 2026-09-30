@@ -19,7 +19,7 @@ export default function Header({ onAbrirMenu }: { onAbrirMenu?: () => void }) {
   return (
     // sticky no celular: a página inteira rola, e o cabeçalho (com o botão de
     // menu) precisa continuar alcançável no meio de uma lista longa.
-    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4 sm:px-6 md:static">
+    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between border-b border-gray-200 bg-white/90 px-4 backdrop-blur sm:px-6 md:static">
       <div className="flex min-w-0 items-center gap-2">
         <button
           onClick={onAbrirMenu}
@@ -48,29 +48,29 @@ export default function Header({ onAbrirMenu }: { onAbrirMenu?: () => void }) {
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-        {/* Nome e papel ocupariam metade da tela no celular. O avatar já
-            identifica quem está logado; o nome completo volta a partir de sm. */}
-        <div className="hidden text-right sm:block">
-          <p className="text-sm font-medium leading-tight text-gray-900">{nome}</p>
-          <p className="text-xs leading-tight text-gray-500">{papel}</p>
+      <div className="flex shrink-0 items-center gap-3">
+        <div className="flex items-center gap-2.5" title={`${nome} · ${papel}`}>
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-900 text-xs font-semibold text-white">
+            {iniciais || "A"}
+          </div>
+          {/* Nome e papel ocupariam metade da tela no celular. O avatar já
+              identifica quem está logado; o nome volta a partir de sm. Papel
+              igual ao nome ("Administrador · Administrador") é omitido. */}
+          <div className="hidden leading-tight sm:block">
+            <p className="text-sm font-medium text-gray-900">{nome}</p>
+            {papel !== nome && <p className="text-xs text-gray-500">{papel}</p>}
+          </div>
         </div>
 
-        <div
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold"
-          style={{
-            backgroundColor: "var(--marca-suave)",
-            color: "var(--marca-suave-texto)",
-          }}
-          title={`${nome} · ${papel}`}
-        >
-          {iniciais || "A"}
-        </div>
+        <span className="hidden h-6 w-px bg-gray-200 sm:block" aria-hidden="true" />
 
         <button
           onClick={() => signOut({ callbackUrl: "/login" })}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50 hover:text-gray-900"
+          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-gray-500 transition hover:bg-gray-100 hover:text-gray-900"
         >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+          </svg>
           Sair
         </button>
       </div>

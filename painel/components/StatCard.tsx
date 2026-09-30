@@ -29,16 +29,13 @@ export default function StatCard({
       : "text-gray-900";
 
   return (
-    <div className="relative overflow-hidden rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      {cor && (
-        <span
-          className="absolute inset-y-0 left-0 w-1"
-          style={{ backgroundColor: cor }}
-          aria-hidden="true"
-        />
-      )}
-
-      <div className="flex items-center gap-2 text-sm font-medium text-gray-500">
+    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-cartao">
+      {/* A cor vira um ponto ao lado do rótulo. A barra lateral colorida
+          anterior pesava e fazia cada card parecer de um sistema diferente. */}
+      <div className="flex items-center gap-2 text-sm text-gray-500">
+        {cor && (
+          <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: cor }} aria-hidden="true" />
+        )}
         {rotulo}
       </div>
 
@@ -48,13 +45,13 @@ export default function StatCard({
           className="mt-2 h-8 w-28 rounded bg-gray-200/80 motion-safe:animate-pulse"
         />
       ) : (
-        <p className={`mt-1 text-2xl font-semibold tracking-tight ${corDoValor}`}>
+        <p className={`mt-2 text-[26px] font-semibold leading-none tracking-tight ${corDoValor}`}>
           {valor}
         </p>
       )}
 
       {detalhe && !carregando && (
-        <p className="mt-1 text-xs text-gray-400">{detalhe}</p>
+        <p className="mt-2 text-xs text-gray-500">{detalhe}</p>
       )}
     </div>
   );

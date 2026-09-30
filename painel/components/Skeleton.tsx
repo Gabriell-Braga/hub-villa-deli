@@ -39,7 +39,7 @@ export function SkeletonCabecalho({ acao = false }: { acao?: boolean }) {
 /** Cartão branco com barrinhas dentro — base dos stat cards e afins. */
 function Cartao({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5">{children}</div>
+    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-cartao">{children}</div>
   );
 }
 
@@ -54,7 +54,7 @@ export function SkeletonListaPedidos({ linhas = 4 }: { linhas?: number }) {
       {/* Celular: cartões, iguais aos do ListaPedidos */}
       <ul className="space-y-3 sm:hidden">
         {itens.map((i) => (
-          <li key={i} className="rounded-xl border border-gray-200 bg-white p-4">
+          <li key={i} className="rounded-xl border border-gray-200 bg-white p-4 shadow-cartao">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <Skeleton className="h-4 w-32" />
@@ -71,7 +71,7 @@ export function SkeletonListaPedidos({ linhas = 4 }: { linhas?: number }) {
       </ul>
 
       {/* Tablet e desktop: linhas de tabela */}
-      <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white sm:block">
+      <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white sm:block shadow-cartao">
         <div className="border-b border-gray-200 bg-gray-50 px-5 py-3">
           <Skeleton className="h-3 w-48" />
         </div>
@@ -125,7 +125,7 @@ export function SkeletonCartoesCotacao({ cartoes = 2 }: { cartoes?: number }) {
 /** Painel lateral com os dados da entrega. */
 export function SkeletonResumoPedido() {
   return (
-    <aside className="rounded-xl border border-gray-200 bg-white p-5">
+    <aside className="rounded-xl border border-gray-200 bg-white p-5 shadow-cartao">
       <Skeleton className="h-3 w-20" />
       <div className="mt-4 space-y-4">
         {[0, 1, 2].map((i) => (
@@ -222,7 +222,7 @@ export function SkeletonUsuarios({ linhas = 3 }: { linhas?: number }) {
   return (
     <ul className="space-y-3">
       {Array.from({ length: linhas }, (_, i) => (
-        <li key={i} className="rounded-xl border border-gray-200 bg-white p-4 sm:p-5">
+        <li key={i} className="rounded-xl border border-gray-200 bg-white p-4 sm:p-5 shadow-cartao">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <Skeleton className="h-4 w-36" />
@@ -254,7 +254,7 @@ export function SkeletonDiagnostico({ linhas = 5 }: { linhas?: number }) {
         <Skeleton className="h-4 w-48" />
       </div>
 
-      <div className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-cartao">
         {Array.from({ length: linhas }, (_, i) => (
           <div key={i} className="flex gap-4 p-5">
             <Skeleton className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" />
@@ -272,7 +272,7 @@ export function SkeletonDiagnostico({ linhas = 5 }: { linhas?: number }) {
 /** Bloco da marca, no topo de Configurações. */
 export function SkeletonMarca() {
   return (
-    <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
+    <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-cartao">
       <Skeleton className="h-3 w-16" />
       <div className="mt-3 flex flex-wrap items-center gap-4">
         <Skeleton className="h-14 w-14 rounded-full" />

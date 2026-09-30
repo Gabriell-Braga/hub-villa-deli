@@ -58,7 +58,7 @@ export default function PaginaRelatorios() {
     <div className="mx-auto max-w-6xl">
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Relatórios</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-gray-900">Relatórios</h1>
           <p className="mt-1 text-sm text-gray-500">
             Resultado das entregas no mês corrente: o frete que os clientes
             pagaram menos o que foi pago às transportadoras.
@@ -134,14 +134,14 @@ export default function PaginaRelatorios() {
       {/* Um card por plataforma. A pergunta não é "quanto gastei com o Uber",
           é "com qual parceiro a loja sai ganhando" — por isso o número grande
           é o resultado, e o custo fica no detalhe. */}
-      <h2 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-wide text-gray-500">
+      <h2 className="mb-3 mt-8 text-sm font-semibold text-gray-900">
         Por plataforma, no mês
       </h2>
 
       {carregando ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="rounded-xl border border-gray-200 bg-white p-5">
+            <div key={i} className="rounded-xl border border-gray-200 bg-white p-5 shadow-cartao">
               <Skeleton className="h-4 w-28" />
               <Skeleton className="mt-2 h-7 w-20" />
               <Skeleton className="mt-2 h-3 w-32" />
@@ -169,7 +169,7 @@ export default function PaginaRelatorios() {
           ))}
         </div>
       ) : (
-        <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
+        <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500 shadow-cartao">
           Nenhuma entrega despachada este mês.
         </div>
       )}
@@ -183,7 +183,7 @@ export default function PaginaRelatorios() {
           outros seria lido como "custou zero", que é diferente de "o Hub não
           sabe quanto custou". */}
       {!carregando && (dados?.outrasPlataformas.entregasMes ?? 0) > 0 && (
-        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-gray-200 bg-white p-4">
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-gray-200 bg-white p-4 shadow-cartao">
           <LogoProvedor provider="outra" tamanho={28} />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-gray-900">
@@ -204,7 +204,7 @@ export default function PaginaRelatorios() {
 
       {/* Gráficos */}
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
-        <section className="rounded-xl border border-gray-200 bg-white p-5">
+        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-cartao">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-gray-900">
               Frete cobrado × custo
@@ -241,7 +241,7 @@ export default function PaginaRelatorios() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-gray-200 bg-white p-5">
+        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-cartao">
           <h2 className="text-sm font-semibold text-gray-900">
             Entregas por plataforma
             <span className="ml-2 font-normal text-gray-400">mês corrente</span>

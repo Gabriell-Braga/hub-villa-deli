@@ -79,7 +79,7 @@ export default function PaginaConfiguracoes() {
     <div className="mx-auto max-w-4xl">
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Configurações</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-gray-900">Configurações</h1>
           <p className="mt-1 text-sm text-gray-500">
             Verificação das credenciais e integrações. Rode aqui antes de ligar
             qualquer ambiente novo.
@@ -102,8 +102,8 @@ export default function PaginaConfiguracoes() {
       <ChaveMotoboy aoTrocar={verificar} />
 
       {/* Identidade do cliente */}
-      <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+      <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-cartao">
+        <h2 className="text-sm font-semibold text-gray-900">
           Marca
         </h2>
         <div className="mt-3 flex flex-wrap items-center gap-4">
@@ -139,7 +139,7 @@ export default function PaginaConfiguracoes() {
         <>
           <div className="mb-4 flex flex-wrap items-center gap-3">
             <span
-              className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ring-1 ring-inset ${
+              className={`rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
                 AMBIENTE_ESTILO[dados.ambiente] ?? AMBIENTE_ESTILO.dev
               }`}
             >
@@ -158,7 +158,7 @@ export default function PaginaConfiguracoes() {
             )}
           </div>
 
-          <div className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-200 bg-white">
+          <div className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-cartao">
             {dados.itens.map((item) => {
               const e = ESTILO[item.status];
               return (

@@ -225,7 +225,7 @@ export default function PaginaUsuarios() {
     <div className="mx-auto max-w-4xl">
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Usuários</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-gray-900">Usuários</h1>
           <p className="mt-1 text-sm text-gray-500">
             Quem pode entrar no painel. A senha é sempre definida pelo próprio
             usuário, pelo link de acesso.
@@ -248,7 +248,7 @@ export default function PaginaUsuarios() {
       {formAberto && (
         <form
           onSubmit={criar}
-          className="mb-5 rounded-xl border border-gray-200 bg-white p-5"
+          className="mb-5 rounded-xl border border-gray-200 bg-white p-5 shadow-cartao"
         >
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
@@ -337,16 +337,29 @@ export default function PaginaUsuarios() {
             return (
               <li
                 key={u.id}
-                className={`rounded-xl border bg-white p-4 sm:p-5 ${
+                className={`rounded-xl border bg-white p-4 shadow-cartao sm:p-5 ${
                   u.ativo ? "border-gray-200" : "border-gray-200 opacity-60"
                 }`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-start gap-3">
+                  <span
+                    aria-hidden="true"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-xs font-semibold text-gray-700 ring-1 ring-inset ring-gray-200"
+                  >
+                    {u.nome
+                      .split(/\s+/)
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .map((p) => p[0])
+                      .join("")
+                      .toUpperCase()}
+                  </span>
                   <div className="min-w-0">
                     <p className="flex flex-wrap items-center gap-2 font-medium text-gray-900">
                       {u.nome}
                       {souEu && (
-                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-normal text-gray-600">
+                        <span className="rounded-md bg-gray-100 px-1.5 py-0.5 text-[11px] font-normal text-gray-600">
                           você
                         </span>
                       )}
@@ -355,7 +368,7 @@ export default function PaginaUsuarios() {
 
                     <div className="mt-2 flex flex-wrap gap-2">
                       <span
-                        className={`rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
+                        className={`rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
                           u.papel === "admin"
                             ? "bg-gray-100 text-gray-800 ring-gray-300"
                             : "bg-blue-50 text-blue-700 ring-blue-200"
@@ -365,19 +378,20 @@ export default function PaginaUsuarios() {
                       </span>
 
                       {!u.ativo && (
-                        <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-300">
+                        <span className="rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-300">
                           Inativo
                         </span>
                       )}
 
                       {u.semSenha && (
-                        <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-200">
+                        <span className="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-200">
                           {u.linkPendenteAte
                             ? "Aguardando primeiro acesso"
                             : "Sem senha. Gere um link"}
                         </span>
                       )}
                     </div>
+                  </div>
                   </div>
 
                   <div className="flex w-full flex-wrap gap-2 sm:w-auto">

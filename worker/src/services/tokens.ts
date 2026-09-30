@@ -168,7 +168,7 @@ export async function getUberToken(
         scope: cred.scope,
       }),
     });
-    if (!res.ok) throw new Error(`Uber auth falhou: ${res.status}`);
+    if (!res.ok) throw new Error(`O Uber recusou as credenciais (código ${res.status}).`);
     return (await res.json()) as { access_token: string; expires_in: number };
   });
 }

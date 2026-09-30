@@ -62,21 +62,17 @@ function Resultado({
   const positivo = saldo >= 0;
 
   return (
-    <div
-      className={`mt-3 rounded-lg px-3 py-2 text-xs ${
-        positivo ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-800"
-      }`}
-    >
-      <span className="font-semibold">
-        {positivo ? "Sobra " : "A loja banca "}
-        {brl(Math.abs(saldo))}
-      </span>
-      <span className="opacity-75">
-        {" "}
-        ·{" "}
+    // Só o VALOR leva cor. A caixa inteira vermelha em quase todo card (é o
+    // caso comum: frete grátis) gritava "erro" numa situação normal.
+    <div className="mt-4 flex items-baseline justify-between gap-2 border-t border-gray-100 pt-3 text-xs">
+      <span className="text-gray-500">
         {reenvio
-          ? `frete já cobrado na entrega anterior`
-          : `cliente pagou ${brlOuGratis(cobrado)} de frete`}
+          ? "Frete já cobrado na entrega anterior"
+          : `Cliente pagou ${brlOuGratis(cobrado)} de frete`}
+      </span>
+      <span className={`whitespace-nowrap font-semibold ${positivo ? "text-emerald-700" : "text-red-700"}`}>
+        {positivo ? "Sobra " : "Loja banca "}
+        {brl(Math.abs(saldo))}
       </span>
     </div>
   );
@@ -317,13 +313,13 @@ export default function PaginaCotacao({
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-xl font-semibold text-gray-900">Pedido #{idPedido}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-gray-900">Pedido #{idPedido}</h1>
             {pedido?.teste && <SeloTeste />}
             <SeloOrigem canal={pedido?.canal} numeroExterno={pedido?.numeroExterno} />
             {/* Junto do número do pedido, não no meio da tela: é a primeira
                 coisa que se lê, e muda o significado de tudo o que vem depois. */}
             {anterior && (
-              <span className="inline-flex items-center whitespace-nowrap rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-amber-800 ring-1 ring-inset ring-amber-300">
+              <span className="inline-flex items-center whitespace-nowrap rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-300">
                 {anterior.sequencia + 1}º envio
               </span>
             )}
@@ -417,7 +413,7 @@ export default function PaginaCotacao({
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
         {/* Cotações */}
         <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
+          <h2 className="mb-3 text-sm font-semibold text-gray-900">
             Cotações
           </h2>
 
@@ -435,9 +431,9 @@ export default function PaginaCotacao({
                   // o próprio botão para baixo e a fileira fica desalinhada.
                   <div
                     key={c.provider}
-                    className={`flex flex-col rounded-xl border bg-white p-5 transition ${
-                      barato ? "border-[var(--marca-primaria)] ring-2 ring-gray-200" : "border-gray-200"
-                    } ${!c.disponivel || travado ? "opacity-70" : ""}`}
+                    className={`flex flex-col rounded-xl border bg-white p-5 shadow-cartao transition ${
+                      barato ? "border-gray-900 ring-1 ring-gray-900" : "border-gray-200"
+                    } ${!c.disponivel ? "bg-gray-50/60 shadow-none" : ""} ${travado ? "opacity-70" : ""}`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex min-w-0 items-center gap-2.5">
@@ -447,7 +443,7 @@ export default function PaginaCotacao({
                         </span>
                       </div>
                       {barato && (
-                        <span className="rounded-full bg-[var(--marca-primaria)] px-2 py-0.5 text-xs font-semibold text-[var(--marca-contraste)]">
+                        <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
                           Mais barato
                         </span>
                       )}
@@ -457,14 +453,14 @@ export default function PaginaCotacao({
                       <>
                         <div className="mt-4 flex items-end justify-between">
                           <div>
-                            <p className="text-xs uppercase tracking-wide text-gray-400">
+                            <p className="text-xs text-gray-500">
                               Custo da entrega
                             </p>
-                            <span className="text-2xl font-semibold tracking-tight text-gray-900">
+                            <span className="mt-0.5 block text-[26px] font-semibold leading-tight tracking-tight text-gray-900">
                               {brlOuGratis(c.preco)}
                             </span>
                           </div>
-                          <span className="text-sm text-gray-500">
+                          <span className="rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">
                             {c.etaMinutos ? `~${c.etaMinutos} min` : "ETA n/d"}
                           </span>
                         </div>
@@ -493,7 +489,7 @@ export default function PaginaCotacao({
                                 : despachar(c.provider, c.nome)
                             }
                             disabled={despachando !== null || travado}
-                            className="w-full rounded-lg bg-[var(--marca-primaria)] py-2.5 text-sm font-semibold text-[var(--marca-contraste)] transition hover:bg-[var(--marca-primaria-hover)] disabled:opacity-50"
+                            className="w-full rounded-lg bg-[var(--marca-primaria)] py-2.5 text-sm font-medium text-[var(--marca-contraste)] shadow-sm transition hover:bg-[var(--marca-primaria-hover)] disabled:opacity-50"
                           >
                             {despachando === c.provider
                               ? "Despachando..."
@@ -505,9 +501,8 @@ export default function PaginaCotacao({
                       </>
                     ) : (
                       <>
-                        <p className="mt-4 text-sm text-red-600">
-                          Indisponível{c.erro ? `: ${c.erro}` : ""}
-                        </p>
+                        <p className="mt-4 text-sm font-medium text-gray-700">Indisponível</p>
+                        {c.erro && <p className="mt-0.5 text-sm text-gray-500">{c.erro}</p>}
                         {/* A distância também aparece na recusa: sem ela,
                             "fora da área de cobertura" não diz se faltaram
                             200 metros ou 3 km. */}
@@ -526,7 +521,7 @@ export default function PaginaCotacao({
             (dados?.cotacoes?.length ?? 0) === 0 &&
             !erroCarregar &&
             !bloqueio && (
-              <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
+              <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500 shadow-cartao">
                 Nenhuma cotação disponível para este endereço no momento.
               </div>
             )}
@@ -541,8 +536,8 @@ export default function PaginaCotacao({
         {!pedido && carregando && <SkeletonResumoPedido />}
 
         {pedido && (
-          <aside className="rounded-xl border border-gray-200 bg-white p-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+          <aside className="rounded-xl border border-gray-200 bg-white p-5 shadow-cartao">
+            <h2 className="text-sm font-semibold text-gray-900">
               Entrega
             </h2>
 
@@ -618,7 +613,7 @@ export default function PaginaCotacao({
                     <span className="text-gray-900">{pedido.formaPagamento}</span>
                   )}
                   <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
+                    className={`rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
                       pedido.pago
                         ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
                         : "bg-amber-50 text-amber-800 ring-amber-300"

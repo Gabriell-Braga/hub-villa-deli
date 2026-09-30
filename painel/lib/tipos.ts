@@ -104,6 +104,8 @@ export const ROTULO_STATUS_ENTREGA: Record<string, string> = {
   returned: "Devolvida",
   shopping_completed: "Compras concluídas",
   acionado: "Acionado",
+  // Status gravado pela confirmação manual e pelos dados de demonstração.
+  concluida: "Concluída",
 };
 
 /** Cor do selo por status. */

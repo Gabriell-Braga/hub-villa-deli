@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { LogoComNome } from "@/components/Logo";
 import { Skeleton } from "@/components/Skeleton";
 import CampoSenha from "@/components/CampoSenha";
+import IconeDestaque from "@/components/IconeDestaque";
 
 // ---------------------------------------------------------------------------
 // Definição de senha — primeiro acesso e recuperação usam esta mesma tela.
@@ -115,7 +116,7 @@ function Formulario() {
             </div>
           ) : tokenInvalido ? (
             <>
-              <p className="text-center text-3xl">🔗</p>
+              <IconeDestaque nome="link" />
               <h1 className="mt-3 text-center font-semibold text-gray-900">
                 Link inválido
               </h1>
@@ -131,7 +132,7 @@ function Formulario() {
             </>
           ) : pronto ? (
             <>
-              <p className="text-center text-3xl">✅</p>
+              <IconeDestaque nome="ok" tom="sucesso" />
               <h1 className="mt-3 text-center font-semibold text-gray-900">
                 Senha criada
               </h1>

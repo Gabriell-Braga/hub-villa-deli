@@ -13,6 +13,12 @@
   --marca-suave-texto: #111827;
 }
 
+/* Inter com os ajustes que a deixam mais "de produto": dígitos tabulares
+   (valores alinham na coluna) e o "1" e o "l" distinguíveis. */
+body {
+  font-feature-settings: "cv11", "ss01", "tnum";
+}
+
 /* Entrada dos toasts. Fica no CSS porque o Tailwind não tem keyframe próprio
    e escrever isso em classe arbitrária ficaria ilegível. */
 @keyframes subir {

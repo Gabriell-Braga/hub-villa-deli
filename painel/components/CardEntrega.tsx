@@ -236,7 +236,7 @@ export default function CardEntrega({
       >
         <LogoProvedor provider={despacho.provider} tamanho={36} />
         <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+          <p className="text-xs font-medium text-gray-500">
             {ROTULO_PROVEDOR[despacho.provider] ?? despacho.provider}
           </p>
           <h2
@@ -265,7 +265,7 @@ export default function CardEntrega({
             {/* ENTREGADOR — quem vai parar na porta. */}
             {entrega?.courierNome ? (
               <div className="rounded-xl border border-gray-200 p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                <p className="text-xs font-medium text-gray-500">
                   Entregador
                 </p>
                 <div className="mt-3 flex items-center gap-3">
@@ -331,7 +331,7 @@ export default function CardEntrega({
                         horário que a cozinha usa para decidir se embala agora. */}
                     {mostraChegadaLoja && (
                       <div>
-                        <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                        <dt className="text-xs font-medium text-gray-500">
                           Chega na loja
                         </dt>
                         <dd className="mt-0.5 text-2xl font-semibold tracking-tight text-gray-900">
@@ -342,7 +342,7 @@ export default function CardEntrega({
                     )}
                     {mostraPrevisao && (
                       <div>
-                        <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                        <dt className="text-xs font-medium text-gray-500">
                           Previsão de entrega
                         </dt>
                         <dd className="mt-0.5 text-2xl font-semibold tracking-tight text-gray-900">
@@ -363,7 +363,7 @@ export default function CardEntrega({
                     className="flex items-center justify-between gap-3 rounded-lg bg-indigo-50 px-4 py-3 ring-1 ring-indigo-100"
                   >
                     <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-indigo-500">
+                      <p className="text-xs font-medium text-indigo-600">
                         Código de entrega
                       </p>
                       <p className="text-xs text-indigo-400">O cliente informa na porta</p>

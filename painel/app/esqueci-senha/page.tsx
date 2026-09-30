@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { LogoComNome } from "@/components/Logo";
+import IconeDestaque from "@/components/IconeDestaque";
 
 export default function PaginaEsqueciSenha() {
   const [email, setEmail] = useState("");
@@ -44,7 +45,7 @@ export default function PaginaEsqueciSenha() {
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
           {mensagem ? (
             <>
-              <p className="text-center text-3xl">📩</p>
+              <IconeDestaque nome="email" />
               <h1 className="mt-3 text-center font-semibold text-gray-900">
                 Solicitação registrada
               </h1>
