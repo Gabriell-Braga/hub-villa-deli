@@ -25,8 +25,8 @@ function MarcaIfood() {
   return (
     <svg
       viewBox="0 0 24 24"
-      width="14"
-      height="14"
+      width="12"
+      height="12"
       role="img"
       aria-label="iFood"
       fill="#EA1D2C"
@@ -64,14 +64,16 @@ export default function SeloOrigem({
 
   const Marca = c.marca;
 
+  // Mesma altura e mesmo arredondado do selo "Teste", para os dois ficarem
+  // alinhados lado a lado. Com marca, só o ícone: o nome vai no title e no
+  // leitor de tela. Sem marca (portal), o nome escrito.
   return (
     <span
-      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${c.classe}`}
+      title={`Pedido do ${c.rotulo}`}
+      aria-label={`Pedido do ${c.rotulo}`}
+      className={`inline-flex h-5 items-center whitespace-nowrap rounded-md px-1.5 text-[11px] font-medium ring-1 ring-inset ${c.classe}`}
     >
-      {/* Só a origem. O número do pedido no marketplace chegou a aparecer
-          aqui, mas no balcão ninguém procurava por ele — só poluía a lista. */}
-      {Marca && <Marca />}
-      <span>{c.rotulo}</span>
+      {Marca ? <Marca /> : <span>{c.rotulo}</span>}
     </span>
   );
 }
