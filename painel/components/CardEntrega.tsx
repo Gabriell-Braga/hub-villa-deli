@@ -352,7 +352,7 @@ export default function CardEntrega({
             >
               {cancelando
                 ? "Cancelando..."
-                : `Cancelar esta corrida no ${despacho.provider === "ifood" ? "iFood" : "Uber"}`}
+                : `Cancelar esta corrida ${despacho.provider === "ifood" ? "no iFood" : despacho.provider === "99" ? "na 99" : "no Uber"}`}
             </button>
             {/* CANCELAR PODE CUSTAR DINHEIRO.
                 Cláusula 6.2 do contrato brasileiro do Uber Direct: R$ 5,00 se o

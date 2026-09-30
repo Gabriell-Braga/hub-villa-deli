@@ -1,13 +1,14 @@
 import type { Env } from "../types";
 import {
   ambiente,
+  credenciais99,
   credenciaisIfood,
   credenciaisUber,
   testeUsandoCredencialDeProducao,
 } from "../config/ambiente";
 import { modoAtual, podeUsarProducao } from "../config/modo";
 import { nomeProvedor, provedoresAtivos } from "../config/provedores";
-import { getIfoodToken, getUberToken } from "../services/tokens";
+import { get99Token, getIfoodToken, getUberToken } from "../services/tokens";
 
 // ---------------------------------------------------------------------------
 // DIAGNÓSTICO DE CONFIGURAÇÃO
@@ -356,6 +357,57 @@ export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
         });
       }
     }
+  }
+
+  // --- 99Entrega ------------------------------------------------------------
+  if (ativos.includes("99")) {
+    const c9 = credenciais99(env, modo);
+    if (!preenchido(c9.clientId) || !preenchido(c9.clientSecret)) {
+      itens.push({
+        chave: "99",
+        titulo: "99 Entregas",
+        status: "erro",
+        detalhe:
+          modo === "producao"
+            ? "Sem credenciais de produção. A 99 libera depois dos testes aprovados."
+            : "Sem credenciais de teste.",
+        comoResolver:
+          "No site da 99Entrega, em Modo de desenvolvedor, copie o ID e o Segredo do cliente e envie ao suporte.",
+      });
+    } else {
+      // Só o token: não cria pedido nem cotação.
+      try {
+        await get99Token(env, modo);
+        itens.push({
+          chave: "99",
+          titulo: "99 Entregas",
+          status: "ok",
+          detalhe:
+            modo === "producao"
+              ? "Conectado à conta real da 99."
+              : "Conectado ao ambiente de teste da 99. Nenhum entregador real é acionado.",
+        });
+      } catch {
+        itens.push({
+          chave: "99",
+          titulo: "99 Entregas",
+          status: "erro",
+          detalhe: "A 99 recusou as credenciais cadastradas.",
+          comoResolver: "Confira o ID e o Segredo do cliente no Modo de desenvolvedor da 99Entrega.",
+        });
+      }
+    }
+
+    itens.push({
+      chave: "99_webhook",
+      titulo: "Acompanhamento da entrega (99)",
+      status: preenchido(c9.webhookSecret) ? "ok" : "aviso",
+      detalhe: preenchido(c9.webhookSecret)
+        ? "Configurado. A 99 avisa o Hub a cada mudança da entrega."
+        : "Sem chave de assinatura. O status é consultado na 99 pela tela do pedido e a cada 5 minutos — funciona, mas com atraso.",
+      comoResolver:
+        "No Modo de desenvolvedor da 99Entrega, cadastre a URL de webhook do Hub e envie a chave de assinatura ao suporte.",
+    });
   }
 
   // --- Provedores ativos ----------------------------------------------------

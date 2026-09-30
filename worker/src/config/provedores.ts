@@ -77,7 +77,8 @@ export const PROVEDORES: Record<ProviderId, Provedor> = {
   "99": {
     id: "99",
     nome: "99 Entregas",
-    // Desligado: a 99 não tem API pública; depende do contrato corporativo.
+    // API 99Entrega (ver services/noventa99.ts). Desligado por padrão: liga
+    // com PROVEDORES_ATIVOS incluindo "99".
     ativo: false,
     cotar: cotar99,
     despachar: despachar99,

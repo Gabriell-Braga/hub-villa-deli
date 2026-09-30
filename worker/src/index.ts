@@ -51,10 +51,12 @@ import {
   revalidarPedido,
 } from "./services/cardapio-web";
 import { historicoCsv, listarHistorico, nomeArquivoCsv } from "./lib/historico";
-import { assinaturaValida } from "./lib/assinatura";
+import { assinaturaValida, assinaturaValida99 } from "./lib/assinatura";
 import { processarWebhookUber } from "./services/uber-webhook";
 import { cancelarIfood } from "./services/ifood";
 import { buscarEventosIfood, processarWebhookIfood } from "./services/ifood-webhook";
+import { cancelar99, sincronizar99, sincronizarAbertas99 } from "./services/noventa99";
+import { processarWebhook99 } from "./services/noventa99-webhook";
 import {
   entregarLink,
   gerarTokenCru,
@@ -653,6 +655,52 @@ app.post("/api/webhook/ifood", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// 1e) Webhook da 99Entrega — eventos de entrega
+//     POST /api/webhook/99
+//
+// URL cadastrada em 99Entrega > Modo de desenvolvedor > Webhook (um por
+// ambiente, teste e produção). A "Chave de assinatura" que aparece depois de
+// salvar a URL vai em NOVA99_WEBHOOK_SECRET_TESTE / NOVA99_WEBHOOK_SECRET.
+//
+// O evento só avisa que algo mudou; o estado vem do detalhe do pedido.
+// ---------------------------------------------------------------------------
+app.post("/api/webhook/99", async (c) => {
+  const corpoBruto = await c.req.text();
+  const recebida = c.req.header("x-webhook-signature") ?? null;
+
+  // Os dois modos, pela mesma razão do Uber: entrega criada em teste continua
+  // mandando eventos depois de virar a chave.
+  const chaves = [c.env.NOVA99_WEBHOOK_SECRET, c.env.NOVA99_WEBHOOK_SECRET_TESTE].filter(
+    (k): k is string => !!k && k.trim() !== ""
+  );
+  if (chaves.length === 0) {
+    console.warn("[99-webhook] nenhuma chave de assinatura configurada");
+    return c.json({ erro: "webhook não configurado" }, 500);
+  }
+
+  let autenticado = false;
+  for (const chave of chaves) {
+    if (await assinaturaValida99(chave, corpoBruto, recebida)) {
+      autenticado = true;
+      break;
+    }
+  }
+  if (!autenticado) {
+    console.warn("[99-webhook] assinatura inválida");
+    return c.json({ erro: "assinatura inválida" }, 401);
+  }
+
+  try {
+    const r = await processarWebhook99(c.env, corpoBruto);
+    if (!r.ok) console.warn(`[99-webhook] ${r.motivo}`);
+    return c.json(r);
+  } catch (e) {
+    console.error(`[99-webhook] falha ao processar: ${e instanceof Error ? e.message : e}`);
+    return c.json({ erro: "falha ao processar" }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // 2) Listagem de pedidos
 //    GET /api/pedidos?aba=abertos|historico&limite=50
 // ---------------------------------------------------------------------------
@@ -790,9 +838,9 @@ app.post("/api/entrega/:idPedido/cancelar", async (c) => {
   const despacho = await obterDespacho(env, idPedido);
   if (!despacho) return c.json({ erro: "Este pedido não tem entrega despachada." }, 404);
 
-  if (despacho.provider !== "uber" && despacho.provider !== "ifood") {
+  if (despacho.provider !== "uber" && despacho.provider !== "ifood" && despacho.provider !== "99") {
     return c.json(
-      { erro: "Cancelamento automático só existe no Uber e no iFood. Use a confirmação manual." },
+      { erro: "Cancelamento automático só existe no Uber, no iFood e na 99. Use a confirmação manual." },
       400
     );
   }
@@ -809,6 +857,8 @@ app.post("/api/entrega/:idPedido/cancelar", async (c) => {
     const pedido = await obterPedido(env, idPedido);
     if (!pedido) return c.json({ erro: "pedido não encontrado" }, 404);
     r = await cancelarIfood(env, pedido, despacho.deliveryId, modo);
+  } else if (despacho.provider === "99") {
+    r = await cancelar99(env, idPedido, despacho.deliveryId, modo);
   } else {
     r = await cancelarUber(env, despacho.deliveryId, modo);
   }
@@ -842,6 +892,21 @@ app.get("/api/cotacao/:idPedido", async (c) => {
   // responde no tempo do banco.
   const jaDespachado = await obterDespacho(env, idPedido);
   if (jaDespachado) {
+    // 99: a tela de acompanhamento é quem puxa o status. O webhook não tem
+    // entrega garantida (a própria 99 avisa) e em dev ele nem chega, então a
+    // volta de 20 s da tela consulta o detalhe do pedido. Com teto de tempo:
+    // a 99 lenta não pode travar a tela — mostra o que o banco tem.
+    if (jaDespachado.provider === "99") {
+      const entrega = await obterEntregaAoVivo(env, idPedido);
+      if (!["delivered", "canceled", "returned"].includes(entrega?.status ?? "")) {
+        await Promise.race([
+          sincronizar99(env, idPedido, await modoAtual(env)).catch((e) =>
+            console.warn(`[99-sync] ${e instanceof Error ? e.message : e}`)
+          ),
+          new Promise((ok) => setTimeout(ok, 4000)),
+        ]);
+      }
+    }
     return c.json({
       idPedido,
       pedido,
@@ -1184,6 +1249,15 @@ export default {
         buscarEventosIfood(env).catch((e) =>
           console.error(`[ifood-polling] ${e instanceof Error ? e.message : e}`)
         )
+      );
+    }
+
+    // Reserva do webhook da 99: consulta as entregas ainda em andamento.
+    if (provedorAtivo(env, "99")) {
+      ctx.waitUntil(
+        modoAtual(env)
+          .then((modo) => sincronizarAbertas99(env, modo))
+          .catch((e) => console.error(`[99-sync] ${e instanceof Error ? e.message : e}`))
       );
     }
   },

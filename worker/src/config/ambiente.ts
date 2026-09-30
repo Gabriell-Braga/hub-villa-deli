@@ -118,6 +118,45 @@ export function credenciaisIfood(env: Env, modo: ModoOperacao): CredenciaisIfood
   };
 }
 
+export interface Credenciais99 {
+  clientId: string;
+  clientSecret: string;
+  baseUrl: string;
+  /** Chave de assinatura do webhook ("Chave de assinatura" no Modo de desenvolvedor). */
+  webhookSecret: string;
+}
+
+/**
+ * Credenciais da 99Entrega para o modo pedido.
+ *
+ * Como no iFood, NÃO há host de sandbox: teste e produção usam
+ * entrega-api.99app.com, e é o client_id que diz à 99 em qual ambiente o
+ * pedido nasce. Pedido feito com a credencial de teste é simulado — nenhum
+ * entregador real aceita e nada é cobrado.
+ *
+ * Sem fallback do teste para produção: aqui cair na credencial real seria
+ * criar corrida cobrada achando que é teste.
+ */
+export function credenciais99(env: Env, modo: ModoOperacao): Credenciais99 {
+  const teste = modo === "teste";
+  const ou = (a: string | undefined, b: string | undefined) =>
+    (a && a.trim()) || (b && b.trim()) || "";
+  const base = "https://entrega-api.99app.com";
+
+  return {
+    clientId: teste ? ou(env.NOVA99_CLIENT_ID_TESTE, undefined) : ou(env.NOVA99_CLIENT_ID, undefined),
+    clientSecret: teste
+      ? ou(env.NOVA99_CLIENT_SECRET_TESTE, undefined)
+      : ou(env.NOVA99_CLIENT_SECRET, undefined),
+    baseUrl: teste
+      ? ou(env.NOVA99_BASE_URL_TESTE, env.NOVA99_BASE_URL || base)
+      : ou(env.NOVA99_BASE_URL, base),
+    webhookSecret: teste
+      ? ou(env.NOVA99_WEBHOOK_SECRET_TESTE, undefined)
+      : ou(env.NOVA99_WEBHOOK_SECRET, undefined),
+  };
+}
+
 /** O modo teste está caindo nas credenciais de produção por falta das de teste? */
 export function testeUsandoCredencialDeProducao(env: Env): boolean {
   return (

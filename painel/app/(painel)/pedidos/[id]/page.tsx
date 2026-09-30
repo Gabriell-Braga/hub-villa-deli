@@ -213,7 +213,7 @@ export default function PaginaCotacao({
       }
 
       toast.sucesso(
-        `Corrida cancelada no ${despacho?.provider === "ifood" ? "iFood" : "Uber"}.`
+        `Corrida cancelada ${despacho?.provider === "ifood" ? "no iFood" : despacho?.provider === "99" ? "na 99" : "no Uber"}.`
       );
       await cotar();
     } catch {

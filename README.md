@@ -368,6 +368,9 @@ No painel, ajuste `PAINEL_ORIGIN` no `wrangler.toml` para o domínio real e
   (menos 60 s). Evita estourar o rate limit de auth.
 - **Geocodificação**: ViaCEP + Google (se houver chave) com fallback Nominatim,
   cache de 30 dias no KV por CEP+número.
-- **Endpoints dos parceiros**: iFood e 99 ainda usam o padrão documentado, não
-  confirmado em contrato — por isso estão desligados na trava. No Uber Direct,
-  confirme `fee` (centavos) e `duration` (minutos) com a resposta real.
+- **99Entrega**: API em `entrega-api.99app.com` (mesmo host para teste e
+  produção; o client_id decide). Validada no ambiente de teste em 30/09/2026:
+  token, cotação, criação e cancelamento. Status vem do detalhe do pedido
+  (tela de acompanhamento + cron de 5 min) e do webhook `/api/webhook/99`.
+- **Uber Direct**: confirme `fee` (centavos) e `duration` (minutos) com a
+  resposta real.

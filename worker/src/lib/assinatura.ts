@@ -61,3 +61,26 @@ export async function assinaturaValida(
   // negativo bobo caso mudem.
   return comparaSegura(esperada, recebida.trim().toLowerCase());
 }
+
+/**
+ * Assinatura da 99Entrega (header X-Webhook-Signature): HMAC-SHA256 do corpo
+ * cru com a "Chave de assinatura" do Modo de desenvolvedor.
+ *
+ * A documentação deles se contradiz: o texto manda codificar em Base64, e o
+ * exemplo em Python usa hexdigest. Aceita os dois — são a mesma assinatura em
+ * grafias diferentes, então não afrouxa nada.
+ */
+export async function assinaturaValida99(
+  segredo: string,
+  corpoBruto: string,
+  recebida: string | null
+): Promise<boolean> {
+  if (!segredo || !recebida) return false;
+
+  const hex = await hmacSha256Hex(segredo, corpoBruto);
+  const bytes = hex.match(/../g)!.map((h) => parseInt(h, 16));
+  const base64 = btoa(String.fromCharCode(...bytes));
+  const r = recebida.trim();
+
+  return comparaSegura(base64, r) || comparaSegura(hex, r.toLowerCase());
+}

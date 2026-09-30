@@ -54,7 +54,6 @@ export interface Env {
   UBER_AUTH_URL: string;
   IFOOD_BASE_URL: string;
   NOVA99_BASE_URL: string;
-  NOVA99_AUTH_URL: string;
 
   // Base URLs — sandbox, usadas no MODO teste (ver config/modo.ts)
   UBER_BASE_URL_TESTE: string;
@@ -89,6 +88,8 @@ export interface Env {
   IFOOD_CLIENT_SECRET: string;
   NOVA99_CLIENT_ID: string;
   NOVA99_CLIENT_SECRET: string;
+  /** Chave de assinatura do webhook da 99Entrega (Modo de desenvolvedor > Webhook). */
+  NOVA99_WEBHOOK_SECRET: string;
   /** Valida o webhook do Cardápio Web. Sem ele, a rota recusa tudo. */
   WEBHOOK_SECRET: string;
   /** Assina/valida o JWT de sessão dos atendentes. Sem ele, ninguém entra. */
@@ -107,6 +108,9 @@ export interface Env {
   UBER_WEBHOOK_SECRET_TESTE: string;
   IFOOD_CLIENT_ID_TESTE: string;
   IFOOD_CLIENT_SECRET_TESTE: string;
+  NOVA99_CLIENT_ID_TESTE: string;
+  NOVA99_CLIENT_SECRET_TESTE: string;
+  NOVA99_WEBHOOK_SECRET_TESTE: string;
 
   // Geocodificação (opcional). Sem chave, usa Nominatim/OpenStreetMap grátis.
   GOOGLE_MAPS_API_KEY: string;

@@ -1,5 +1,5 @@
 import type { Env, ModoOperacao } from "../types";
-import { credenciaisIfood, credenciaisUber, prefixoCache } from "../config/ambiente";
+import { credenciais99, credenciaisIfood, credenciaisUber, prefixoCache } from "../config/ambiente";
 
 // ---------------------------------------------------------------------------
 // Cache de tokens OAuth2 no Cloudflare KV.
@@ -94,19 +94,32 @@ export async function getIfoodToken(
   });
 }
 
-export function get99Token(env: Env, modo: ModoOperacao): Promise<string> {
-  return getCachedToken(env, modo, "token:99", async () => {
-    const res = await fetch(env.NOVA99_AUTH_URL, {
+export async function get99Token(env: Env, modo: ModoOperacao): Promise<string> {
+  const cred = credenciais99(env, modo);
+  const marca = await marcaDaCredencial(cred.clientId);
+
+  return getCachedToken(env, modo, `token:99:${marca}`, async () => {
+    const res = await fetch(`${cred.baseUrl}/oauth/v1/token`, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         grant_type: "client_credentials",
-        client_id: env.NOVA99_CLIENT_ID,
-        client_secret: env.NOVA99_CLIENT_SECRET,
+        client_id: cred.clientId,
+        client_secret: cred.clientSecret,
+        // Único escopo que a 99 oferece hoje. É obrigatório.
+        scope: "entrega.order",
       }),
     });
-    if (!res.ok) throw new Error(`99 auth falhou: ${res.status}`);
-    return (await res.json()) as { access_token: string; expires_in: number };
+    // A 99 responde erro de negócio com HTTP 200 e `errno` diferente de zero,
+    // por isso o status sozinho não basta.
+    const data = (await res.json().catch(() => null)) as {
+      errno?: number;
+      data?: { access_token?: string; expires_in?: number };
+    } | null;
+    if (!res.ok || !data || data.errno !== 0 || !data.data?.access_token) {
+      throw new Error(`A 99 recusou as credenciais (código ${data?.errno ?? res.status}).`);
+    }
+    return { access_token: data.data.access_token, expires_in: data.data.expires_in ?? 7200 };
   });
 }
 

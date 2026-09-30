@@ -56,7 +56,7 @@ AMBIENTE = "dev"
 #   "uber,motoboy"            -> Uber + motoboy próprio   (configuração atual)
 #   "uber,ifood,99,motoboy"   -> todos
 # Vazio = usa o padrão de src/config/provedores.ts.
-PROVEDORES_ATIVOS = "uber,motoboy"
+PROVEDORES_ATIVOS = "uber,99,motoboy"
 
 # Origens liberadas no CORS (separadas por vírgula).
 PAINEL_ORIGIN = "http://localhost:3000"
@@ -117,16 +117,16 @@ UBER_SCOPE_TESTE = "direct.organizations eats.deliveries"
 UBER_BASE_URL_TESTE = "https://sandbox-api.uber.com"
 UBER_CUSTOMER_ID_TESTE = "c1cc78e9-6147-5db8-82be-1b0f45446e09"
 
-# --- iFood / 99 (desligados na trava por enquanto) -------------------------
+# --- iFood / 99 -------------------------------------------------------------
 IFOOD_BASE_URL = "https://merchant-api.ifood.com.br"
 IFOOD_BASE_URL_TESTE = "https://merchant-api.ifood.com.br"
 # ID da loja (UUID). O iFood nao tem sandbox: o modo TESTE usa a loja de teste
 # que o Portal do Desenvolvedor cria junto com a aplicacao (mesma URL).
 IFOOD_MERCHANT_ID = ""
 IFOOD_MERCHANT_ID_TESTE = "f6dfc904-95c1-4c09-9ff9-6cf75d399363"  # "Teste - BS REFEICOES LTDA" (Bujari/AC)
-NOVA99_BASE_URL = "https://api.99app.com"
-NOVA99_BASE_URL_TESTE = "https://api.99app.com"
-NOVA99_AUTH_URL = "https://api.99app.com/oauth/token"
+# 99Entrega: mesmo host para teste e produção — o client_id decide o ambiente.
+NOVA99_BASE_URL = "https://entrega-api.99app.com"
+NOVA99_BASE_URL_TESTE = "https://entrega-api.99app.com"
 
 # --- Motoboy próprio -------------------------------------------------------
 # A tabela de preço por faixa de raio fica em src/config/faixas-motoboy.ts
@@ -153,7 +153,7 @@ crons = ["*/5 * * * *", "0 4 * * *"]
 
 [env.hml.vars]
 AMBIENTE = "hml"
-PROVEDORES_ATIVOS = "uber,ifood,motoboy"
+PROVEDORES_ATIVOS = "uber,ifood,99,motoboy"
 PAINEL_ORIGIN = "https://hub-villa-deli-braga-s-team.vercel.app"
 
 RESTAURANTE_NOME = "Villa Deli"
@@ -205,9 +205,9 @@ IFOOD_BASE_URL_TESTE = "https://merchant-api.ifood.com.br"
 # que o Portal do Desenvolvedor cria junto com a aplicacao (mesma URL).
 IFOOD_MERCHANT_ID = ""
 IFOOD_MERCHANT_ID_TESTE = "f6dfc904-95c1-4c09-9ff9-6cf75d399363"  # "Teste - BS REFEICOES LTDA" (Bujari/AC)
-NOVA99_BASE_URL = "https://api.99app.com"
-NOVA99_BASE_URL_TESTE = "https://api.99app.com"
-NOVA99_AUTH_URL = "https://api.99app.com/oauth/token"
+# 99Entrega: mesmo host para teste e produção — o client_id decide o ambiente.
+NOVA99_BASE_URL = "https://entrega-api.99app.com"
+NOVA99_BASE_URL_TESTE = "https://entrega-api.99app.com"
 
 
 # ===========================================================================
@@ -280,9 +280,9 @@ IFOOD_BASE_URL_TESTE = "https://merchant-api.ifood.com.br"
 # que o Portal do Desenvolvedor cria junto com a aplicacao (mesma URL).
 IFOOD_MERCHANT_ID = ""
 IFOOD_MERCHANT_ID_TESTE = "f6dfc904-95c1-4c09-9ff9-6cf75d399363"  # "Teste - BS REFEICOES LTDA" (Bujari/AC)
-NOVA99_BASE_URL = "https://api.99app.com"
-NOVA99_BASE_URL_TESTE = "https://api.99app.com"
-NOVA99_AUTH_URL = "https://api.99app.com/oauth/token"
+# 99Entrega: mesmo host para teste e produção — o client_id decide o ambiente.
+NOVA99_BASE_URL = "https://entrega-api.99app.com"
+NOVA99_BASE_URL_TESTE = "https://entrega-api.99app.com"
 
 # ---------------------------------------------------------------------------
 # SEGREDOS — NUNCA neste arquivo. Ver CREDENCIAIS.md na raiz do projeto.

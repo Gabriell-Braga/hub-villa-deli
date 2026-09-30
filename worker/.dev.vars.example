@@ -56,9 +56,16 @@ IFOOD_CLIENT_SECRET_TESTE=
 IFOOD_CLIENT_ID=
 IFOOD_CLIENT_SECRET=
 
-# --- Só quando ligar a 99 ---------------------------------------------------
+# --- 99Entrega --------------------------------------------------------------
+# Site da 99Entrega > Modo de desenvolvedor. Uma aba por ambiente.
+# A chave de assinatura só aparece depois de salvar a URL do webhook
+# (https://<worker>/api/webhook/99). Sem ela, o status é consultado na 99.
+NOVA99_CLIENT_ID_TESTE=
+NOVA99_CLIENT_SECRET_TESTE=
+NOVA99_WEBHOOK_SECRET_TESTE=
 NOVA99_CLIENT_ID=
 NOVA99_CLIENT_SECRET=
+NOVA99_WEBHOOK_SECRET=
 
 # --- Opcional --------------------------------------------------------------
 # Vazio = geocodifica pelo Nominatim/OpenStreetMap (grátis, mais impreciso).
