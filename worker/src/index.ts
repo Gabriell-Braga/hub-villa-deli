@@ -700,7 +700,10 @@ app.post("/api/webhook/99", async (c) => {
 
   try {
     const r = await processarWebhook99(c.env, corpoBruto);
-    if (!r.ok) console.warn(`[99-webhook] ${r.motivo}`);
+    // Uma linha por evento: é o que mostra, no log, que a 99 está chamando.
+    const nome = corpoBruto.match(/"event"\s*:\s*"([^"]+)"/)?.[1] ?? "?";
+    if (!r.ok) console.warn(`[99-webhook] ${nome}: ${r.motivo}`);
+    else console.log(`[99-webhook] ${nome}: ${r.aplicado ? "aplicado" : r.motivo}`);
     return c.json(r);
   } catch (e) {
     console.error(`[99-webhook] falha ao processar: ${e instanceof Error ? e.message : e}`);
