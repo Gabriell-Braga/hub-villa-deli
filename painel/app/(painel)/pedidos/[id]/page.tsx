@@ -6,8 +6,10 @@ import type {
   CotacaoResponse,
   Despacho,
   EntregaAoVivo,
+  MotivoCancelamentoIfood,
   ProviderId,
 } from "@/lib/tipos";
+import ModalCancelamentoIfood from "@/components/ModalCancelamentoIfood";
 import LogoProvedor from "@/components/LogoProvedor";
 import CardEntrega from "@/components/CardEntrega";
 import SeloTeste from "@/components/SeloTeste";
@@ -102,6 +104,9 @@ export default function PaginaCotacao({
   const [entrega, setEntrega] = useState<EntregaAoVivo | null>(null);
   const [concluindo, setConcluindo] = useState(false);
   const [cancelando, setCancelando] = useState(false);
+  // Motivos de cancelamento do iFood. Não-null = janela de escolha aberta.
+  const [motivosIfood, setMotivosIfood] = useState<MotivoCancelamentoIfood[] | null>(null);
+  const [respondendoEndereco, setRespondendoEndereco] = useState(false);
   const [reenviando, setReenviando] = useState(false);
   // Motivo pelo qual o servidor se recusou a cotar. Estado do pedido, não erro
   // de sistema — por isso não vai para o toast nem para o alerta vermelho.
@@ -193,12 +198,18 @@ export default function PaginaCotacao({
     }
   }
 
-  async function cancelarCorrida() {
+  async function cancelarCorrida(codigoMotivo?: string) {
     setCancelando(true);
     try {
       const res = await apiFetch(
         `/api/entrega/${encodeURIComponent(idPedido)}/cancelar`,
-        { method: "POST" }
+        codigoMotivo
+          ? {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ codigoMotivo }),
+            }
+          : { method: "POST" }
       );
       const json = await res.json();
 
@@ -209,6 +220,7 @@ export default function PaginaCotacao({
         return;
       }
 
+      setMotivosIfood(null);
       toast.sucesso(
         `Corrida cancelada ${despacho?.provider === "ifood" ? "no iFood" : despacho?.provider === "99" ? "na 99" : "no Uber"}.`
       );
@@ -217,6 +229,64 @@ export default function PaginaCotacao({
       toast.erro("Erro de rede ao cancelar.");
     } finally {
       setCancelando(false);
+    }
+  }
+
+  // No iFood o cancelamento pede motivo, e a lista vem do iFood na hora. Os
+  // outros parceiros cancelam direto.
+  async function pedirCancelamento() {
+    if (despacho?.provider !== "ifood") return cancelarCorrida();
+
+    setCancelando(true);
+    let json: { erro?: string; precisaMotivo?: boolean; motivos?: MotivoCancelamentoIfood[] };
+    try {
+      const res = await apiFetch(
+        `/api/entrega/${encodeURIComponent(idPedido)}/ifood/motivos`
+      );
+      json = await res.json();
+      if (!res.ok) {
+        toast.erro(json.erro ?? "Não foi possível consultar os motivos de cancelamento.");
+        return;
+      }
+    } catch {
+      toast.erro("Erro de rede ao consultar os motivos de cancelamento.");
+      return;
+    } finally {
+      setCancelando(false);
+    }
+
+    // Entrega pedida com requestDriver: a rota cancela só o entregador e não
+    // recebe motivo.
+    if (!json.precisaMotivo) return cancelarCorrida();
+    if (!json.motivos?.length) {
+      toast.erro("O iFood não aceita mais cancelar esta entrega: o entregador provavelmente já coletou.");
+      return;
+    }
+    setMotivosIfood(json.motivos);
+  }
+
+  async function responderEndereco(aceitar: boolean) {
+    setRespondendoEndereco(true);
+    try {
+      const res = await apiFetch(
+        `/api/entrega/${encodeURIComponent(idPedido)}/ifood/endereco`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ aceitar }),
+        }
+      );
+      const json = await res.json();
+      if (!res.ok) {
+        toast.erro(json.erro ?? "Não foi possível responder ao iFood.");
+        return;
+      }
+      toast.sucesso(aceitar ? "Novo endereço aceito." : "Mudança de endereço recusada.");
+      await cotar({ silencioso: true });
+    } catch {
+      toast.erro("Erro de rede ao responder ao iFood.");
+    } finally {
+      setRespondendoEndereco(false);
     }
   }
 
@@ -408,9 +478,19 @@ export default function PaginaCotacao({
           reenviando={reenviando}
           onReenviar={reenviar}
           cancelando={cancelando}
-          onCancelar={cancelarCorrida}
+          onCancelar={pedirCancelamento}
+          pendenciasIfood={dados?.pendenciasIfood ?? null}
+          respondendoEndereco={respondendoEndereco}
+          onResponderEndereco={responderEndereco}
         />
       )}
+
+      <ModalCancelamentoIfood
+        motivos={motivosIfood}
+        ocupado={cancelando}
+        onFechar={() => setMotivosIfood(null)}
+        onConfirmar={(codigo) => cancelarCorrida(codigo)}
+      />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
         {/* Cotações */}

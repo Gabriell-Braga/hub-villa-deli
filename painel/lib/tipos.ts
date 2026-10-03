@@ -150,6 +150,28 @@ export interface CotacaoResponse {
   entrega: EntregaAoVivo | null;
   /** Preenchida só quando o pedido foi reenviado e ainda não há novo despacho. */
   entregaAnterior: EntregaAnterior | null;
+  /** Só em entrega do iFood já despachada. */
+  pendenciasIfood?: PendenciasIfood | null;
+}
+
+/** O que o iFood pediu e o atendente precisa ver, além do status. */
+export interface PendenciasIfood {
+  /** Cliente pediu outro endereço; a loja tem até `prazo` para responder. */
+  mudancaEndereco?: {
+    novoEndereco: string | null;
+    pedidaEm: string;
+    prazo: string;
+  };
+  /** Código que o ENTREGADOR informa no balcão para retirar o pedido. */
+  codigoColeta?: string;
+  /** Código que o CLIENTE informa ao entregador na porta. */
+  codigoEntrega?: string;
+}
+
+/** Motivo de cancelamento como o iFood devolve para a entrega. */
+export interface MotivoCancelamentoIfood {
+  codigo: string;
+  descricao: string;
 }
 
 export interface PedidoResumo {

@@ -1,6 +1,6 @@
 "use client";
 
-import type { Despacho, EntregaAoVivo } from "@/lib/tipos";
+import type { Despacho, EntregaAoVivo, PendenciasIfood } from "@/lib/tipos";
 import { ROTULO_PROVEDOR, ROTULO_STATUS_ENTREGA } from "@/lib/tipos";
 import { faltam, hora, telefone } from "@/lib/formato";
 import LogoProvedor from "./LogoProvedor";
@@ -33,6 +33,12 @@ const ETAPAS = [
   { rotulo: "Saiu para entrega", status: ["dropoff"] },
   { rotulo: "Entregue", status: ["delivered"] },
 ];
+
+/** "faltam 12 min" até o prazo. `faltam()` fala de chegada ("chegando"), não de prazo. */
+function prazoRestante(iso: string): string {
+  const min = Math.ceil((Date.parse(iso) - Date.now()) / 60000);
+  return min <= 1 ? "falta menos de 1 min" : `faltam ${min} min`;
+}
 
 /** Base comum dos botões do card, para todos terem a mesma altura. */
 const BOTAO =
@@ -185,6 +191,9 @@ export default function CardEntrega({
   onReenviar,
   cancelando,
   onCancelar,
+  pendenciasIfood,
+  respondendoEndereco,
+  onResponderEndereco,
 }: {
   despacho: Despacho;
   entrega: EntregaAoVivo | null;
@@ -194,6 +203,9 @@ export default function CardEntrega({
   onReenviar?: () => void;
   cancelando?: boolean;
   onCancelar?: () => void;
+  pendenciasIfood?: PendenciasIfood | null;
+  respondendoEndereco?: boolean;
+  onResponderEndereco?: (aceitar: boolean) => void;
 }) {
   const status = entrega?.status ?? despacho.status;
   const rotulo = ROTULO_STATUS_ENTREGA[status] ?? status;
@@ -211,9 +223,17 @@ export default function CardEntrega({
   const mostraChegadaLoja =
     !!entrega?.pickupEta && emAndamento && (status === "pending" || status === "pickup");
   const mostraPrevisao = !!entrega?.dropoffEta && emAndamento;
-  const mostraCodigo = !!despacho.codigoEntrega && emAndamento;
+  // O código que o iFood mandou no evento vale mais que o calculado no despacho.
+  const codigoEntrega = pendenciasIfood?.codigoEntrega ?? despacho.codigoEntrega;
+  const mostraCodigo = !!codigoEntrega && emAndamento;
+  // CÓDIGO DE COLETA (iFood). Só até a coleta: depois, o pedido já saiu.
+  const codigoColeta = pendenciasIfood?.codigoColeta ?? null;
+  const mostraCodigoColeta =
+    !!codigoColeta && emAndamento && ["pending", "pickup", "at_pickup"].includes(status);
   const mostraLink = !!link && emAndamento;
-  const temPainelLateral = mostraChegadaLoja || mostraPrevisao || mostraCodigo || mostraLink;
+  const temPainelLateral =
+    mostraChegadaLoja || mostraPrevisao || mostraCodigo || mostraCodigoColeta || mostraLink;
+  const mudanca = emAndamento ? pendenciasIfood?.mudancaEndereco : undefined;
   const cancelarRotulo =
     despacho.provider === "ifood"
       ? "Cancelar corrida no iFood"
@@ -258,6 +278,39 @@ export default function CardEntrega({
       </header>
 
       <div className="space-y-6 p-5">
+        {/* MUDANÇA DE ENDEREÇO (iFood). Primeiro do card porque tem prazo: em
+            15 minutos o iFood recusa sozinho, e o cliente fica sem resposta. */}
+        {mudanca && onResponderEndereco && (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-4" role="alert">
+            <p className="text-sm font-semibold text-amber-900">
+              O cliente pediu para mudar o endereço de entrega
+            </p>
+            <p className="mt-1 text-sm text-amber-900">
+              {mudanca.novoEndereco ?? "O novo endereço aparece no rastreio do iFood."}
+            </p>
+            <p className="mt-1 text-xs text-amber-700">
+              Responda até {hora(mudanca.prazo)} ({prazoRestante(mudanca.prazo)}). Depois disso
+              o iFood recusa sozinho. O iFood só aceita até 500 m do endereço original.
+            </p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <button
+                onClick={() => onResponderEndereco(true)}
+                disabled={respondendoEndereco}
+                className={`${BOTAO} bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50`}
+              >
+                {respondendoEndereco ? "Enviando..." : "Aceitar novo endereço"}
+              </button>
+              <button
+                onClick={() => onResponderEndereco(false)}
+                disabled={respondendoEndereco}
+                className={`${BOTAO} border border-red-200 bg-white text-red-700 hover:bg-red-50 disabled:opacity-50`}
+              >
+                Recusar
+              </button>
+            </div>
+          </div>
+        )}
+
         {temTrilha && <Trilha status={status} ativo={emAndamento} />}
 
         {(entrega?.courierNome || temPainelLateral || (emAndamento && !ehMotoboy)) && (
@@ -369,7 +422,25 @@ export default function CardEntrega({
                       <p className="text-xs text-indigo-400">O cliente informa na porta</p>
                     </div>
                     <span className="font-mono text-2xl font-bold tracking-[0.3em] text-indigo-900">
-                      {despacho.codigoEntrega}
+                      {codigoEntrega}
+                    </span>
+                  </div>
+                )}
+
+                {/* CÓDIGO DE COLETA. O entregador do iFood diz este número no
+                    balcão; o pedido só sai se bater. A entrega só vira
+                    "coletado" quando o iFood confirma a coleta pelo app dele. */}
+                {mostraCodigoColeta && (
+                  <div
+                    title="O entregador informa este número no balcão. Só entregue o pedido se o código bater."
+                    className="flex items-center justify-between gap-3 rounded-lg bg-amber-50 px-4 py-3 ring-1 ring-amber-100"
+                  >
+                    <div>
+                      <p className="text-xs font-medium text-amber-700">Código de coleta</p>
+                      <p className="text-xs text-amber-500">O entregador informa no balcão</p>
+                    </div>
+                    <span className="font-mono text-2xl font-bold tracking-[0.3em] text-amber-900">
+                      {codigoColeta}
                     </span>
                   </div>
                 )}

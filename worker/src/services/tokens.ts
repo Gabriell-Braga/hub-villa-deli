@@ -20,8 +20,15 @@ interface TokenCache {
   expiresAtEpoch: number;
 }
 
-/** Margem de segurança: renova 60s antes de expirar de verdade. */
+/** Margem de segurança padrão: renova 60s antes de expirar de verdade. */
 const SKEW_SECONDS = 60;
+
+/**
+ * O iFood pede renovação 5 minutos antes do vencimento (critério de
+ * homologação do Shipping). O token dele dura 6 horas: a margem maior custa
+ * uma renovação a cada ~5h55 em vez de ~5h59.
+ */
+const SKEW_IFOOD_SECONDS = 300;
 
 export type TokenFetcher = () => Promise<{
   access_token: string;
@@ -32,14 +39,15 @@ export async function getCachedToken(
   env: Env,
   modo: ModoOperacao,
   chaveBase: string, // ex: "token:ifood"
-  fetcher: TokenFetcher
+  fetcher: TokenFetcher,
+  skew = SKEW_SECONDS
 ): Promise<string> {
   const agora = Math.floor(Date.now() / 1000);
   const chave = `${prefixoCache(env, modo)}${chaveBase}`;
 
   // 1) Tenta o cache
   const cache = await env.HUB_KV.get<TokenCache>(chave, "json");
-  if (cache && cache.expiresAtEpoch - SKEW_SECONDS > agora) {
+  if (cache && cache.expiresAtEpoch - skew > agora) {
     return cache.accessToken;
   }
 
@@ -51,7 +59,7 @@ export async function getCachedToken(
 
   // 3) Persiste com TTL alinhado à expiração real (menos a margem).
   //    KV exige TTL mínimo de 60s.
-  const ttl = Math.max(60, token.expires_in - SKEW_SECONDS);
+  const ttl = Math.max(60, token.expires_in - skew);
   await env.HUB_KV.put(chave, JSON.stringify(novo), { expirationTtl: ttl });
 
   return token.access_token;
@@ -91,7 +99,7 @@ export async function getIfoodToken(
     const data = (await res.json()) as { accessToken: string; expiresIn: number };
     // Normaliza o formato do iFood para o esperado pelo getCachedToken
     return { access_token: data.accessToken, expires_in: data.expiresIn };
-  });
+  }, SKEW_IFOOD_SECONDS);
 }
 
 export async function get99Token(env: Env, modo: ModoOperacao): Promise<string> {

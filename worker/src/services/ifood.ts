@@ -204,6 +204,13 @@ const ERROS: Record<string, string> = {
   InvalidPaymentMethods: "O iFood não aceita a forma de pagamento deste pedido.",
   SaturatedOfflinePayment: "O iFood não está aceitando pagamento na entrega agora.",
   BadRequestCustomer: "O iFood recusou os dados do cliente. Confira nome e telefone.",
+  // Mudança de endereço (aceitar/recusar)
+  ChangeAddressOperationNotStarted:
+    "Não há mais pedido de mudança de endereço pendente. O prazo de 15 minutos pode ter acabado.",
+  ChangeAddressOperationConflict: "Já existe outra mudança de endereço em andamento nesta entrega.",
+  MaxDistanceHigherThanAllowed: "O novo endereço fica a mais de 500 m do original. O iFood não permite.",
+  RegionMismatch: "O novo endereço fica em outra região de cobertura do iFood.",
+  OrderNotFound: "O iFood não encontrou esta entrega (ela expira 8 horas depois de criada).",
 };
 
 export function traduzirErroIfood(status: number, corpo: string): string {
@@ -244,24 +251,79 @@ export function traduzirErroIfood(status: number, corpo: string): string {
   return message ? `O iFood recusou: ${message}` : `O iFood recusou a solicitação (código ${status}).`;
 }
 
-/** Chamada autenticada à API do iFood. */
+// ---------------------------------------------------------------------------
+// Chamada autenticada, com nova tentativa em falha passageira.
+//
+// Critério de homologação do iFood: backoff exponencial 2x com jitter, 3 a 5
+// tentativas, toda tentativa no log, e 429 respeitado.
+//
+// O que se repete:
+//   - 429 (Too Many Requests), em QUALQUER método: o iFood não processou a
+//     chamada, então repetir não duplica nada.
+//   - 5xx e falha de rede, só quando `repetir` é true. GET sempre pode. POST
+//     só quando repetir não muda o resultado (cancelar, aceitar/recusar
+//     endereço). Criar pedido NÃO repete: um 500 depois de o iFood ter criado
+//     a entrega viraria duas corridas pagas.
+// ---------------------------------------------------------------------------
+
+const TENTATIVAS = 4;
+/** Teto de espera entre tentativas: o atendente está olhando para a tela. */
+const ESPERA_MAX_MS = 8000;
+
+function esperaDaTentativa(n: number, retryAfter: string | null): number {
+  const pedida = retryAfter ? Number(retryAfter) * 1000 : NaN;
+  if (Number.isFinite(pedida) && pedida > 0) return Math.min(pedida, ESPERA_MAX_MS);
+  // 1 s, 2 s, 4 s... com jitter de ±50% para as chamadas não voltarem juntas.
+  const base = 1000 * 2 ** (n - 1);
+  return Math.min(base * (0.5 + Math.random()), ESPERA_MAX_MS);
+}
+
 async function chamar(
   env: Env,
   modo: ModoOperacao,
   metodo: "GET" | "POST",
   caminho: string,
-  corpo?: unknown
+  corpo?: unknown,
+  { repetir = metodo === "GET" }: { repetir?: boolean } = {}
 ): Promise<Response> {
   const cred = credenciaisIfood(env, modo);
   const token = await getIfoodToken(env, modo);
-  return fetch(`${cred.baseUrl}${caminho}`, {
-    method: metodo,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...(corpo !== undefined ? { "Content-Type": "application/json" } : {}),
-    },
-    body: corpo !== undefined ? JSON.stringify(corpo) : undefined,
-  });
+  const rota = `${metodo} ${caminho.split("?")[0]}`;
+
+  for (let n = 1; ; n++) {
+    const ultima = n >= TENTATIVAS;
+    let res: Response;
+    try {
+      res = await fetch(`${cred.baseUrl}${caminho}`, {
+        method: metodo,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...(corpo !== undefined ? { "Content-Type": "application/json" } : {}),
+        },
+        body: corpo !== undefined ? JSON.stringify(corpo) : undefined,
+      });
+    } catch (e) {
+      console.warn(
+        `[ifood] ${rota} tentativa ${n}/${TENTATIVAS}: falha de rede (${e instanceof Error ? e.message : e})`
+      );
+      if (!repetir || ultima) throw e;
+      await new Promise((ok) => setTimeout(ok, esperaDaTentativa(n, null)));
+      continue;
+    }
+
+    const passageira = res.status === 429 || (repetir && res.status >= 500);
+    if (!passageira || ultima) {
+      if (n > 1 || !res.ok) console.log(`[ifood] ${rota} tentativa ${n}/${TENTATIVAS}: ${res.status}`);
+      return res;
+    }
+
+    const espera = esperaDaTentativa(n, res.headers.get("retry-after"));
+    await res.body?.cancel();
+    console.warn(
+      `[ifood] ${rota} tentativa ${n}/${TENTATIVAS}: ${res.status}, nova tentativa em ${Math.round(espera)} ms`
+    );
+    await new Promise((ok) => setTimeout(ok, espera));
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -528,6 +590,67 @@ export async function despacharIfood(
 // CANCELAMENTO
 // ---------------------------------------------------------------------------
 
+/** Motivo de cancelamento como o iFood devolve, já normalizado. */
+export interface MotivoCancelamentoIfood {
+  codigo: string;
+  descricao: string;
+}
+
+/** A entrega foi pedida com requestDriver (pedido do iFood) e não criada pelo Hub? */
+function foiRequestDriver(pedido: Pedido, deliveryId: string, modo: ModoOperacao): boolean {
+  return ehPedidoDoIfood(pedido, modo) && pedido.idExterno === deliveryId;
+}
+
+const SEM_CANCELAMENTO =
+  "Esta entrega não pode mais ser cancelada no iFood: o entregador provavelmente já coletou o pedido.";
+
+/**
+ * Motivos de cancelamento VÁLIDOS AGORA para a entrega.
+ *
+ * Critério de homologação: a lista vem da API e o ATENDENTE escolhe — nada de
+ * motivo fixo no código. Ela muda conforme a fase da entrega, por isso é lida
+ * na hora de cancelar, não guardada.
+ *
+ * `precisaMotivo: false` = entrega pedida com requestDriver. Essa rota cancela
+ * só o entregador e não recebe motivo.
+ * Lista vazia (204 ou []) = o iFood não aceita mais cancelamento.
+ */
+export async function motivosCancelamentoIfood(
+  env: Env,
+  pedido: Pedido,
+  deliveryId: string,
+  modo: ModoOperacao
+): Promise<
+  { precisaMotivo: false } | { precisaMotivo: true; motivos: MotivoCancelamentoIfood[] } | { erro: string }
+> {
+  if (foiRequestDriver(pedido, deliveryId, modo)) return { precisaMotivo: false };
+
+  const res = await chamar(
+    env,
+    modo,
+    "GET",
+    `/shipping/v1.0/orders/${encodeURIComponent(deliveryId)}/cancellationReasons`
+  );
+  if (res.status === 204) return { precisaMotivo: true, motivos: [] };
+  if (!res.ok) return { erro: traduzirErroIfood(res.status, await res.text()) };
+
+  const lista = (await res.json().catch(() => [])) as Array<{
+    cancelCodeId?: string | number;
+    cancellationCode?: string | number;
+    code?: string | number;
+    description?: string;
+  }>;
+
+  const motivos = (Array.isArray(lista) ? lista : [])
+    .map((m) => ({
+      codigo: String(m.cancelCodeId ?? m.cancellationCode ?? m.code ?? ""),
+      descricao: m.description?.trim() || "Motivo sem descrição",
+    }))
+    .filter((m) => m.codigo !== "");
+
+  return { precisaMotivo: true, motivos };
+}
+
 /**
  * Cancela a entrega no iFood.
  *
@@ -535,58 +658,85 @@ export async function despacharIfood(
  * pela forma do despacho qual rota usar sem guardar nada a mais: se o
  * deliveryId é o idExterno do pedido, foi requestDriver.
  *
+ * Entrega criada pelo Hub exige `codigoMotivo`, escolhido pelo atendente na
+ * lista de motivosCancelamentoIfood. O código é conferido contra a lista atual
+ * antes de enviar: entre abrir a janela e confirmar, a fase da entrega pode
+ * ter mudado.
+ *
  * As duas rotas respondem 202: o pedido de cancelamento foi ACEITO para
  * análise, e a confirmação chega por evento. Mesmo assim o Hub marca como
  * cancelado na hora, como faz com o Uber — se o iFood recusar depois, o evento
- * de status seguinte corrige a tela.
+ * de recusa corrige a tela (ver ifood-webhook.ts).
  */
 export async function cancelarIfood(
   env: Env,
   pedido: Pedido,
   deliveryId: string,
-  modo: ModoOperacao
+  modo: ModoOperacao,
+  codigoMotivo?: string
 ): Promise<{ ok: boolean; erro?: string }> {
   const id = encodeURIComponent(deliveryId);
 
-  if (ehPedidoDoIfood(pedido, modo) && pedido.idExterno === deliveryId) {
-    const res = await chamar(env, modo, "POST", `/shipping/v1.0/orders/${id}/cancelRequestDriver`);
+  if (foiRequestDriver(pedido, deliveryId, modo)) {
+    const res = await chamar(env, modo, "POST", `/shipping/v1.0/orders/${id}/cancelRequestDriver`, undefined, {
+      repetir: true,
+    });
     return res.ok ? { ok: true } : { ok: false, erro: traduzirErroIfood(res.status, await res.text()) };
   }
 
-  // Pedido criado pelo Hub: o cancelamento exige um código de motivo, e a
-  // lista válida vem da própria API (muda conforme a fase da entrega). Uma
-  // lista vazia é a resposta do iFood para "não dá mais para cancelar".
-  const motivos = await chamar(env, modo, "GET", `/shipping/v1.0/orders/${id}/cancellationReasons`);
-  if (!motivos.ok) {
-    return { ok: false, erro: traduzirErroIfood(motivos.status, await motivos.text()) };
+  const r = await motivosCancelamentoIfood(env, pedido, deliveryId, modo);
+  if ("erro" in r) return { ok: false, erro: r.erro };
+  if (!r.precisaMotivo) return { ok: false, erro: "Rota de cancelamento inesperada para esta entrega." };
+  if (r.motivos.length === 0) return { ok: false, erro: SEM_CANCELAMENTO };
+
+  if (!codigoMotivo) return { ok: false, erro: "Escolha o motivo do cancelamento." };
+  const motivo = r.motivos.find((m) => m.codigo === String(codigoMotivo));
+  if (!motivo) {
+    return { ok: false, erro: "Este motivo não vale mais para a entrega. Abra o cancelamento de novo." };
   }
 
-  const lista = (await motivos.json().catch(() => [])) as Array<{
-    cancelCodeId?: string | number;
-    cancellationCode?: string | number;
-    code?: string | number;
-    description?: string;
-  }>;
-  // A lista vem ordenada por código, e o primeiro é "Problemas de sistema na
-  // loja" — falso na maioria das vezes, e fica registrado contra a loja. O
-  // caso comum de cancelar a corrida é o pedido ter sido cancelado (817).
-  const opcoes = Array.isArray(lista) ? lista : [];
-  const motivo =
-    opcoes.find((m) => String(m.cancelCodeId ?? m.cancellationCode ?? m.code) === "817") ??
-    opcoes[0];
-  const codigo = motivo?.cancelCodeId ?? motivo?.cancellationCode ?? motivo?.code;
+  const codigoNumerico = Number(motivo.codigo);
+  const res = await chamar(
+    env,
+    modo,
+    "POST",
+    `/shipping/v1.0/orders/${id}/cancel`,
+    {
+      reason: motivo.descricao,
+      // A doc pede inteiro (ex.: 817); a lista devolve texto ("817").
+      cancellationCode: Number.isFinite(codigoNumerico) ? codigoNumerico : motivo.codigo,
+    },
+    { repetir: true }
+  );
 
-  if (codigo == null) {
-    return {
-      ok: false,
-      erro: "Esta entrega não pode mais ser cancelada no iFood: o entregador provavelmente já coletou o pedido.",
-    };
-  }
+  console.log(`[ifood] cancelamento orderId=${deliveryId} motivo=${motivo.codigo} -> ${res.status}`);
+  return res.ok ? { ok: true } : { ok: false, erro: traduzirErroIfood(res.status, await res.text()) };
+}
 
-  const res = await chamar(env, modo, "POST", `/shipping/v1.0/orders/${id}/cancel`, {
-    reason: motivo?.description ?? "Cancelado pela loja",
-    cancellationCode: codigo,
-  });
+// ---------------------------------------------------------------------------
+// MUDANÇA DE ENDEREÇO
+//
+// O cliente pode pedir para trocar o endereço depois de a entrega existir
+// (até 500 m do original). O iFood avisa com DELIVERY_ADDRESS_CHANGE_REQUESTED
+// e a LOJA tem 15 minutos para aceitar ou recusar; depois disso o iFood recusa
+// sozinho. Critério obrigatório da homologação.
+// ---------------------------------------------------------------------------
 
+export async function responderMudancaEnderecoIfood(
+  env: Env,
+  deliveryId: string,
+  aceitar: boolean,
+  modo: ModoOperacao
+): Promise<{ ok: boolean; erro?: string }> {
+  const acao = aceitar ? "acceptDeliveryAddressChange" : "denyDeliveryAddressChange";
+  const res = await chamar(
+    env,
+    modo,
+    "POST",
+    `/shipping/v1.0/orders/${encodeURIComponent(deliveryId)}/${acao}`,
+    undefined,
+    { repetir: true }
+  );
+  console.log(`[ifood] ${acao} orderId=${deliveryId} -> ${res.status}`);
   return res.ok ? { ok: true } : { ok: false, erro: traduzirErroIfood(res.status, await res.text()) };
 }

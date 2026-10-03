@@ -7,11 +7,10 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  // No iFood leva o motivo escolhido pelo atendente ({ codigoMotivo }).
   const body = await req.text();
   return chamarHub(
     req,
-    `/api/entrega/${encodeURIComponent(params.id)}/cancelar`,
-    { method: "POST", body: body || undefined }
+    `/api/entrega/${encodeURIComponent(params.id)}/ifood/endereco`,
+    { method: "POST", body }
   );
 }

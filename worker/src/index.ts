@@ -53,8 +53,17 @@ import {
 import { historicoCsv, listarHistorico, nomeArquivoCsv } from "./lib/historico";
 import { assinaturaValida, assinaturaValida99 } from "./lib/assinatura";
 import { processarWebhookUber } from "./services/uber-webhook";
-import { cancelarIfood } from "./services/ifood";
-import { buscarEventosIfood, processarWebhookIfood } from "./services/ifood-webhook";
+import {
+  cancelarIfood,
+  motivosCancelamentoIfood,
+  responderMudancaEnderecoIfood,
+} from "./services/ifood";
+import {
+  buscarEventosIfood,
+  encerrarMudancaEndereco,
+  pendenciasIfood,
+  processarWebhookIfood,
+} from "./services/ifood-webhook";
 import { cancelar99, sincronizar99, sincronizarAbertas99 } from "./services/noventa99";
 import { processarWebhook99 } from "./services/noventa99-webhook";
 import {
@@ -867,7 +876,9 @@ app.post("/api/entrega/:idPedido/cancelar", async (c) => {
   if (despacho.provider === "ifood") {
     const pedido = await obterPedido(env, idPedido);
     if (!pedido) return c.json({ erro: "pedido não encontrado" }, 404);
-    r = await cancelarIfood(env, pedido, despacho.deliveryId, modo);
+    // Motivo escolhido pelo atendente na lista do iFood (GET .../ifood/motivos).
+    const body = await c.req.json<{ codigoMotivo?: string }>().catch(() => null);
+    r = await cancelarIfood(env, pedido, despacho.deliveryId, modo, body?.codigoMotivo);
   } else if (despacho.provider === "99") {
     r = await cancelar99(env, idPedido, despacho.deliveryId, modo);
   } else {
@@ -879,6 +890,66 @@ app.post("/api/entrega/:idPedido/cancelar", async (c) => {
   // evita a tela mostrar "a caminho" para uma corrida que acabou de morrer.
   await marcarEntregaManual(env, idPedido, "canceled", c.get("usuario").email, true);
 
+  return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// 2f) iFood — motivos de cancelamento válidos agora
+//     GET /api/entrega/:idPedido/ifood/motivos
+//
+// O painel abre a janela de cancelamento com esta lista e o atendente escolhe.
+// Critério de homologação: motivo nunca fixo no código.
+// ---------------------------------------------------------------------------
+app.get("/api/entrega/:idPedido/ifood/motivos", async (c) => {
+  const env = c.env;
+  const idPedido = c.req.param("idPedido");
+
+  const despacho = await obterDespacho(env, idPedido);
+  if (!despacho || despacho.provider !== "ifood") {
+    return c.json({ erro: "Este pedido não tem entrega do iFood." }, 404);
+  }
+  const pedido = await obterPedido(env, idPedido);
+  if (!pedido) return c.json({ erro: "pedido não encontrado" }, 404);
+
+  const r = await motivosCancelamentoIfood(env, pedido, despacho.deliveryId, await modoAtual(env));
+  if ("erro" in r) return c.json({ erro: r.erro }, 409);
+  return c.json(r);
+});
+
+// ---------------------------------------------------------------------------
+// 2g) iFood — responder ao pedido de mudança de endereço do cliente
+//     POST /api/entrega/:idPedido/ifood/endereco  { aceitar: boolean }
+//
+// A loja tem 15 minutos; depois o iFood recusa sozinho.
+// ---------------------------------------------------------------------------
+app.post("/api/entrega/:idPedido/ifood/endereco", async (c) => {
+  const env = c.env;
+  const idPedido = c.req.param("idPedido");
+  const body = await c.req.json<{ aceitar?: boolean }>().catch(() => null);
+  if (typeof body?.aceitar !== "boolean") {
+    return c.json({ erro: "Informe se a mudança foi aceita ou recusada." }, 400);
+  }
+
+  const despacho = await obterDespacho(env, idPedido);
+  if (!despacho || despacho.provider !== "ifood") {
+    return c.json({ erro: "Este pedido não tem entrega do iFood." }, 404);
+  }
+
+  const r = await responderMudancaEnderecoIfood(
+    env,
+    despacho.deliveryId,
+    body.aceitar,
+    await modoAtual(env)
+  );
+  if (!r.ok) return c.json({ erro: r.erro }, 409);
+
+  // O evento ACCEPTED/DENIED também fecha o aviso, mas pode demorar; fechar
+  // já evita o atendente clicar de novo.
+  await encerrarMudancaEndereco(env, despacho.deliveryId);
+  console.log(
+    `[ifood] mudança de endereço ${body.aceitar ? "aceita" : "recusada"} ` +
+      `pedido=${idPedido} orderId=${despacho.deliveryId} por ${c.get("usuario").email}`
+  );
   return c.json({ ok: true });
 });
 // ---------------------------------------------------------------------------
@@ -926,6 +997,11 @@ app.get("/api/cotacao/:idPedido", async (c) => {
       despacho: jaDespachado,
       entrega: await obterEntregaAoVivo(env, idPedido),
       entregaAnterior: null,
+      // Mudança de endereço pendente e códigos de coleta/entrega do iFood.
+      pendenciasIfood:
+        jaDespachado.provider === "ifood"
+          ? await pendenciasIfood(env, jaDespachado.deliveryId)
+          : null,
     });
   }
 
@@ -1279,17 +1355,27 @@ export default {
       return;
     }
 
-    ctx.waitUntil(reprocessarEventosCardapio(env));
-
-    // Reserva do webhook do iFood. Separado e com catch próprio: uma falha na
-    // API do iFood não pode levar junto a fila do Cardápio Web.
+    // POLLING DO iFOOD A CADA 30 s. O cron roda de minuto em minuto (é o menor
+    // intervalo da Cloudflare) e busca duas vezes: agora e daqui a 30 s. É o
+    // intervalo que o critério de homologação do iFood exige. Separado e com
+    // catch próprio: uma falha na API do iFood não leva junto o resto.
     if (provedorAtivo(env, "ifood")) {
-      ctx.waitUntil(
+      const buscar = () =>
         buscarEventosIfood(env).catch((e) =>
           console.error(`[ifood-polling] ${e instanceof Error ? e.message : e}`)
-        )
+        );
+      ctx.waitUntil(
+        buscar().then(() => new Promise((ok) => setTimeout(ok, 30_000))).then(buscar)
       );
     }
+
+    // O resto continua de 5 em 5 minutos, como era antes do cron de 1 minuto.
+    // Varrer a fila do Cardápio Web e consultar a 99 a cada minuto seria
+    // custo sem ganho: os dois são reserva de webhook.
+    const minuto = new Date(evt.scheduledTime).getUTCMinutes();
+    if (minuto % 5 !== 0) return;
+
+    ctx.waitUntil(reprocessarEventosCardapio(env));
 
     // Reserva do webhook da 99: consulta as entregas ainda em andamento.
     if (provedorAtivo(env, "99")) {

@@ -37,11 +37,13 @@ id = "PREENCHER_COM_O_ID_DO_KV"          # produção
 preview_id = "PREENCHER_COM_O_PREVIEW_ID" # wrangler dev
 
 # Dois horários:
-#   */5  reprocessa eventos do Cardápio Web que falharam na primeira tentativa.
-#        Um pedido preso é um pedido que a loja não vê — não pode esperar horas.
+#   * (todo minuto)  polling do iFood a cada 30 s (duas buscas por execução),
+#        exigido pela homologação. Nos minutos múltiplos de 5, também
+#        reprocessa eventos do Cardápio Web que falharam na primeira tentativa
+#        e consulta a 99. Um pedido preso é um pedido que a loja não vê.
 #   0 4  limpeza diária dos pedidos antigos (D1 não expira sozinho como o KV).
 [triggers]
-crons = ["*/5 * * * *", "0 4 * * *"]
+crons = ["* * * * *", "0 4 * * *"]
 
 # ===========================================================================
 # VARIÁVEIS — DEV (padrão do `npx wrangler dev`)
@@ -149,7 +151,7 @@ binding = "HUB_KV"
 id = "f9bcfa095d4849158d18df35f5225614"
 
 [env.hml.triggers]
-crons = ["*/5 * * * *", "0 4 * * *"]
+crons = ["* * * * *", "0 4 * * *"]
 
 [env.hml.vars]
 AMBIENTE = "hml"
@@ -229,7 +231,7 @@ binding = "HUB_KV"
 id = "71eac8fe915d419ebb01c324687977f1"
 
 [env.producao.triggers]
-crons = ["*/5 * * * *", "0 4 * * *"]
+crons = ["* * * * *", "0 4 * * *"]
 
 [env.producao.vars]
 AMBIENTE = "producao"
