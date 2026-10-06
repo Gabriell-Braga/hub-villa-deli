@@ -235,7 +235,7 @@ crons = ["* * * * *", "0 4 * * *"]
 
 [env.producao.vars]
 AMBIENTE = "producao"
-PROVEDORES_ATIVOS = "uber,ifood,motoboy"
+PROVEDORES_ATIVOS = "uber,ifood,99,motoboy"
 PAINEL_ORIGIN = "https://hub-villa-deli-producao.vercel.app"
 
 RESTAURANTE_NOME = "Villa Deli"
