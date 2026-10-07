@@ -279,6 +279,12 @@ async function aplicarEventosIfood(
 
   for (const ev of eventos) {
     const nome = ev.fullCode ?? ev.code ?? "";
+    // Todo evento no log, inclusive o que o Hub descarta: é o que mostra que
+    // o evento chegou quando a tela não mudou.
+    console.log(
+      `[ifood-recebido] eventId=${ev.id ?? "-"} code=${nome || "-"} ` +
+        `orderId=${ev.orderId ?? "-"} merchantId=${ev.merchantId ?? "-"}`
+    );
     const conhecido =
       nome in STATUS_POR_EVENTO || (ev.code != null && ev.code in STATUS_POR_EVENTO);
 
