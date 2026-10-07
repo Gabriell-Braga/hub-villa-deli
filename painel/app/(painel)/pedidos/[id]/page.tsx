@@ -544,6 +544,21 @@ export default function PaginaCotacao({
         </div>
       )}
 
+      {/* Status do PEDIDO no iFood, separado do status da corrida: o iFood
+          fecha o pedido (CONCLUDED) por conta própria, e a loja precisa ver. */}
+      {pedido?.daApiIfood && pedido.statusIfood === "CONCLUDED" && (
+        <div
+          role="status"
+          className="mb-4 flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"
+        >
+          <LogoProvedor provider="ifood" tamanho={24} />
+          <span>
+            <strong className="font-semibold">Pedido concluído no iFood.</strong> Status do
+            pedido na plataforma: Concluído.
+          </span>
+        </div>
+      )}
+
       {/* PEDIDO DIRETO DO iFOOD — confirmar e cancelar o pedido. Fica no topo:
           enquanto não for confirmado, não há corrida a escolher. */}
       {pedido?.daApiIfood && !cancelado && !despacho && (
