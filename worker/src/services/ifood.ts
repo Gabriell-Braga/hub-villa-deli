@@ -37,7 +37,11 @@ import { observacaoParaEntregador } from "../lib/observacao-entregador";
  * de teste (ver emModoTeste).
  */
 function ehPedidoDoIfood(pedido: Pedido, modo: ModoOperacao): boolean {
-  return modo !== "teste" && pedido.canal === "ifood" && !!pedido.idExterno;
+  if (pedido.canal !== "ifood" || !pedido.idExterno) return false;
+  // Exceção do modo teste: o pedido que chegou pela API do iFood É da loja de
+  // teste (foi o aplicativo de teste que o recebeu), então a rota de pedido
+  // da plataforma vale para ele.
+  return modo !== "teste" || !!pedido.daApiIfood;
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +108,8 @@ async function lojaIfood(env: Env, modo: ModoOperacao): Promise<LojaIfood | null
  * Fora do modo teste, devolve o pedido intacto.
  */
 async function emModoTeste(env: Env, pedido: Pedido, modo: ModoOperacao): Promise<Pedido> {
-  if (modo !== "teste") return pedido;
+  // Pedido vindo da API do iFood já tem o endereço do cliente da loja de teste.
+  if (modo !== "teste" || pedido.daApiIfood) return pedido;
 
   const { lat, lng } = pedido.endereco;
   const origemLat = parseFloat(env.RESTAURANTE_LAT);
@@ -278,17 +283,31 @@ function esperaDaTentativa(n: number, retryAfter: string | null): number {
   return Math.min(base * (0.5 + Math.random()), ESPERA_MAX_MS);
 }
 
-async function chamar(
+/**
+ * Chamada à API do iFood com retry.
+ *
+ * IDEMPOTÊNCIA (critério de homologação): todo POST leva `idempotency-key`. A
+ * chave é a mesma em todas as tentativas desta chamada — é isso que permite
+ * repetir um cancelamento ou uma confirmação depois de um timeout sem o iFood
+ * aplicar duas vezes. Quem chama pode passar a sua (ex.: confirmar um pedido
+ * usa o id do pedido, então dois cliques viram uma operação só).
+ */
+export async function chamar(
   env: Env,
   modo: ModoOperacao,
   metodo: "GET" | "POST",
   caminho: string,
   corpo?: unknown,
-  { repetir = metodo === "GET" }: { repetir?: boolean } = {}
+  {
+    repetir = metodo === "GET",
+    idempotencia,
+  }: { repetir?: boolean; idempotencia?: string } = {}
 ): Promise<Response> {
   const cred = credenciaisIfood(env, modo);
   const token = await getIfoodToken(env, modo);
   const rota = `${metodo} ${caminho.split("?")[0]}`;
+  const chaveIdempotencia =
+    metodo === "POST" ? idempotencia ?? crypto.randomUUID() : undefined;
 
   for (let n = 1; ; n++) {
     const ultima = n >= TENTATIVAS;
@@ -299,6 +318,7 @@ async function chamar(
         headers: {
           Authorization: `Bearer ${token}`,
           ...(corpo !== undefined ? { "Content-Type": "application/json" } : {}),
+          ...(chaveIdempotencia ? { "idempotency-key": chaveIdempotencia } : {}),
         },
         body: corpo !== undefined ? JSON.stringify(corpo) : undefined,
       });

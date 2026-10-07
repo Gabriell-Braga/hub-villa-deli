@@ -3,6 +3,7 @@ import { registrarEvento, aplicarEstadoEntrega } from "../lib/store";
 import { credenciaisIfood } from "../config/ambiente";
 import { modoAtual } from "../config/modo";
 import { getIfoodToken } from "./tokens";
+import { aplicarEventoDePedidoIfood } from "./ifood-pedidos";
 
 // ---------------------------------------------------------------------------
 // Recebimento dos eventos do iFood (webhook).
@@ -17,10 +18,11 @@ import { getIfoodToken } from "./tokens";
 // header X-IFood-Signature). A validação está na rota, em index.ts.
 //
 // FILTRO: a aplicação recebe TODOS os eventos das lojas autorizadas — pedido
-// novo, confirmado, cancelado pelo cliente... A maior parte não é da conta do
-// Hub. Só os eventos de entrega (tabela abaixo) são gravados; o resto é
-// respondido com 2xx e descartado, senão o banco enche de evento de pedido que
-// o Cardápio Web já trata.
+// novo, confirmado, cancelado pelo cliente... Os eventos de entrega (tabela
+// abaixo) são gravados. Os de pedido só valem para pedido que chegou direto
+// do iFood (modo teste, ver ifood-pedidos.ts); o resto é respondido com 2xx e
+// descartado, senão o banco enche de evento de pedido que o Cardápio Web já
+// trata.
 // ---------------------------------------------------------------------------
 
 /**
@@ -280,8 +282,15 @@ async function aplicarEventosIfood(
     const conhecido =
       nome in STATUS_POR_EVENTO || (ev.code != null && ev.code in STATUS_POR_EVENTO);
 
+    // Eventos do PEDIDO (recebido, confirmado, cancelado...). Só mexem em
+    // pedido que veio direto do iFood — ver ifood-pedidos.ts. Lança se não
+    // conseguir buscar o pedido novo: aí o evento não é confirmado na fila e
+    // volta na próxima busca.
+    const mexeuNoPedido = await aplicarEventoDePedidoIfood(env, ev);
+
     if (!conhecido || !ev.orderId) {
-      r.ignorados++;
+      if (mexeuNoPedido) r.aplicados++;
+      else r.ignorados++;
       continue;
     }
 
@@ -304,7 +313,8 @@ async function aplicarEventosIfood(
     if (!novo || !idPedido) {
       // Duplicado, ou pedido do iFood que o Hub não despachou (a loja recebe
       // eventos de TODOS os pedidos). Nos dois casos, nada a aplicar.
-      r.ignorados++;
+      if (mexeuNoPedido) r.aplicados++;
+      else r.ignorados++;
       continue;
     }
 

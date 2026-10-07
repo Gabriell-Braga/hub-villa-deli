@@ -64,6 +64,12 @@ import {
   pendenciasIfood,
   processarWebhookIfood,
 } from "./services/ifood-webhook";
+import {
+  cancelarPedidoIfood,
+  confirmarPedidoIfood,
+  motivosCancelamentoPedidoIfood,
+  pedidoCanceladoNoIfood,
+} from "./services/ifood-pedidos";
 import { cancelar99, sincronizar99, sincronizarAbertas99 } from "./services/noventa99";
 import { processarWebhook99 } from "./services/noventa99-webhook";
 import {
@@ -124,6 +130,7 @@ app.use("/api/pedidos", exigirLogin);
 app.use("/api/historico", exigirLogin);
 app.use("/api/historico/*", exigirLogin);
 app.use("/api/entrega/*", exigirLogin);
+app.use("/api/pedido-ifood/*", exigirLogin);
 app.use("/api/estatisticas", exigirLogin);
 app.use("/api/auth/eu", exigirLogin);
 
@@ -953,6 +960,57 @@ app.post("/api/entrega/:idPedido/ifood/endereco", async (c) => {
   return c.json({ ok: true });
 });
 // ---------------------------------------------------------------------------
+// 2h) iFood — PEDIDO que chegou direto da API do iFood (modo teste)
+//     POST /api/pedido-ifood/:idPedido/confirmar
+//     GET  /api/pedido-ifood/:idPedido/motivos
+//     POST /api/pedido-ifood/:idPedido/cancelar  { codigoMotivo }
+//
+// Critérios de homologação do Shipping: confirmar no sistema da integradora e
+// cancelar com motivo escolhido pelo atendente na lista do iFood. Ver
+// services/ifood-pedidos.ts. É o PEDIDO, não a entrega: a entrega tem as rotas
+// /api/entrega/:id/... acima.
+// ---------------------------------------------------------------------------
+app.post("/api/pedido-ifood/:idPedido/confirmar", async (c) => {
+  const env = c.env;
+  const pedido = await obterPedido(env, c.req.param("idPedido"));
+  if (!pedido) return c.json({ erro: "pedido não encontrado" }, 404);
+
+  const r = await confirmarPedidoIfood(env, pedido, await modoAtual(env), c.get("usuario").email);
+  if (!r.ok) return c.json({ erro: r.erro }, 409);
+  return c.json({ ok: true });
+});
+
+app.get("/api/pedido-ifood/:idPedido/motivos", async (c) => {
+  const env = c.env;
+  const pedido = await obterPedido(env, c.req.param("idPedido"));
+  if (!pedido) return c.json({ erro: "pedido não encontrado" }, 404);
+
+  const r = await motivosCancelamentoPedidoIfood(env, pedido, await modoAtual(env));
+  if ("erro" in r) return c.json({ erro: r.erro }, 409);
+  return c.json(r);
+});
+
+app.post("/api/pedido-ifood/:idPedido/cancelar", async (c) => {
+  const env = c.env;
+  const pedido = await obterPedido(env, c.req.param("idPedido"));
+  if (!pedido) return c.json({ erro: "pedido não encontrado" }, 404);
+  if (await obterDespacho(env, pedido.id)) {
+    return c.json({ erro: "Cancele a entrega antes de cancelar o pedido." }, 409);
+  }
+
+  const body = await c.req.json<{ codigoMotivo?: string }>().catch(() => null);
+  const r = await cancelarPedidoIfood(
+    env,
+    pedido,
+    await modoAtual(env),
+    body?.codigoMotivo,
+    c.get("usuario").email
+  );
+  if (!r.ok) return c.json({ erro: r.erro }, 409);
+  return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
 // 3) Cotação simultânea nos provedores LIGADOS
 //    GET /api/cotacao/:idPedido
 // ---------------------------------------------------------------------------
@@ -1011,7 +1069,7 @@ app.get("/api/cotacao/:idPedido", async (c) => {
   // O normal é o webhook de status avisar, mas se ele falhar o pedido fica
   // preso na fila para sempre. A releitura acontece só neste caso — pedido já
   // pago não gera chamada nenhuma.
-  if (pedido.pago === false) {
+  if (pedido.pago === false && !pedido.daApiIfood) {
     pedido = (await revalidarPedido(env, pedido)) ?? pedido;
   }
 
@@ -1032,12 +1090,28 @@ app.get("/api/cotacao/:idPedido", async (c) => {
   // está sem pagamento não tem duas pendências: o cancelamento encerra o
   // assunto, e responder "aguardando pagamento" mandaria o atendente esperar
   // por algo que nunca vai acontecer.
-  if (cancelado(pedido.statusCardapio)) {
+  if (cancelado(pedido.statusCardapio) || pedidoCanceladoNoIfood(pedido)) {
     return c.json(
       {
         ...recusa,
-        erro: "Este pedido foi cancelado no Cardápio Web.",
+        erro: pedido.daApiIfood
+          ? "Este pedido foi cancelado no iFood."
+          : "Este pedido foi cancelado no Cardápio Web.",
         bloqueio: "cancelado" as const,
+      },
+      409
+    );
+  }
+
+  // Pedido que veio direto do iFood só cota depois de CONFIRMADO: pedir
+  // entregador para um pedido que a loja ainda não aceitou não faz sentido, e
+  // o iFood recusa o requestDriver nesse estado.
+  if (pedido.daApiIfood && (pedido.statusIfood ?? "PLACED") === "PLACED") {
+    return c.json(
+      {
+        ...recusa,
+        erro: "Confirme o pedido do iFood antes de cotar a entrega.",
+        bloqueio: "confirmacao" as const,
       },
       409
     );
@@ -1166,6 +1240,12 @@ app.post("/api/despachar", async (c) => {
 
   // Trava 1b — cancelado no Cardápio Web. Sem isto, um pedido cancelado que
   // ainda está na tela do atendente vira uma corrida cobrada por nada.
+  if (pedidoCanceladoNoIfood(pedido)) {
+    return c.json({ erro: "Este pedido foi cancelado no iFood." }, 409);
+  }
+  if (pedido.daApiIfood && (pedido.statusIfood ?? "PLACED") === "PLACED") {
+    return c.json({ erro: "Confirme o pedido do iFood antes de despachar." }, 409);
+  }
   if (cancelado(pedido.statusCardapio)) {
     return c.json({ erro: "Este pedido foi cancelado no Cardápio Web." }, 409);
   }

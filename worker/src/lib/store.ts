@@ -12,6 +12,7 @@ import type {
   PedidoResumo,
   ResultadoDespacho,
   StatusPedido,
+  StatusPedidoIfood,
   TipoTokenSenha,
   Usuario,
   UsuarioListado,
@@ -62,6 +63,34 @@ export async function salvarPedidoNovo(env: Env, pedido: Pedido): Promise<boolea
     .run();
 
   return (r.meta.changes ?? 0) > 0;
+}
+
+/**
+ * Pedido do Hub pelo id do pedido no iFood (UUID).
+ *
+ * Serve aos dois caminhos: o pedido que veio pelo Cardápio Web guarda o UUID
+ * em `idExterno`, e o que veio direto da API do iFood também.
+ */
+export async function obterPedidoPorIdIfood(env: Env, orderId: string): Promise<Pedido | null> {
+  const l = await env.DB.prepare(
+    `SELECT * FROM pedidos WHERE json_extract(dados, '$.idExterno') = ?1 LIMIT 1`
+  )
+    .bind(orderId)
+    .first<LinhaPedido>();
+  return l ? linhaParaPedido(l) : null;
+}
+
+/** Grava o status do pedido no iFood. json_set pelo mesmo motivo de atualizarDoCardapio. */
+export async function atualizarStatusIfood(
+  env: Env,
+  idPedido: string,
+  status: StatusPedidoIfood
+): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE pedidos SET dados = json_set(dados, '$.statusIfood', ?2) WHERE id = ?1`
+  )
+    .bind(idPedido, status)
+    .run();
 }
 
 /** O que o Cardápio Web ainda pode mudar depois do pedido ter entrado. */
@@ -905,7 +934,11 @@ export async function listarPedidos(
   //
   // A grafia varia entre "canceled" e "cancelled"; o LIKE em minúsculas pega
   // as duas e qualquer variação futura.
-  const naoCancelado = `COALESCE(lower(json_extract(p.dados, '$.statusCardapio')), '') NOT LIKE '%cancel%'`;
+  //
+  // Pedido que veio direto do iFood tem o status de lá em `statusIfood`.
+  const naoCancelado =
+    `COALESCE(lower(json_extract(p.dados, '$.statusCardapio')), '') NOT LIKE '%cancel%'` +
+    ` AND COALESCE(json_extract(p.dados, '$.statusIfood'), '') <> 'CANCELLED'`;
 
   const filtro = opcoes.abertos
     ? `p.status IN ('recebido', 'cotado', 'despachando') AND ${naoCancelado}`
@@ -954,6 +987,7 @@ export async function listarPedidos(
       pago: p.pago !== false,
       canal: p.canal,
       numeroExterno: p.numeroExterno,
+      statusIfood: p.statusIfood,
       itens: p.itens?.length ?? 0,
       despacho: despacho ? { ...despacho, valorPago: l.valor_pago } : null,
       melhorPreco: precos.length ? Math.min(...precos) : null,

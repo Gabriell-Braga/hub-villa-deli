@@ -110,7 +110,11 @@ export default function PaginaCotacao({
   const [reenviando, setReenviando] = useState(false);
   // Motivo pelo qual o servidor se recusou a cotar. Estado do pedido, não erro
   // de sistema — por isso não vai para o toast nem para o alerta vermelho.
-  const [bloqueio, setBloqueio] = useState<"pagamento" | "cancelado" | null>(null);
+  const [bloqueio, setBloqueio] = useState<"pagamento" | "cancelado" | "confirmacao" | null>(null);
+  // Pedido que veio direto do iFood: confirmar e cancelar o PEDIDO (não a corrida).
+  const [confirmandoPedido, setConfirmandoPedido] = useState(false);
+  const [cancelandoPedido, setCancelandoPedido] = useState(false);
+  const [motivosPedido, setMotivosPedido] = useState<MotivoCancelamentoIfood[] | null>(null);
   // Cotação que está esperando a escolha de veículo no modal. Só o Uber usa:
   // é o único parceiro em que declarar o volume muda quem vem buscar.
   const [pedindoVeiculo, setPedindoVeiculo] = useState<{
@@ -133,7 +137,10 @@ export default function PaginaCotacao({
       const json = await res.json();
 
       if (!res.ok) {
-        if (silencioso) return;
+        // A volta automática também lê a recusa: é ela que percebe que o
+        // pedido foi confirmado ou cancelado por fora (Gestor de Pedidos,
+        // cliente) enquanto a tela estava aberta.
+        if (silencioso && !json.bloqueio) return;
         // Recusa por regra de negócio (não pago, cancelado) vem COM o pedido:
         // dá para manter o resumo na tela em vez de deixar o atendente diante
         // de uma página em branco com uma frase.
@@ -290,6 +297,70 @@ export default function PaginaCotacao({
     }
   }
 
+  async function confirmarPedido() {
+    setConfirmandoPedido(true);
+    try {
+      const res = await apiFetch(`/api/pedido-ifood/${encodeURIComponent(idPedido)}/confirmar`, {
+        method: "POST",
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        toast.erro(json.erro ?? "Não foi possível confirmar o pedido no iFood.");
+        return;
+      }
+      toast.sucesso("Pedido confirmado no iFood.");
+      await cotar();
+    } catch {
+      toast.erro("Erro de rede ao confirmar o pedido.");
+    } finally {
+      setConfirmandoPedido(false);
+    }
+  }
+
+  async function abrirCancelamentoPedido() {
+    setCancelandoPedido(true);
+    try {
+      const res = await apiFetch(`/api/pedido-ifood/${encodeURIComponent(idPedido)}/motivos`);
+      const json = await res.json();
+      if (!res.ok) {
+        toast.erro(json.erro ?? "Não foi possível consultar os motivos de cancelamento.");
+        return;
+      }
+      if (!json.motivos?.length) {
+        toast.erro("O iFood não aceita mais cancelar este pedido.");
+        return;
+      }
+      setMotivosPedido(json.motivos);
+    } catch {
+      toast.erro("Erro de rede ao consultar os motivos de cancelamento.");
+    } finally {
+      setCancelandoPedido(false);
+    }
+  }
+
+  async function cancelarPedido(codigoMotivo: string) {
+    setCancelandoPedido(true);
+    try {
+      const res = await apiFetch(`/api/pedido-ifood/${encodeURIComponent(idPedido)}/cancelar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ codigoMotivo }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        toast.erro(json.erro ?? "Não foi possível cancelar o pedido.");
+        return;
+      }
+      setMotivosPedido(null);
+      toast.sucesso("Cancelamento enviado ao iFood. O pedido sai da fila quando ele confirmar.");
+      await cotar({ silencioso: true });
+    } catch {
+      toast.erro("Erro de rede ao cancelar o pedido.");
+    } finally {
+      setCancelandoPedido(false);
+    }
+  }
+
   async function concluir(status: "delivered" | "canceled") {
     setConcluindo(true);
     try {
@@ -361,6 +432,16 @@ export default function PaginaCotacao({
     return () => clearInterval(t);
   }, [despacho, entrega?.status, cotar]);
 
+  // Pedido do iFood ainda sem corrida: revalida a cada 15 s para refletir o
+  // que terceiros fizerem (confirmar no Gestor de Pedidos, cliente cancelar).
+  const pedidoIfoodAberto =
+    !!dados?.pedido?.daApiIfood && !despacho && dados?.pedido?.statusIfood !== "CANCELLED";
+  useEffect(() => {
+    if (!pedidoIfoodAberto) return;
+    const t = setInterval(() => cotar({ silencioso: true }), 15_000);
+    return () => clearInterval(t);
+  }, [pedidoIfoodAberto, cotar]);
+
   const pedido = dados?.pedido;
   // Há uma corrida anterior guardada = este pedido está sendo reenviado. O
   // servidor só devolve `entregaAnterior` quando não existe despacho atual,
@@ -369,8 +450,13 @@ export default function PaginaCotacao({
   const ehReenvio = anterior !== null;
   // Cancelado ou não pago também travam a tela: o servidor recusa o despacho,
   // e deixar o botão ativo só produziria um erro depois do clique.
-  const cancelado = bloqueio === "cancelado" || /cancel/i.test(pedido?.statusCardapio ?? "");
+  const cancelado =
+    bloqueio === "cancelado" ||
+    /cancel/i.test(pedido?.statusCardapio ?? "") ||
+    pedido?.statusIfood === "CANCELLED";
   const travado = despacho !== null || bloqueio !== null || cancelado;
+  const aguardandoConfirmacao =
+    !!pedido?.daApiIfood && (pedido.statusIfood ?? "PLACED") === "PLACED";
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -450,8 +536,66 @@ export default function PaginaCotacao({
           role="alert"
           className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"
         >
-          <strong className="font-semibold">Pedido cancelado.</strong> A loja
-          cancelou este pedido no Cardápio Web. Não acione entregador para ele.
+          <strong className="font-semibold">Pedido cancelado.</strong>{" "}
+          {pedido?.daApiIfood
+            ? "Este pedido foi cancelado no iFood."
+            : "A loja cancelou este pedido no Cardápio Web."}{" "}
+          Não acione entregador para ele.
+        </div>
+      )}
+
+      {/* PEDIDO DIRETO DO iFOOD — confirmar e cancelar o pedido. Fica no topo:
+          enquanto não for confirmado, não há corrida a escolher. */}
+      {pedido?.daApiIfood && !cancelado && !despacho && (
+        <div
+          role="status"
+          className={`mb-4 flex flex-col gap-3 rounded-xl border p-4 text-sm sm:flex-row sm:items-center sm:justify-between ${
+            aguardandoConfirmacao
+              ? "border-red-200 bg-red-50 text-red-900"
+              : "border-emerald-200 bg-emerald-50 text-emerald-900"
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            <LogoProvedor provider="ifood" tamanho={24} />
+            {aguardandoConfirmacao ? (
+              <span>
+                <strong className="font-semibold">Pedido novo do iFood.</strong> Confira
+                o endereço e os itens e confirme para liberar a entrega.
+              </span>
+            ) : (
+              <span>
+                <strong className="font-semibold">Pedido confirmado no iFood.</strong>{" "}
+                Escolha a entrega abaixo.
+              </span>
+            )}
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <button
+              onClick={abrirCancelamentoPedido}
+              disabled={cancelandoPedido || confirmandoPedido}
+              className="rounded-lg border border-red-200 bg-white px-3.5 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-50"
+            >
+              {cancelandoPedido ? "Aguarde..." : "Cancelar pedido"}
+            </button>
+            {aguardandoConfirmacao && (
+              <button
+                onClick={confirmarPedido}
+                disabled={confirmandoPedido || cancelandoPedido}
+                className="rounded-lg bg-[var(--marca-primaria)] px-4 py-2 text-sm font-semibold text-[var(--marca-contraste)] shadow-sm transition hover:bg-[var(--marca-primaria-hover)] disabled:opacity-50"
+              >
+                {confirmandoPedido ? "Confirmando..." : "Confirmar pedido"}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Observação de entrega do cliente (iFood): em destaque, porque é
+          instrução para quem entrega — portaria, ponto de referência, horário. */}
+      {pedido?.observacaoEntrega && (
+        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+          <strong className="font-semibold">Observação de entrega:</strong>{" "}
+          {pedido.observacaoEntrega}
         </div>
       )}
 
@@ -484,6 +628,14 @@ export default function PaginaCotacao({
           onResponderEndereco={responderEndereco}
         />
       )}
+
+      <ModalCancelamentoIfood
+        alvo="pedido"
+        motivos={motivosPedido}
+        ocupado={cancelandoPedido}
+        onFechar={() => setMotivosPedido(null)}
+        onConfirmar={(codigo) => cancelarPedido(codigo)}
+      />
 
       <ModalCancelamentoIfood
         motivos={motivosIfood}
@@ -705,6 +857,18 @@ export default function PaginaCotacao({
                   </span>
                 </dd>
               </div>
+
+              {pedido.codigoColeta && (
+                <div>
+                  <dt className="text-gray-500">Código de coleta</dt>
+                  <dd className="font-mono text-base font-semibold tracking-widest text-gray-900">
+                    {pedido.codigoColeta}
+                  </dd>
+                  <dd className="text-xs text-gray-500">
+                    Só entregue o pedido ao entregador que informar este código.
+                  </dd>
+                </div>
+              )}
 
               {pedido.observacao && (
                 <div>

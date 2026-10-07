@@ -210,7 +210,27 @@ export interface Pedido {
   statusCardapio?: string | null;
   /** true = pedido de teste. Nunca é uma venda real da loja. */
   teste?: boolean;
+  /**
+   * true = o pedido chegou ao Hub direto da API do iFood (evento PLACED), e
+   * não pelo Cardápio Web. É o único caso em que o Hub confirma e cancela o
+   * PEDIDO no iFood — nos outros, quem faz isso é o Cardápio Web.
+   */
+  daApiIfood?: boolean;
+  /** Status do pedido no iFood: PLACED | CONFIRMED | DISPATCHED | CONCLUDED | CANCELLED. */
+  statusIfood?: StatusPedidoIfood;
+  /** Observação de entrega do cliente (`delivery.observations` do iFood). */
+  observacaoEntrega?: string;
+  /** Código que o entregador informa na loja para retirar (`delivery.pickupCode`). */
+  codigoColeta?: string;
 }
+
+export type StatusPedidoIfood =
+  | "PLACED"
+  | "CONFIRMED"
+  | "READY_TO_PICKUP"
+  | "DISPATCHED"
+  | "CONCLUDED"
+  | "CANCELLED";
 
 // Resultado normalizado de cotação — todo provider devolve neste formato.
 export interface Cotacao {
@@ -399,6 +419,8 @@ export interface PedidoResumo {
   canal?: string;
   /** Número do pedido no marketplace, quando veio de um. */
   numeroExterno?: string;
+  /** Status do pedido no iFood, quando o pedido veio direto da API dele. */
+  statusIfood?: StatusPedidoIfood;
   itens: number;
   /** Preenchido quando já foi despachado. */
   despacho: (ResultadoDespacho & { valorPago: number | null }) | null;

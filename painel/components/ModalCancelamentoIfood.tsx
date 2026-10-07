@@ -21,7 +21,10 @@ export default function ModalCancelamentoIfood({
   ocupado,
   onFechar,
   onConfirmar,
+  alvo = "corrida",
 }: {
+  /** "pedido" = cancela o pedido inteiro no iFood, não só a entrega. */
+  alvo?: "corrida" | "pedido";
   /** null = fechado. */
   motivos: MotivoCancelamentoIfood[] | null;
   ocupado: boolean;
@@ -67,13 +70,14 @@ export default function ModalCancelamentoIfood({
         <div className="flex items-center gap-2.5">
           <LogoProvedor provider="ifood" tamanho={26} />
           <h2 id="titulo-cancelamento-ifood" className="text-lg font-semibold text-gray-900">
-            Cancelar corrida no iFood
+            {alvo === "pedido" ? "Cancelar pedido no iFood" : "Cancelar corrida no iFood"}
           </h2>
         </div>
 
         <p className="mt-4 text-sm font-medium text-gray-900">Motivo do cancelamento</p>
         <p className="mt-0.5 text-xs text-gray-500">
-          Lista enviada pelo iFood para esta entrega. O motivo fica registrado na conta da loja.
+          Lista enviada pelo iFood para {alvo === "pedido" ? "este pedido" : "esta entrega"}. O
+          motivo fica registrado na conta da loja.
         </p>
 
         <div className="mt-3 max-h-72 space-y-2 overflow-y-auto" role="radiogroup">
@@ -107,8 +111,9 @@ export default function ModalCancelamentoIfood({
         </div>
 
         <p className="mt-4 rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
-          Com entregador designado, o iFood cobra parte do frete. Depois da coleta,
-          o iFood recusa o cancelamento.
+          {alvo === "pedido"
+            ? "O cliente é avisado pelo iFood. O cancelamento é analisado pelo iFood e some da fila quando ele confirmar."
+            : "Com entregador designado, o iFood cobra parte do frete. Depois da coleta, o iFood recusa o cancelamento."}
         </p>
 
         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -126,7 +131,7 @@ export default function ModalCancelamentoIfood({
             disabled={ocupado || !escolhido}
             className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
           >
-            {ocupado ? "Cancelando..." : "Cancelar corrida"}
+            {ocupado ? "Cancelando..." : alvo === "pedido" ? "Cancelar pedido" : "Cancelar corrida"}
           </button>
         </div>
       </div>

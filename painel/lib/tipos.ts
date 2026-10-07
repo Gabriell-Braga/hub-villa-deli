@@ -71,7 +71,22 @@ export interface PedidoDetalhe {
   statusCardapio?: string | null;
   /** true = pedido simulado. Não é uma venda da loja. */
   teste?: boolean;
+  /** true = chegou direto da API do iFood; o Hub confirma e cancela o pedido. */
+  daApiIfood?: boolean;
+  statusIfood?: StatusPedidoIfood;
+  /** Observação de entrega do cliente no iFood. */
+  observacaoEntrega?: string;
+  /** Código que o entregador informa na loja para retirar. */
+  codigoColeta?: string;
 }
+
+export type StatusPedidoIfood =
+  | "PLACED"
+  | "CONFIRMED"
+  | "READY_TO_PICKUP"
+  | "DISPATCHED"
+  | "CONCLUDED"
+  | "CANCELLED";
 
 /** Estado ao vivo da entrega, alimentado pelos webhooks do parceiro. */
 export interface EntregaAoVivo {
@@ -187,6 +202,7 @@ export interface PedidoResumo {
   pago: boolean;
   canal?: string;
   numeroExterno?: string;
+  statusIfood?: StatusPedidoIfood;
   despacho: (Despacho & { valorPago: number | null }) | null;
   melhorPreco: number | null;
   /** true = pedido simulado. Não é uma venda da loja. */

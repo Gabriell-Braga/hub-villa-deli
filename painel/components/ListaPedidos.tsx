@@ -49,7 +49,24 @@ const ROTULO_STATUS: Record<StatusPedido, string> = {
  * pagamento cair. Dois selos faziam o atendente procurar o que fazer com o
  * primeiro, quando não há nada a fazer além de esperar o segundo.
  */
-function Selo({ status, pago }: { status: StatusPedido; pago: boolean }) {
+function Selo({
+  status,
+  pago,
+  statusIfood,
+}: {
+  status: StatusPedido;
+  pago: boolean;
+  statusIfood?: string;
+}) {
+  // Pedido que veio direto do iFood e ainda não foi aceito: a pendência é da
+  // loja, e é a primeira coisa a fazer com ele.
+  if (statusIfood === "PLACED") {
+    return (
+      <span className="inline-flex whitespace-nowrap rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-300">
+        Confirmar no iFood
+      </span>
+    );
+  }
   if (!pago) {
     return (
       <span className="inline-flex whitespace-nowrap rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-300">
@@ -355,7 +372,7 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
                 {p.teste && <SeloTeste />}
                 <SeloOrigem canal={p.canal} numeroExterno={p.numeroExterno} />
                 {p.reenvio && <SeloReenvio />}
-                <Selo status={p.status} pago={p.pago} />
+                <Selo status={p.status} pago={p.pago} statusIfood={p.statusIfood} />
                 {p.bairro && (
                   <span className="text-xs text-gray-500">{p.bairro}</span>
                 )}
@@ -445,7 +462,7 @@ export default function ListaPedidos({ aba }: { aba: "abertos" | "historico" }) 
                   </td>
 
                   <td className="px-5 py-3">
-                    <Selo status={p.status} pago={p.pago} />
+                    <Selo status={p.status} pago={p.pago} statusIfood={p.statusIfood} />
                   </td>
 
                   <td className="px-5 py-3 text-right">
