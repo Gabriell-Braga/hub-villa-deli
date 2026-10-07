@@ -99,7 +99,7 @@ async function lojaIfood(env: Env, modo: ModoOperacao): Promise<LojaIfood | null
     state: a.state ?? "",
     postalCode: (a.postalCode ?? "").replace(/\D/g, ""),
   };
-  await env.HUB_KV.put(chave, JSON.stringify(loja), { expirationTtl: 86_400 });
+  await env.HUB_KV.put(chave, JSON.stringify(loja), { expirationTtl: 86_400 }).catch(() => {});
   return loja;
 }
 

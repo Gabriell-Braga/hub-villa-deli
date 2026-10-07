@@ -485,7 +485,11 @@ const LIMITE_FALHAS = 5;
 
 async function registrarFalhaPolling(env: Env, motivo: string): Promise<void> {
   const falhas = Number((await env.HUB_KV.get(CHAVE_FALHAS)) ?? "0") + 1;
-  await env.HUB_KV.put(CHAVE_FALHAS, String(falhas), { expirationTtl: 86_400 });
+  // Passou do limite, o alerta já sai a cada falha: não grava mais. Gravar
+  // toda falha estourou a cota grátis do KV (1.000 escritas/dia) em 07/10.
+  if (falhas <= LIMITE_FALHAS + 1) {
+    await env.HUB_KV.put(CHAVE_FALHAS, String(falhas), { expirationTtl: 86_400 }).catch(() => {});
+  }
   if (falhas > LIMITE_FALHAS) {
     console.error(`[ALERTA ifood-polling] ${falhas} falhas seguidas. Última: ${motivo}`);
   } else {

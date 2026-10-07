@@ -69,6 +69,7 @@ import {
   confirmarPedidoIfood,
   motivosCancelamentoPedidoIfood,
   pedidoCanceladoNoIfood,
+  despacharPedidoIfood,
 } from "./services/ifood-pedidos";
 import { cancelar99, sincronizar99, sincronizarAbertas99 } from "./services/noventa99";
 import { processarWebhook99 } from "./services/noventa99-webhook";
@@ -1301,6 +1302,11 @@ app.post("/api/despachar", async (c) => {
     await concluirDespacho(env, idPedido, resultado);
     // Histórico para o relatório. Guarda quem clicou e se foi teste.
     await registrarDelivery(env, pedido, cotacao, resultado, atendente.email, modo);
+    // Pedido direto do iFood: avisa que saiu (DISPATCHED). Falha só vai pro log,
+    // a corrida já foi pedida.
+    await despacharPedidoIfood(env, pedido, modo).catch((e) =>
+      console.error(`[ifood-pedido] dispatch: ${e instanceof Error ? e.message : e}`)
+    );
 
     return c.json({ ok: true, ...resultado });
   } catch (e) {

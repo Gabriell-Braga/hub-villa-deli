@@ -367,6 +367,31 @@ export async function cancelarPedidoIfood(
   return res.ok ? { ok: true } : { ok: false, erro: traduzirErroIfood(res.status, await res.text()) };
 }
 
+/**
+ * Avisa o iFood que o pedido saiu da loja (DISPATCHED). Pedido com entrega
+ * MERCHANT não muda de status sozinho, nem com requestDriver: sem isto o
+ * cenário "Pedido Despachado Imediato" da homologação reprova.
+ */
+export async function despacharPedidoIfood(
+  env: Env,
+  pedido: Pedido,
+  modo: ModoOperacao
+): Promise<void> {
+  if (!pedido.daApiIfood || !pedido.idExterno) return;
+  const orderId = pedido.idExterno;
+  const res = await chamar(
+    env,
+    modo,
+    "POST",
+    `/order/v1.0/orders/${encodeURIComponent(orderId)}/dispatch`,
+    undefined,
+    { repetir: true, idempotencia: `despachar-${orderId}` }
+  );
+  console.log(`[ifood-pedido] dispatch orderId=${orderId} -> ${res.status}`);
+  if (res.ok) await atualizarStatusIfood(env, pedido.id, "DISPATCHED");
+  else console.error(`[ifood-pedido] dispatch recusado: ${traduzirErroIfood(res.status, await res.text())}`);
+}
+
 /** Pedido que veio direto do iFood e foi cancelado lá. */
 export function pedidoCanceladoNoIfood(pedido: Pedido): boolean {
   return pedido.statusIfood === "CANCELLED";

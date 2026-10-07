@@ -60,7 +60,10 @@ export async function getCachedToken(
   // 3) Persiste com TTL alinhado à expiração real (menos a margem).
   //    KV exige TTL mínimo de 60s.
   const ttl = Math.max(60, token.expires_in - skew);
-  await env.HUB_KV.put(chave, JSON.stringify(novo), { expirationTtl: ttl });
+  // Cache é best-effort: com o KV no limite diário (429) o token ainda serve.
+  await env.HUB_KV.put(chave, JSON.stringify(novo), { expirationTtl: ttl }).catch((e) =>
+    console.warn(`[token] cache não gravado: ${e instanceof Error ? e.message : e}`)
+  );
 
   return token.access_token;
 }
