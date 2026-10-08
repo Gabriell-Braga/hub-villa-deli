@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { Despacho, EntregaAoVivo, PendenciasIfood } from "@/lib/tipos";
 import { ROTULO_PROVEDOR, ROTULO_STATUS_ENTREGA } from "@/lib/tipos";
 import { faltam, hora, telefone } from "@/lib/formato";
@@ -194,6 +195,8 @@ export default function CardEntrega({
   pendenciasIfood,
   respondendoEndereco,
   onResponderEndereco,
+  validandoColeta,
+  onValidarColeta,
 }: {
   despacho: Despacho;
   entrega: EntregaAoVivo | null;
@@ -206,7 +209,10 @@ export default function CardEntrega({
   pendenciasIfood?: PendenciasIfood | null;
   respondendoEndereco?: boolean;
   onResponderEndereco?: (aceitar: boolean) => void;
+  validandoColeta?: boolean;
+  onValidarColeta?: (codigo: string) => void;
 }) {
+  const [codigoDigitado, setCodigoDigitado] = useState("");
   const status = entrega?.status ?? despacho.status;
   const rotulo = ROTULO_STATUS_ENTREGA[status] ?? status;
   const cancelado = status === "canceled" || status === "returned";
@@ -228,11 +234,13 @@ export default function CardEntrega({
   const mostraCodigo = !!codigoEntrega && emAndamento;
   // CÓDIGO DE COLETA (iFood). Só até a coleta: depois, o pedido já saiu.
   const codigoColeta = pendenciasIfood?.codigoColeta ?? null;
+  const coletaValidada = !!pendenciasIfood?.coletaValidadaEm;
   const mostraCodigoColeta =
     !!codigoColeta && emAndamento && ["pending", "pickup", "at_pickup"].includes(status);
   const mostraLink = !!link && emAndamento;
   const temPainelLateral =
-    mostraChegadaLoja || mostraPrevisao || mostraCodigo || mostraCodigoColeta || mostraLink;
+    mostraChegadaLoja || mostraPrevisao || mostraCodigo || mostraCodigoColeta || mostraLink ||
+    (!!codigoColeta && coletaValidada && emAndamento);
   const mudanca = emAndamento ? pendenciasIfood?.mudancaEndereco : undefined;
   const cancelarRotulo =
     despacho.provider === "ifood"
@@ -443,6 +451,44 @@ export default function CardEntrega({
                       {codigoColeta}
                     </span>
                   </div>
+                )}
+
+                {/* Etapa 2 do código de coleta: o atendente digita o que o
+                    entregador disse e só libera o pedido se bater. */}
+                {mostraCodigoColeta && onValidarColeta && !coletaValidada && (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      onValidarColeta(codigoDigitado);
+                    }}
+                    className="flex flex-col gap-2 rounded-lg bg-white p-3 ring-1 ring-amber-200"
+                  >
+                    <label htmlFor="codigo-coleta" className="text-xs font-medium text-amber-800">
+                      Código dito pelo entregador
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        id="codigo-coleta"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        value={codigoDigitado}
+                        onChange={(e) => setCodigoDigitado(e.target.value)}
+                        className="min-w-0 flex-1 rounded-md border border-gray-300 px-3 py-2 font-mono tracking-widest"
+                      />
+                      <button
+                        type="submit"
+                        disabled={validandoColeta || !codigoDigitado.trim()}
+                        className={`${BOTAO} bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50`}
+                      >
+                        {validandoColeta ? "Conferindo..." : "Validar e liberar"}
+                      </button>
+                    </div>
+                  </form>
+                )}
+                {codigoColeta && coletaValidada && emAndamento && (
+                  <p className="rounded-lg bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 ring-1 ring-emerald-100">
+                    Código de coleta conferido. Pedido retirado pelo entregador.
+                  </p>
                 )}
 
                 {/* Rastreio só enquanto a entrega está em andamento. */}

@@ -107,6 +107,7 @@ export default function PaginaCotacao({
   // Motivos de cancelamento do iFood. Não-null = janela de escolha aberta.
   const [motivosIfood, setMotivosIfood] = useState<MotivoCancelamentoIfood[] | null>(null);
   const [respondendoEndereco, setRespondendoEndereco] = useState(false);
+  const [validandoColeta, setValidandoColeta] = useState(false);
   const [reenviando, setReenviando] = useState(false);
   // Motivo pelo qual o servidor se recusou a cotar. Estado do pedido, não erro
   // de sistema — por isso não vai para o toast nem para o alerta vermelho.
@@ -294,6 +295,31 @@ export default function PaginaCotacao({
       toast.erro("Erro de rede ao responder ao iFood.");
     } finally {
       setRespondendoEndereco(false);
+    }
+  }
+
+  async function validarColeta(codigo: string) {
+    setValidandoColeta(true);
+    try {
+      const res = await apiFetch(
+        `/api/entrega/${encodeURIComponent(idPedido)}/ifood/coleta`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ codigo }),
+        }
+      );
+      const json = await res.json();
+      if (!res.ok) {
+        toast.erro(json.erro ?? "Não foi possível conferir o código.");
+        return;
+      }
+      toast.sucesso("Código confere. Pedido liberado para o entregador.");
+      await cotar({ silencioso: true });
+    } catch {
+      toast.erro("Erro de rede ao conferir o código.");
+    } finally {
+      setValidandoColeta(false);
     }
   }
 
@@ -640,6 +666,8 @@ export default function PaginaCotacao({
           onCancelar={pedirCancelamento}
           pendenciasIfood={dados?.pendenciasIfood ?? null}
           respondendoEndereco={respondendoEndereco}
+          validandoColeta={validandoColeta}
+          onValidarColeta={validarColeta}
           onResponderEndereco={responderEndereco}
         />
       )}

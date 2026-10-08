@@ -63,6 +63,7 @@ import {
   encerrarMudancaEndereco,
   pendenciasIfood,
   processarWebhookIfood,
+  validarCodigoColeta,
 } from "./services/ifood-webhook";
 import {
   cancelarPedidoIfood,
@@ -960,6 +961,35 @@ app.post("/api/entrega/:idPedido/ifood/endereco", async (c) => {
   );
   return c.json({ ok: true });
 });
+
+/** Pedido da plataforma traz o pickupCode no próprio pedido, não em evento. */
+async function pendenciasComColeta(env: Env, orderId: string, codigoDoPedido?: string) {
+  const p = await pendenciasIfood(env, orderId);
+  if (!codigoDoPedido || p?.codigoColeta) return p;
+  return { ...p, codigoColeta: codigoDoPedido };
+}
+
+// ---------------------------------------------------------------------------
+// 2g') iFood — conferir o código de coleta dito pelo entregador
+//     POST /api/entrega/:idPedido/ifood/coleta  { codigo }
+// ---------------------------------------------------------------------------
+app.post("/api/entrega/:idPedido/ifood/coleta", async (c) => {
+  const env = c.env;
+  const idPedido = c.req.param("idPedido");
+  const body = await c.req.json<{ codigo?: string }>().catch(() => null);
+  if (!body?.codigo?.trim()) return c.json({ erro: "Digite o código que o entregador informou." }, 400);
+
+  const despacho = await obterDespacho(env, idPedido);
+  if (!despacho || despacho.provider !== "ifood") {
+    return c.json({ erro: "Este pedido não tem entrega do iFood." }, 404);
+  }
+
+  const pedido = await obterPedido(env, idPedido);
+  const r = await validarCodigoColeta(env, despacho.deliveryId, body.codigo, pedido?.codigoColeta);
+  if (!r.ok) return c.json({ erro: r.erro }, 409);
+  console.log(`[ifood] coleta liberada pedido=${idPedido} por ${c.get("usuario").email}`);
+  return c.json({ ok: true });
+});
 // ---------------------------------------------------------------------------
 // 2h) iFood — PEDIDO que chegou direto da API do iFood (modo teste)
 //     POST /api/pedido-ifood/:idPedido/confirmar
@@ -1059,7 +1089,7 @@ app.get("/api/cotacao/:idPedido", async (c) => {
       // Mudança de endereço pendente e códigos de coleta/entrega do iFood.
       pendenciasIfood:
         jaDespachado.provider === "ifood"
-          ? await pendenciasIfood(env, jaDespachado.deliveryId)
+          ? await pendenciasComColeta(env, jaDespachado.deliveryId, pedido.codigoColeta)
           : null,
     });
   }

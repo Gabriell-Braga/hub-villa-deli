@@ -114,6 +114,8 @@ export interface PendenciasIfood {
   };
   /** Código que o ENTREGADOR informa no balcão para retirar o pedido. */
   codigoColeta?: string;
+  /** Quando o atendente conferiu o código dito pelo entregador. */
+  coletaValidadaEm?: string;
   /** Código que o CLIENTE informa ao entregador na porta. */
   codigoEntrega?: string;
 }
@@ -141,6 +143,54 @@ export async function encerrarMudancaEndereco(env: Env, orderId: string): Promis
   if (!p?.mudancaEndereco) return;
   delete p.mudancaEndereco;
   await salvarPendencias(env, orderId, p);
+}
+
+/**
+ * CÓDIGO DE COLETA — critério de homologação em duas etapas: o pedido tem
+ * pickupCode, e o código que o entregador diz no balcão bate com ele. Só
+ * então o Hub marca "coletado". A API não tem rota para isso: a conferência
+ * é da loja. O evento COLLECTED do iFood chega depois e não rebaixa nada.
+ */
+export async function validarCodigoColeta(
+  env: Env,
+  orderId: string,
+  codigo: string,
+  /** pickupCode que veio no pedido da plataforma (ifood-pedidos.ts). */
+  codigoDoPedido?: string
+): Promise<{ ok: true } | { ok: false; erro: string }> {
+  const p = (await env.HUB_KV.get<PendenciasIfood>(chavePendencias(orderId), "json")) ?? {};
+  p.codigoColeta ??= codigoDoPedido;
+  if (!p.codigoColeta) return { ok: false, erro: "O iFood não enviou código de coleta para esta entrega." };
+  if (codigo.replace(/\D/g, "") !== p.codigoColeta.replace(/\D/g, "")) {
+    console.log(`[ifood] código de coleta NÃO confere orderId=${orderId}`);
+    return { ok: false, erro: "Código não confere. Não entregue o pedido." };
+  }
+
+  p.coletaValidadaEm = new Date().toISOString();
+  await salvarPendencias(env, orderId, p);
+
+  const atual = await env.DB.prepare(
+    `SELECT status_ao_vivo FROM deliveries WHERE delivery_id_externo = ?1 LIMIT 1`
+  )
+    .bind(orderId)
+    .first<{ status_ao_vivo: string | null }>();
+  if ((ETAPA[atual?.status_ao_vivo ?? ""] ?? -1) < ETAPA.pickup_complete) {
+    await aplicarEstadoEntrega(env, orderId, {
+      status: "pickup_complete",
+      trackingUrl: null,
+      dropoffEta: null,
+      pickupEta: null,
+      courierNome: null,
+      courierTelefone: null,
+      courierVeiculo: null,
+      courierPlaca: null,
+      courierLat: null,
+      courierLng: null,
+      liveMode: null,
+    });
+  }
+  console.log(`[ifood] código de coleta conferido orderId=${orderId} -> pickup_complete`);
+  return { ok: true };
 }
 
 /**

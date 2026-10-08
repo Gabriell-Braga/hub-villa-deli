@@ -179,6 +179,8 @@ export interface PendenciasIfood {
   };
   /** Código que o ENTREGADOR informa no balcão para retirar o pedido. */
   codigoColeta?: string;
+  /** Quando o atendente conferiu o código dito pelo entregador. */
+  coletaValidadaEm?: string;
   /** Código que o CLIENTE informa ao entregador na porta. */
   codigoEntrega?: string;
 }
