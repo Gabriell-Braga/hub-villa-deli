@@ -715,7 +715,6 @@ export async function cancelarIfood(
     return { ok: false, erro: "Este motivo não vale mais para a entrega. Abra o cancelamento de novo." };
   }
 
-  const codigoNumerico = Number(motivo.codigo);
   const res = await chamar(
     env,
     modo,
@@ -723,8 +722,9 @@ export async function cancelarIfood(
     `/shipping/v1.0/orders/${id}/cancel`,
     {
       reason: motivo.descricao,
-      // A doc pede inteiro (ex.: 817); a lista devolve texto ("817").
-      cancellationCode: Number.isFinite(codigoNumerico) ? codigoNumerico : motivo.codigo,
+      // A doc diz inteiro (ex.: 817), mas a API recusa número: "Unmarshal
+      // type error: expected=string, got=number" (08/10/2026). Vai texto.
+      cancellationCode: String(motivo.codigo),
     },
     { repetir: true }
   );
