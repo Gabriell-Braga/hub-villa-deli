@@ -76,8 +76,6 @@ export interface PedidoDetalhe {
   statusIfood?: StatusPedidoIfood;
   /** Observação de entrega do cliente no iFood. */
   observacaoEntrega?: string;
-  /** Código que o entregador informa na loja para retirar. */
-  codigoColeta?: string;
 }
 
 export type StatusPedidoIfood =
@@ -177,8 +175,8 @@ export interface PendenciasIfood {
     pedidaEm: string;
     prazo: string;
   };
-  /** Código que o ENTREGADOR informa no balcão para retirar o pedido. */
-  codigoColeta?: string;
+  /** Há código de coleta. O valor não vem: o atendente digita o que o entregador diz. */
+  temCodigoColeta?: boolean;
   /** Quando o atendente conferiu o código dito pelo entregador. */
   coletaValidadaEm?: string;
   /** Código que o CLIENTE informa ao entregador na porta. */

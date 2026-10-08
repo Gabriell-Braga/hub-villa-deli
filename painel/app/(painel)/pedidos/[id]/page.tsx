@@ -901,17 +901,6 @@ export default function PaginaCotacao({
                 </dd>
               </div>
 
-              {pedido.codigoColeta && (
-                <div>
-                  <dt className="text-gray-500">Código de coleta</dt>
-                  <dd className="font-mono text-base font-semibold tracking-widest text-gray-900">
-                    {pedido.codigoColeta}
-                  </dd>
-                  <dd className="text-xs text-gray-500">
-                    Só entregue o pedido ao entregador que informar este código.
-                  </dd>
-                </div>
-              )}
 
               {pedido.observacao && (
                 <div>

@@ -233,14 +233,14 @@ export default function CardEntrega({
   const codigoEntrega = pendenciasIfood?.codigoEntrega ?? despacho.codigoEntrega;
   const mostraCodigo = !!codigoEntrega && emAndamento;
   // CÓDIGO DE COLETA (iFood). Só até a coleta: depois, o pedido já saiu.
-  const codigoColeta = pendenciasIfood?.codigoColeta ?? null;
+  const temCodigoColeta = !!pendenciasIfood?.temCodigoColeta;
   const coletaValidada = !!pendenciasIfood?.coletaValidadaEm;
   const mostraCodigoColeta =
-    !!codigoColeta && emAndamento && ["pending", "pickup", "at_pickup"].includes(status);
+    temCodigoColeta && emAndamento && ["pending", "pickup", "at_pickup"].includes(status);
   const mostraLink = !!link && emAndamento;
   const temPainelLateral =
     mostraChegadaLoja || mostraPrevisao || mostraCodigo || mostraCodigoColeta || mostraLink ||
-    (!!codigoColeta && coletaValidada && emAndamento);
+    (temCodigoColeta && coletaValidada && emAndamento);
   const mudanca = emAndamento ? pendenciasIfood?.mudancaEndereco : undefined;
   const cancelarRotulo =
     despacho.provider === "ifood"
@@ -435,26 +435,9 @@ export default function CardEntrega({
                   </div>
                 )}
 
-                {/* CÓDIGO DE COLETA. O entregador do iFood diz este número no
-                    balcão; o pedido só sai se bater. A entrega só vira
-                    "coletado" quando o iFood confirma a coleta pelo app dele. */}
-                {mostraCodigoColeta && (
-                  <div
-                    title="O entregador informa este número no balcão. Só entregue o pedido se o código bater."
-                    className="flex items-center justify-between gap-3 rounded-lg bg-amber-50 px-4 py-3 ring-1 ring-amber-100"
-                  >
-                    <div>
-                      <p className="text-xs font-medium text-amber-700">Código de coleta</p>
-                      <p className="text-xs text-amber-500">O entregador informa no balcão</p>
-                    </div>
-                    <span className="font-mono text-2xl font-bold tracking-[0.3em] text-amber-900">
-                      {codigoColeta}
-                    </span>
-                  </div>
-                )}
-
-                {/* Etapa 2 do código de coleta: o atendente digita o que o
-                    entregador disse e só libera o pedido se bater. */}
+                {/* CÓDIGO DE COLETA. O painel não mostra o código: o atendente
+                    digita o que o entregador diz no balcão e o Hub confere.
+                    Só libera o pedido se bater. */}
                 {mostraCodigoColeta && onValidarColeta && !coletaValidada && (
                   <form
                     onSubmit={(e) => {
@@ -464,7 +447,7 @@ export default function CardEntrega({
                     className="flex flex-col gap-2 rounded-lg bg-white p-3 ring-1 ring-amber-200"
                   >
                     <label htmlFor="codigo-coleta" className="text-xs font-medium text-amber-800">
-                      Código dito pelo entregador
+                      Código de coleta dito pelo entregador
                     </label>
                     <div className="flex gap-2">
                       <input
@@ -485,7 +468,7 @@ export default function CardEntrega({
                     </div>
                   </form>
                 )}
-                {codigoColeta && coletaValidada && emAndamento && (
+                {temCodigoColeta && coletaValidada && emAndamento && (
                   <p className="rounded-lg bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 ring-1 ring-emerald-100">
                     Código de coleta conferido. Pedido retirado pelo entregador.
                   </p>

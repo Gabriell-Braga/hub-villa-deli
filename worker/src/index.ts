@@ -972,17 +972,23 @@ async function pendenciasComColeta(
   status: string | undefined
 ) {
   const p = await pendenciasIfood(env, orderId);
-  if (p?.codigoColeta) return p;
   // Pedido POS: nenhum evento traz o código, então lê o detalhe do pedido
   // enquanto a coleta não aconteceu. Achou, guarda e não pergunta de novo.
-  const codigo =
-    codigoDoPedido ??
-    (["pending", "pickup", "at_pickup"].includes(status ?? "")
-      ? await codigoColetaIfood(env, orderId, await modoAtual(env)).catch(() => null)
-      : null);
-  if (!codigo) return p;
-  if (!codigoDoPedido) await guardarCodigoColeta(env, orderId, codigo);
-  return { ...p, codigoColeta: codigo };
+  let codigo = p?.codigoColeta ?? codigoDoPedido ?? null;
+  if (!codigo && ["pending", "pickup", "at_pickup"].includes(status ?? "")) {
+    codigo = await codigoColetaIfood(env, orderId, await modoAtual(env)).catch(() => null);
+    if (codigo) await guardarCodigoColeta(env, orderId, codigo);
+  }
+  // O código NUNCA vai para o painel: o atendente confere pelo que o
+  // entregador diz, digitando. O painel só sabe que existe um código.
+  const { codigoColeta: _, ...resto } = p ?? {};
+  return { ...resto, temCodigoColeta: !!codigo };
+}
+
+/** Pedido sem o código de coleta, pelo mesmo motivo de pendenciasComColeta. */
+function paraPainel(pedido: Pedido): Pedido {
+  const { codigoColeta: _, ...resto } = pedido;
+  return resto;
 }
 
 // ---------------------------------------------------------------------------
@@ -1096,7 +1102,7 @@ app.get("/api/cotacao/:idPedido", async (c) => {
     }
     return c.json({
       idPedido,
-      pedido,
+      pedido: paraPainel(pedido),
       maisBarato: null,
       cotacoes: (await obterCotacoes(env, idPedido)) ?? [],
       despacho: jaDespachado,
@@ -1232,7 +1238,7 @@ app.get("/api/cotacao/:idPedido", async (c) => {
 
   return c.json({
     idPedido,
-    pedido,
+    pedido: paraPainel(pedido),
     maisBarato,
     cotacoes,
     despacho,
