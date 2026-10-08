@@ -55,12 +55,14 @@ import { assinaturaValida, assinaturaValida99 } from "./lib/assinatura";
 import { processarWebhookUber } from "./services/uber-webhook";
 import {
   cancelarIfood,
+  codigoColetaIfood,
   motivosCancelamentoIfood,
   responderMudancaEnderecoIfood,
 } from "./services/ifood";
 import {
   buscarEventosIfood,
   encerrarMudancaEndereco,
+  guardarCodigoColeta,
   pendenciasIfood,
   processarWebhookIfood,
   validarCodigoColeta,
@@ -963,10 +965,24 @@ app.post("/api/entrega/:idPedido/ifood/endereco", async (c) => {
 });
 
 /** Pedido da plataforma traz o pickupCode no próprio pedido, não em evento. */
-async function pendenciasComColeta(env: Env, orderId: string, codigoDoPedido?: string) {
+async function pendenciasComColeta(
+  env: Env,
+  orderId: string,
+  codigoDoPedido: string | undefined,
+  status: string | undefined
+) {
   const p = await pendenciasIfood(env, orderId);
-  if (!codigoDoPedido || p?.codigoColeta) return p;
-  return { ...p, codigoColeta: codigoDoPedido };
+  if (p?.codigoColeta) return p;
+  // Pedido POS: nenhum evento traz o código, então lê o detalhe do pedido
+  // enquanto a coleta não aconteceu. Achou, guarda e não pergunta de novo.
+  const codigo =
+    codigoDoPedido ??
+    (["pending", "pickup", "at_pickup"].includes(status ?? "")
+      ? await codigoColetaIfood(env, orderId, await modoAtual(env)).catch(() => null)
+      : null);
+  if (!codigo) return p;
+  if (!codigoDoPedido) await guardarCodigoColeta(env, orderId, codigo);
+  return { ...p, codigoColeta: codigo };
 }
 
 // ---------------------------------------------------------------------------
@@ -1089,7 +1105,12 @@ app.get("/api/cotacao/:idPedido", async (c) => {
       // Mudança de endereço pendente e códigos de coleta/entrega do iFood.
       pendenciasIfood:
         jaDespachado.provider === "ifood"
-          ? await pendenciasComColeta(env, jaDespachado.deliveryId, pedido.codigoColeta)
+          ? await pendenciasComColeta(
+              env,
+              jaDespachado.deliveryId,
+              pedido.codigoColeta,
+              (await obterEntregaAoVivo(env, idPedido))?.status ?? jaDespachado.status
+            )
           : null,
     });
   }

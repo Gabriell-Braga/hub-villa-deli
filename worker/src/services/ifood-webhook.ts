@@ -137,6 +137,13 @@ async function salvarPendencias(env: Env, orderId: string, p: PendenciasIfood): 
   await env.HUB_KV.put(chavePendencias(orderId), JSON.stringify(p), { expirationTtl: 86_400 });
 }
 
+/** Guarda o código de coleta lido do detalhe do pedido (ver codigoColetaIfood). */
+export async function guardarCodigoColeta(env: Env, orderId: string, codigo: string): Promise<void> {
+  const p = (await env.HUB_KV.get<PendenciasIfood>(chavePendencias(orderId), "json")) ?? {};
+  p.codigoColeta = codigo;
+  await salvarPendencias(env, orderId, p);
+}
+
 /** Marca a mudança de endereço como respondida (pela tela ou por evento). */
 export async function encerrarMudancaEndereco(env: Env, orderId: string): Promise<void> {
   const p = await env.HUB_KV.get<PendenciasIfood>(chavePendencias(orderId), "json");

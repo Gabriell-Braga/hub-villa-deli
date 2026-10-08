@@ -635,6 +635,22 @@ const SEM_CANCELAMENTO =
  * só o entregador e não recebe motivo.
  * Lista vazia (204 ou []) = o iFood não aceita mais cancelamento.
  */
+/**
+ * Código de coleta da entrega. No pedido fora da plataforma (POS) nenhum
+ * evento traz o pickupCode; ele só aparece no detalhe do pedido
+ * (delivery.pickupCode), visto na loja de teste em 08/10/2026.
+ */
+export async function codigoColetaIfood(
+  env: Env,
+  orderId: string,
+  modo: ModoOperacao
+): Promise<string | null> {
+  const res = await chamar(env, modo, "GET", `/order/v1.0/orders/${encodeURIComponent(orderId)}`);
+  if (!res.ok) return null;
+  const o = (await res.json()) as { delivery?: { pickupCode?: string } };
+  return o.delivery?.pickupCode || null;
+}
+
 export async function motivosCancelamentoIfood(
   env: Env,
   pedido: Pedido,
