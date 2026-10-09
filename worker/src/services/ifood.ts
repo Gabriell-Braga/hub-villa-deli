@@ -333,7 +333,8 @@ export async function chamar(
 
     const passageira = res.status === 429 || (repetir && res.status >= 500);
     if (!passageira || ultima) {
-      if (n > 1 || !res.ok) console.log(`[ifood] ${rota} tentativa ${n}/${TENTATIVAS}: ${res.status}`);
+      // Toda chamada no log (critério de homologação: registrar as operações).
+      console.log(`[ifood] ${rota} -> ${res.status}${n > 1 ? ` (tentativa ${n}/${TENTATIVAS})` : ""}`);
       return res;
     }
 
