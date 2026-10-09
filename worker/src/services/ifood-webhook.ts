@@ -373,6 +373,11 @@ async function aplicarEventosIfood(
     };
 
     const { novo, idPedido } = await registrarEvento(env, evento);
+    if (!novo) {
+      // Deduplicação pelo eventId: o mesmo evento chega pelo webhook e pelo
+      // polling, e o iFood reenvia o que não foi confirmado.
+      console.log(`[ifood-duplicado] eventId=${evento.id} code=${nome} descartado (já processado)`);
+    }
     if (!novo || !idPedido) {
       // Duplicado, ou pedido do iFood que o Hub não despachou (a loja recebe
       // eventos de TODOS os pedidos). Nos dois casos, nada a aplicar.
@@ -495,6 +500,7 @@ export async function buscarEventosIfood(
 
   // 204 = fila vazia, o caso mais comum.
   if (res.status === 204) {
+    console.log(`[ifood-polling] GET /events:polling -> 204 fila vazia em ${duracao} ms`);
     await zerarFalhasPolling(env);
     return { recebidos: 0, aplicados: 0, ignorados: 0 };
   }
@@ -520,7 +526,10 @@ export async function buscarEventosIfood(
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify(ids),
     });
-    if (!ack.ok) console.warn(`[ifood-polling] acknowledgment respondeu ${ack.status}`);
+    console.log(
+      `[ifood-polling] POST /events/acknowledgment ${ids.length} evento(s) -> ${ack.status}: ` +
+        ids.map((i) => i.id).join(", ")
+    );
   }
 
   console.log(
