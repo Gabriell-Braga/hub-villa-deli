@@ -979,16 +979,9 @@ async function pendenciasComColeta(
     codigo = await codigoColetaIfood(env, orderId, await modoAtual(env)).catch(() => null);
     if (codigo) await guardarCodigoColeta(env, orderId, codigo);
   }
-  // O código NUNCA vai para o painel: o atendente confere pelo que o
-  // entregador diz, digitando. O painel só sabe que existe um código.
-  const { codigoColeta: _, ...resto } = p ?? {};
-  return { ...resto, temCodigoColeta: !!codigo };
-}
-
-/** Pedido sem o código de coleta, pelo mesmo motivo de pendenciasComColeta. */
-function paraPainel(pedido: Pedido): Pedido {
-  const { codigoColeta: _, ...resto } = pedido;
-  return resto;
+  // O código aparece nos detalhes do pedido (critério da homologação), mas a
+  // conferência no balcão é pelo campo do card, digitando o que o entregador diz.
+  return { ...p, codigoColeta: codigo ?? undefined, temCodigoColeta: !!codigo };
 }
 
 // ---------------------------------------------------------------------------
@@ -1102,7 +1095,7 @@ app.get("/api/cotacao/:idPedido", async (c) => {
     }
     return c.json({
       idPedido,
-      pedido: paraPainel(pedido),
+      pedido,
       maisBarato: null,
       cotacoes: (await obterCotacoes(env, idPedido)) ?? [],
       despacho: jaDespachado,
@@ -1238,7 +1231,7 @@ app.get("/api/cotacao/:idPedido", async (c) => {
 
   return c.json({
     idPedido,
-    pedido: paraPainel(pedido),
+    pedido,
     maisBarato,
     cotacoes,
     despacho,

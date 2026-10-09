@@ -901,6 +901,18 @@ export default function PaginaCotacao({
                 </dd>
               </div>
 
+              {(dados?.pendenciasIfood?.codigoColeta ?? pedido.codigoColeta) && (
+                <div>
+                  <dt className="text-gray-500">Código de coleta (pickupCode)</dt>
+                  <dd className="font-mono text-base font-semibold tracking-widest text-gray-900">
+                    {dados?.pendenciasIfood?.codigoColeta ?? pedido.codigoColeta}
+                  </dd>
+                  <dd className="text-xs text-gray-500">
+                    Confira pelo campo no card da entrega, digitando o que o entregador informar.
+                  </dd>
+                </div>
+              )}
+
 
               {pedido.observacao && (
                 <div>
