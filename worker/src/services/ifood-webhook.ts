@@ -487,6 +487,10 @@ export async function buscarEventosIfood(
         Authorization: `Bearer ${token}`,
         // Sem este header o iFood devolve eventos de TODAS as lojas do app.
         "x-polling-merchants": cred.merchantId,
+        // Sem estes dois, o firewall do iFood (Akamai) recusa com 403 "Access
+        // Denied" o polling que sai do Cloudflare (visto em 09/10/2026).
+        Accept: "application/json",
+        "User-Agent": "HubVillaDeli/1.0 (+https://hub-logistico.hub-villa-deli.workers.dev)",
       },
     });
   } catch (e) {
@@ -505,7 +509,8 @@ export async function buscarEventosIfood(
     return { recebidos: 0, aplicados: 0, ignorados: 0 };
   }
   if (!res.ok) {
-    await registrarFalhaPolling(env, `fila respondeu ${res.status}`);
+    const corpo = (await res.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 300);
+    await registrarFalhaPolling(env, `fila respondeu ${res.status}: ${corpo}`);
     return { pulado: `fila respondeu ${res.status}` };
   }
   await zerarFalhasPolling(env);
@@ -523,7 +528,12 @@ export async function buscarEventosIfood(
   if (ids.length > 0) {
     const ack = await fetch(`${cred.baseUrl}/events/v1.0/events/acknowledgment`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "User-Agent": "HubVillaDeli/1.0 (+https://hub-logistico.hub-villa-deli.workers.dev)",
+      },
       body: JSON.stringify(ids),
     });
     console.log(
