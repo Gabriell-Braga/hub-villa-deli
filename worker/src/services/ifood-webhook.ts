@@ -480,19 +480,28 @@ export async function buscarEventosIfood(
   }
 
   const inicio = Date.now();
-  let res: Response;
+  let res!: Response;
   try {
-    res = await fetch(`${cred.baseUrl}/events/v1.0/events:polling`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        // Sem este header o iFood devolve eventos de TODAS as lojas do app.
-        "x-polling-merchants": cred.merchantId,
-        // Sem estes dois, o firewall do iFood (Akamai) recusa com 403 "Access
-        // Denied" o polling que sai do Cloudflare (visto em 09/10/2026).
-        Accept: "application/json",
-        "User-Agent": "HubVillaDeli/1.0 (+https://hub-logistico.hub-villa-deli.workers.dev)",
-      },
-    });
+    // O firewall do iFood (Akamai) às vezes recusa com 403 "Access Denied" o
+    // polling que sai do Cloudflare (IP compartilhado; visto em 09/10/2026).
+    // Não é o token: a mesma chamada passa logo depois. Tenta de novo com
+    // backoff curto antes de contar como falha.
+    for (let n = 1; n <= 3; n++) {
+      res = await fetch(`${cred.baseUrl}/events/v1.0/events:polling`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          // Sem este header o iFood devolve eventos de TODAS as lojas do app.
+          "x-polling-merchants": cred.merchantId,
+          Accept: "application/json",
+          "User-Agent": "HubVillaDeli/1.0 (+https://hub-logistico.hub-villa-deli.workers.dev)",
+        },
+      });
+      if (res.status !== 403 || n === 3) break;
+      await res.body?.cancel();
+      const espera = 1000 * 2 ** (n - 1) + Math.random() * 500;
+      console.warn(`[ifood-polling] 403 do firewall, tentativa ${n}/3, nova em ${Math.round(espera)} ms`);
+      await new Promise((ok) => setTimeout(ok, espera));
+    }
   } catch (e) {
     await registrarFalhaPolling(env, `falha de rede: ${e instanceof Error ? e.message : e}`);
     return { pulado: "falha de rede no polling" };
