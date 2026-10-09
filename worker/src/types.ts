@@ -148,6 +148,7 @@ export interface Cliente {
 export interface ItemPedido {
   nome: string;
   quantidade: number;
+  /** Total da linha (quantidade já incluída), não o preço unitário. */
   preco: number;
 }
 

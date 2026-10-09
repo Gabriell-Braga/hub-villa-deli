@@ -532,15 +532,23 @@ export async function despacharIfood(
 
   const itens =
     pedido.itens.length > 0
-      ? pedido.itens.map((i) => ({
-          id: crypto.randomUUID(),
-          name: i.nome,
-          quantity: i.quantidade,
-          unitPrice: i.preco,
-          price: i.preco * i.quantidade,
-          optionsPrice: 0,
-          totalPrice: i.preco * i.quantidade,
-        }))
+      ? pedido.itens.map((i) => {
+          // `preco` é o total da LINHA (o subtotal soma `preco` direto). O iFood
+          // exige price = quantity × unitPrice exato, em centavos: se o total
+          // não divide pela quantidade, a linha vai como 1 unidade "3x Nome".
+          const centavos = Math.round(i.preco * 100);
+          const q = i.quantidade > 0 ? i.quantidade : 1;
+          const divide = centavos % q === 0;
+          return {
+            id: crypto.randomUUID(),
+            name: (divide ? i.nome : `${q}x ${i.nome}`).slice(0, 50),
+            quantity: divide ? q : 1,
+            unitPrice: (divide ? centavos / q : centavos) / 100,
+            price: centavos / 100,
+            optionsPrice: 0,
+            totalPrice: centavos / 100,
+          };
+        })
       : [
           {
             id: crypto.randomUUID(),
