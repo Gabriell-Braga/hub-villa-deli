@@ -206,10 +206,20 @@ async function buscarPedidoIfood(
  */
 export async function aplicarEventoDePedidoIfood(
   env: Env,
-  ev: { id?: string; code?: string; fullCode?: string; orderId?: string; createdAt?: string }
+  ev: {
+    id?: string;
+    code?: string;
+    fullCode?: string;
+    orderId?: string;
+    createdAt?: string;
+    salesChannel?: string;
+  }
 ): Promise<boolean> {
   const status = statusDoEventoDePedido(ev.fullCode, ev.code);
   if (!status || !ev.orderId) return false;
+  // POS = pedido de entrega que o PRÓPRIO Hub criou (POST /merchants/{id}/orders).
+  // Não é venda nova: sem este filtro ele entrava na fila como pedido do iFood.
+  if (ev.salesChannel === "POS") return false;
 
   const existente = await obterPedidoPorIdIfood(env, ev.orderId);
 
