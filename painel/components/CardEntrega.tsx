@@ -197,6 +197,8 @@ export default function CardEntrega({
   onResponderEndereco,
   validandoColeta,
   onValidarColeta,
+  solicitandoEndereco,
+  onSolicitarEndereco,
 }: {
   despacho: Despacho;
   entrega: EntregaAoVivo | null;
@@ -211,6 +213,8 @@ export default function CardEntrega({
   onResponderEndereco?: (aceitar: boolean) => void;
   validandoColeta?: boolean;
   onValidarColeta?: (codigo: string) => void;
+  solicitandoEndereco?: boolean;
+  onSolicitarEndereco?: (endereco: Record<string, string>) => Promise<boolean>;
 }) {
   const [codigoDigitado, setCodigoDigitado] = useState("");
   const status = entrega?.status ?? despacho.status;
@@ -317,6 +321,59 @@ export default function CardEntrega({
               </button>
             </div>
           </div>
+        )}
+
+        {/* NOVO ENDEREÇO informado pela loja (cliente ligou ou mandou
+            mensagem). O iFood devolve o pedido de mudança, e o aviso acima
+            aparece para aceitar ou recusar. */}
+        {despacho.provider === "ifood" && emAndamento && !mudanca && onSolicitarEndereco && (
+          <details className="rounded-xl border border-gray-200 p-4">
+            <summary className="cursor-pointer text-sm font-medium text-gray-700">
+              Alterar endereço de entrega
+            </summary>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const form = e.currentTarget;
+                const campos = Object.fromEntries(new FormData(form)) as Record<string, string>;
+                if (await onSolicitarEndereco(campos)) form.closest("details")?.removeAttribute("open");
+              }}
+              className="mt-3 grid gap-2 sm:grid-cols-6"
+            >
+              {(
+                [
+                  ["logradouro", "Rua", "sm:col-span-4", true],
+                  ["numero", "Número", "sm:col-span-2", true],
+                  ["complemento", "Complemento", "sm:col-span-3", false],
+                  ["bairro", "Bairro", "sm:col-span-3", true],
+                  ["cidade", "Cidade", "sm:col-span-3", true],
+                  ["uf", "UF", "sm:col-span-1", true],
+                  ["cep", "CEP", "sm:col-span-2", false],
+                  ["referencia", "Referência", "sm:col-span-6", false],
+                ] as const
+              ).map(([nome, rotuloCampo, col, obrigatorio]) => (
+                <label key={nome} className={`flex flex-col gap-1 text-xs text-gray-600 ${col}`}>
+                  {rotuloCampo}
+                  <input
+                    name={nome}
+                    required={obrigatorio}
+                    maxLength={nome === "uf" ? 2 : undefined}
+                    className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                  />
+                </label>
+              ))}
+              <p className="text-xs text-gray-500 sm:col-span-6">
+                O iFood só aceita até 500 m do endereço original, e uma mudança por entrega.
+              </p>
+              <button
+                type="submit"
+                disabled={solicitandoEndereco}
+                className={`${BOTAO} bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50 sm:col-span-6`}
+              >
+                {solicitandoEndereco ? "Enviando ao iFood..." : "Enviar novo endereço ao iFood"}
+              </button>
+            </form>
+          </details>
         )}
 
         {temTrilha && <Trilha status={status} ativo={emAndamento} />}

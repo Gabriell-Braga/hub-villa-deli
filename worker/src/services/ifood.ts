@@ -1,7 +1,8 @@
-import type { Cotacao, Env, ModoOperacao, Pedido, ResultadoDespacho } from "../types";
+import type { Cotacao, Endereco, Env, ModoOperacao, Pedido, ResultadoDespacho } from "../types";
 import { getIfoodToken } from "./tokens";
 import { credenciaisIfood, prefixoCache } from "../config/ambiente";
 import { observacaoParaEntregador } from "../lib/observacao-entregador";
+import { garantirCoordenadas } from "../lib/geocode";
 
 // ---------------------------------------------------------------------------
 // iFood — módulo SHIPPING (Entrega Fácil / Sob Demanda)
@@ -783,5 +784,54 @@ export async function responderMudancaEnderecoIfood(
     { repetir: true }
   );
   console.log(`[ifood] ${acao} orderId=${deliveryId} -> ${res.status}`);
+  return res.ok ? { ok: true } : { ok: false, erro: traduzirErroIfood(res.status, await res.text()) };
+}
+
+/**
+ * A LOJA informa o novo endereço que o cliente passou (por telefone, WhatsApp).
+ * O iFood trata como o pedido do cliente: manda DELIVERY_ADDRESS_CHANGE_REQUESTED
+ * e o aviso de aceitar/recusar aparece no card, como no rastreio.
+ *
+ * Em modo teste as coordenadas vêm da loja de teste (~330 m ao norte): o iFood
+ * só aceita a mudança com rua e número que batem com o ponto, então digite o
+ * endereço da loja de teste. Só uma mudança por entrega (depois 409).
+ */
+export async function solicitarMudancaEnderecoIfood(
+  env: Env,
+  deliveryId: string,
+  e: Endereco & { referencia?: string },
+  modo: ModoOperacao
+): Promise<{ ok: boolean; erro?: string }> {
+  let coords: { lat?: number; lng?: number };
+  if (modo === "teste") {
+    const loja = await lojaIfood(env, modo);
+    if (!loja) return { ok: false, erro: "Não consegui ler o endereço da loja de teste do iFood." };
+    coords = { lat: loja.latitude + 0.003, lng: loja.longitude };
+  } else {
+    coords = await garantirCoordenadas(env, e);
+  }
+  if (coords.lat == null || coords.lng == null) {
+    return { ok: false, erro: "Não encontrei esse endereço no mapa. Confira rua, número e cidade." };
+  }
+
+  const res = await chamar(
+    env,
+    modo,
+    "POST",
+    `/shipping/v1.0/orders/${encodeURIComponent(deliveryId)}/deliveryAddressChangeRequest`,
+    {
+      streetName: e.logradouro,
+      streetNumber: e.numero || "S/N",
+      ...(e.complemento ? { complement: e.complemento } : {}),
+      neighborhood: e.bairro,
+      city: e.cidade,
+      state: e.uf,
+      country: "BR",
+      ...(e.cep ? { postalCode: e.cep.replace(/\D/g, "") } : {}),
+      ...(e.referencia ? { reference: e.referencia.slice(0, 200) } : {}),
+      coordinates: { latitude: coords.lat, longitude: coords.lng },
+    }
+  );
+  console.log(`[ifood] deliveryAddressChangeRequest orderId=${deliveryId} -> ${res.status}`);
   return res.ok ? { ok: true } : { ok: false, erro: traduzirErroIfood(res.status, await res.text()) };
 }

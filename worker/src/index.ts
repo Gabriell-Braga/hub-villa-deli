@@ -58,6 +58,7 @@ import {
   codigoColetaIfood,
   motivosCancelamentoIfood,
   responderMudancaEnderecoIfood,
+  solicitarMudancaEnderecoIfood,
 } from "./services/ifood";
 import {
   buscarEventosIfood,
@@ -960,6 +961,46 @@ app.post("/api/entrega/:idPedido/ifood/endereco", async (c) => {
   console.log(
     `[ifood] mudança de endereço ${body.aceitar ? "aceita" : "recusada"} ` +
       `pedido=${idPedido} orderId=${despacho.deliveryId} por ${c.get("usuario").email}`
+  );
+  return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// 2h) iFood — a loja informa o novo endereço que o cliente passou
+//     POST /api/entrega/:idPedido/ifood/endereco/solicitar  { logradouro, numero, ... }
+//
+// O iFood responde com DELIVERY_ADDRESS_CHANGE_REQUESTED, e o card mostra
+// aceitar/recusar (rota 2g).
+// ---------------------------------------------------------------------------
+app.post("/api/entrega/:idPedido/ifood/endereco/solicitar", async (c) => {
+  const env = c.env;
+  const idPedido = c.req.param("idPedido");
+  const b = await c.req.json<Record<string, unknown>>().catch(() => null);
+  const txt = (k: string) => (typeof b?.[k] === "string" ? (b[k] as string).trim() : "");
+  const endereco = {
+    logradouro: txt("logradouro"),
+    numero: txt("numero"),
+    complemento: txt("complemento") || undefined,
+    bairro: txt("bairro"),
+    cidade: txt("cidade"),
+    uf: txt("uf").toUpperCase(),
+    cep: txt("cep"),
+    referencia: txt("referencia") || undefined,
+  };
+  if (!endereco.logradouro || !endereco.numero || !endereco.bairro || !endereco.cidade || endereco.uf.length !== 2) {
+    return c.json({ erro: "Preencha rua, número, bairro, cidade e UF." }, 400);
+  }
+
+  const despacho = await obterDespacho(env, idPedido);
+  if (!despacho || despacho.provider !== "ifood") {
+    return c.json({ erro: "Este pedido não tem entrega do iFood." }, 404);
+  }
+
+  const r = await solicitarMudancaEnderecoIfood(env, despacho.deliveryId, endereco, await modoAtual(env));
+  if (!r.ok) return c.json({ erro: r.erro }, 409);
+  console.log(
+    `[ifood] mudança de endereço solicitada pedido=${idPedido} orderId=${despacho.deliveryId} ` +
+      `por ${c.get("usuario").email}`
   );
   return c.json({ ok: true });
 });

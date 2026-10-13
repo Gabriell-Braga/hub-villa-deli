@@ -107,6 +107,7 @@ export default function PaginaCotacao({
   // Motivos de cancelamento do iFood. Não-null = janela de escolha aberta.
   const [motivosIfood, setMotivosIfood] = useState<MotivoCancelamentoIfood[] | null>(null);
   const [respondendoEndereco, setRespondendoEndereco] = useState(false);
+  const [solicitandoEndereco, setSolicitandoEndereco] = useState(false);
   const [validandoColeta, setValidandoColeta] = useState(false);
   const [reenviando, setReenviando] = useState(false);
   // Motivo pelo qual o servidor se recusou a cotar. Estado do pedido, não erro
@@ -295,6 +296,33 @@ export default function PaginaCotacao({
       toast.erro("Erro de rede ao responder ao iFood.");
     } finally {
       setRespondendoEndereco(false);
+    }
+  }
+
+  async function solicitarEndereco(endereco: Record<string, string>): Promise<boolean> {
+    setSolicitandoEndereco(true);
+    try {
+      const res = await apiFetch(
+        `/api/entrega/${encodeURIComponent(idPedido)}/ifood/endereco/solicitar`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(endereco),
+        }
+      );
+      const json = await res.json();
+      if (!res.ok) {
+        toast.erro(json.erro ?? "O iFood não aceitou o novo endereço.");
+        return false;
+      }
+      toast.sucesso("Novo endereço enviado. Aguarde o iFood pedir a confirmação.");
+      await cotar({ silencioso: true });
+      return true;
+    } catch {
+      toast.erro("Erro de rede ao enviar o novo endereço.");
+      return false;
+    } finally {
+      setSolicitandoEndereco(false);
     }
   }
 
@@ -669,6 +697,8 @@ export default function PaginaCotacao({
           validandoColeta={validandoColeta}
           onValidarColeta={validarColeta}
           onResponderEndereco={responderEndereco}
+          solicitandoEndereco={solicitandoEndereco}
+          onSolicitarEndereco={solicitarEndereco}
         />
       )}
 
