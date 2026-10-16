@@ -503,9 +503,11 @@ export async function buscarEventosIfood(
       await new Promise((ok) => setTimeout(ok, espera));
     }
     // Bloqueio que não passa: repete pelo painel (Vercel), que sai de outro IP.
+    // Sempre o painel de PRODUÇÃO: o de HML fica atrás do login da Vercel e
+    // devolve 302. A rota só repassa, então serve aos dois modos.
     if (res.status === 403) {
       await res.body?.cancel();
-      res = await fetch(`${env.PAINEL_ORIGIN}/api/ifood/polling`, {
+      res = await fetch("https://hub-villa-deli-producao.vercel.app/api/ifood/polling", {
         headers: { Authorization: `Bearer ${token}`, "x-polling-merchants": cred.merchantId },
       });
       console.warn(`[ifood-polling] 403 do firewall nas 3 tentativas; pela Vercel -> ${res.status}`);
