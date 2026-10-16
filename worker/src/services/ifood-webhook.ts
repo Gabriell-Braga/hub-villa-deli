@@ -502,6 +502,14 @@ export async function buscarEventosIfood(
       console.warn(`[ifood-polling] 403 do firewall, tentativa ${n}/3, nova em ${Math.round(espera)} ms`);
       await new Promise((ok) => setTimeout(ok, espera));
     }
+    // Bloqueio que não passa: repete pelo painel (Vercel), que sai de outro IP.
+    if (res.status === 403) {
+      await res.body?.cancel();
+      res = await fetch(`${env.PAINEL_ORIGIN}/api/ifood/polling`, {
+        headers: { Authorization: `Bearer ${token}`, "x-polling-merchants": cred.merchantId },
+      });
+      console.warn(`[ifood-polling] 403 do firewall nas 3 tentativas; pela Vercel -> ${res.status}`);
+    }
   } catch (e) {
     await registrarFalhaPolling(env, `falha de rede: ${e instanceof Error ? e.message : e}`);
     return { pulado: "falha de rede no polling" };
