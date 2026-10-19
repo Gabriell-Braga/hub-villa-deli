@@ -280,7 +280,7 @@ IFOOD_BASE_URL = "https://merchant-api.ifood.com.br"
 IFOOD_BASE_URL_TESTE = "https://merchant-api.ifood.com.br"
 # ID da loja (UUID). O iFood nao tem sandbox: o modo TESTE usa a loja de teste
 # que o Portal do Desenvolvedor cria junto com a aplicacao (mesma URL).
-IFOOD_MERCHANT_ID = ""
+IFOOD_MERCHANT_ID = "3fcbcdc0-efce-4ab1-b634-22d9136634b8"  # "Villa Deli - Pizza & Hamburguer" (CNPJ 40.916.674/0001-55)
 IFOOD_MERCHANT_ID_TESTE = "f6dfc904-95c1-4c09-9ff9-6cf75d399363"  # "Teste - BS REFEICOES LTDA" (Bujari/AC)
 # 99Entrega: mesmo host para teste e produção — o client_id decide o ambiente.
 NOVA99_BASE_URL = "https://entrega-api.99app.com"
