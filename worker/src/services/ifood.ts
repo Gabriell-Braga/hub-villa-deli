@@ -250,7 +250,13 @@ export function traduzirErroIfood(status: number, corpo: string): string {
 
   if (code && ERROS[code]) return ERROS[code];
   if (status === 401 || status === 403) {
-    return "O iFood recusou as credenciais ou a loja não autorizou o aplicativo. Veja em Configurações.";
+    // Com a mensagem do iFood: o 403 também vem quando o pedido não aceita
+    // entregador (ex.: entrega já é do iFood), e aí a culpa não é da credencial.
+    const motivo = [code, message].filter(Boolean).join(": ");
+    return (
+      "O iFood recusou as credenciais ou a loja não autorizou o aplicativo. Veja em Configurações." +
+      (motivo ? ` (${motivo})` : "")
+    );
   }
   if (status === 404) return "O iFood não encontrou este pedido ou esta loja.";
   if (status >= 500) return "O iFood está instável no momento. Tente novamente em instantes.";
