@@ -3,6 +3,11 @@ main = "src/index.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
+# Workers Logs: guarda os console.log para pesquisar depois no painel da
+# Cloudflare, sem precisar de `wrangler tail` aberto. Vale para todos os envs.
+[observability]
+enabled = true
+
 # ===========================================================================
 # AMBIENTES
 #
