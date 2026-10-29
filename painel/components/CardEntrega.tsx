@@ -199,6 +199,7 @@ export default function CardEntrega({
   onValidarColeta,
   solicitandoEndereco,
   onSolicitarEndereco,
+  semTelefoneDoCliente,
 }: {
   despacho: Despacho;
   entrega: EntregaAoVivo | null;
@@ -215,6 +216,8 @@ export default function CardEntrega({
   onValidarColeta?: (codigo: string) => void;
   solicitandoEndereco?: boolean;
   onSolicitarEndereco?: (endereco: Record<string, string>) => Promise<boolean>;
+  /** true = o SMS do código foi para a loja; o cliente não tem o número. */
+  semTelefoneDoCliente?: boolean;
 }) {
   const [codigoDigitado, setCodigoDigitado] = useState("");
   const status = entrega?.status ?? despacho.status;
@@ -236,6 +239,10 @@ export default function CardEntrega({
   // O código que o iFood mandou no evento vale mais que o calculado no despacho.
   const codigoEntrega = pendenciasIfood?.codigoEntrega ?? despacho.codigoEntrega;
   const mostraCodigo = !!codigoEntrega && emAndamento;
+  // Código da 99/Uber num pedido sem telefone do cliente: ninguém avisou o
+  // cliente. O do iFood Shipping não entra — esse o cliente vê no app.
+  const enviarCodigoPeloChat =
+    mostraCodigo && !!semTelefoneDoCliente && !pendenciasIfood?.codigoEntrega;
   // CÓDIGO DE COLETA (iFood). Só até a coleta: depois, o pedido já saiu.
   const temCodigoColeta = !!pendenciasIfood?.temCodigoColeta;
   const coletaValidada = !!pendenciasIfood?.coletaValidadaEm;
@@ -490,6 +497,12 @@ export default function CardEntrega({
                       {codigoEntrega}
                     </span>
                   </div>
+                )}
+                {enviarCodigoPeloChat && (
+                  <p className="rounded-lg bg-amber-50 px-4 py-2 text-xs font-medium text-amber-800 ring-1 ring-amber-200">
+                    O cliente não recebeu este código. Envie pelo chat do iFood antes do
+                    entregador chegar.
+                  </p>
                 )}
 
                 {/* CÓDIGO DE COLETA. O painel não mostra o código: o atendente

@@ -699,6 +699,7 @@ export default function PaginaCotacao({
           onResponderEndereco={responderEndereco}
           solicitandoEndereco={solicitandoEndereco}
           onSolicitarEndereco={solicitarEndereco}
+          semTelefoneDoCliente={pedido?.semTelefoneDoCliente}
         />
       )}
 
