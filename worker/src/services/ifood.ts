@@ -338,6 +338,27 @@ export async function chamar(
       continue;
     }
 
+    // 403 sem JSON = página "Access Denied" do firewall do iFood (Akamai), que
+    // bloqueia o IP do Cloudflare. Não chegou no iFood: repete pelo painel
+    // (Vercel), mesmo desvio do polling. Sempre o painel de PRODUÇÃO (o de HML
+    // fica atrás do login da Vercel).
+    if (res.status === 403 && !res.headers.get("content-type")?.includes("json")) {
+      await res.body?.cancel();
+      res = await fetch(
+        `https://hub-villa-deli-producao.vercel.app/api/ifood/proxy?caminho=${encodeURIComponent(caminho)}`,
+        {
+          method: metodo,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            ...(corpo !== undefined ? { "Content-Type": "application/json" } : {}),
+            ...(chaveIdempotencia ? { "idempotency-key": chaveIdempotencia } : {}),
+          },
+          body: corpo !== undefined ? JSON.stringify(corpo) : undefined,
+        }
+      );
+      console.warn(`[ifood] ${rota}: 403 do firewall; pela Vercel -> ${res.status}`);
+    }
+
     const passageira = res.status === 429 || (repetir && res.status >= 500);
     if (!passageira || ultima) {
       // Toda chamada no log (critério de homologação: registrar as operações).
