@@ -341,8 +341,10 @@ export async function despachar99(
     // Código na COLETA desligado: a 99 mostraria um código que só o Hub
     // conhece, e o balcão não tem onde vê-lo. O código na ENTREGA fica — é o
     // que impede entregar à pessoa errada, e vai no card como o PIN do Uber.
+    // Exceto sem telefone do cliente (iFood): o SMS com o código cairia no
+    // celular da loja e o entregador ficaria parado na porta.
     need_pickup_code: false,
-    need_dropoff_code: true,
+    need_dropoff_code: !pedido.semTelefoneDoCliente,
     return_type: 1,
   });
 

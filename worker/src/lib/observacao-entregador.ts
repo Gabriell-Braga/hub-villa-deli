@@ -13,6 +13,10 @@ const INSTRUCAO_BAG =
 export function observacaoParaEntregador(pedido: Pedido): string {
   const partes = [INSTRUCAO_BAG];
 
+  // Logo depois da bag: a 99 corta a nota em 127 caracteres, e sem este
+  // número o entregador não tem como falar com o cliente do iFood.
+  if (pedido.contatoCliente) partes.push(`Cliente: ligar ${pedido.contatoCliente}`);
+
   const obs = pedido.observacao?.trim();
   if (obs) partes.push(obs);
 

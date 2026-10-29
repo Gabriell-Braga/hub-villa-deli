@@ -199,6 +199,11 @@ export interface Pedido {
    * quem estiver no balcão tem que saber que ligar ali não fala com o cliente.
    */
   semTelefoneDoCliente?: boolean;
+  /**
+   * Contato mascarado do iFood ("0800 ... localizador ..."). Não recebe SMS,
+   * mas o entregador consegue ligar e falar com o cliente.
+   */
+  contatoCliente?: string;
   /** Como foi pago, em português, para a tela ("Pix", "Cartão de crédito"). */
   formaPagamento?: string;
   observacao?: string;

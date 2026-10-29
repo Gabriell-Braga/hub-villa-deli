@@ -122,6 +122,11 @@ function descreverPagamento(o: PedidoIfoodApi): string {
   return m?.type === "OFFLINE" ? `${nome} na entrega` : `${nome} (pago no iFood)`;
 }
 
+function contatoMascarado(p?: { number?: string; localizer?: string }): string | undefined {
+  if (!p?.number) return undefined;
+  return p.localizer ? `${p.number} localizador ${p.localizer}` : p.number;
+}
+
 function traduzirPedidoIfood(
   o: PedidoIfoodApi,
   status: StatusPedidoIfood,
@@ -172,6 +177,7 @@ function traduzirPedidoIfood(
     numeroExterno: o.displayId,
     idExterno: o.id,
     semTelefoneDoCliente: true,
+    contatoCliente: contatoMascarado(o.customer?.phone),
     observacao: undefined,
     observacaoEntrega: o.delivery?.observations?.trim() || undefined,
     codigoColeta: o.delivery?.pickupCode || undefined,
