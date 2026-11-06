@@ -229,6 +229,32 @@ async function cotacaoLalamove(
   });
 }
 
+/**
+ * Cota moto e carro e fica com o mais barato.
+ *
+ * Em produção a moto leva uma sobretaxa dinâmica (`surcharge`, horário de
+ * pico) que o carro não teve: em 06/11/2026 às 17h30, 400 m saíam R$ 17,50
+ * de moto (7,00 + 10,50 de sobretaxa) e R$ 9,00 de carro. O sandbox não tem
+ * sobretaxa, por isso a diferença não apareceu nos testes. Empate fica com a
+ * moto, que é o veículo normal de comida.
+ */
+async function cotacaoMaisBarata(
+  env: Env,
+  pedido: Pedido,
+  modo: ModoOperacao
+): Promise<{ q: CotacaoLalamove; veiculo: PreferenciaVeiculo }> {
+  const [moto, carro] = await Promise.allSettled([
+    cotacaoLalamove(env, pedido, modo, "moto"),
+    cotacaoLalamove(env, pedido, modo, "carro"),
+  ]);
+  if (moto.status === "rejected" && carro.status === "rejected") throw moto.reason;
+  if (carro.status === "rejected") return { q: (moto as PromiseFulfilledResult<CotacaoLalamove>).value, veiculo: "moto" };
+  if (moto.status === "rejected") return { q: carro.value, veiculo: "carro" };
+  return Number(carro.value.priceBreakdown.total) < Number(moto.value.priceBreakdown.total)
+    ? { q: carro.value, veiculo: "carro" }
+    : { q: moto.value, veiculo: "moto" };
+}
+
 export async function cotarLalamove(env: Env, pedido: Pedido, modo: ModoOperacao): Promise<Cotacao> {
   const base: Cotacao = {
     provider: "lalamove",
@@ -253,7 +279,7 @@ export async function cotarLalamove(env: Env, pedido: Pedido, modo: ModoOperacao
   }
 
   try {
-    const [q, saldo] = await Promise.all([cotacaoLalamove(env, pedido, modo, "moto"), saldoLalamove(env, modo)]);
+    const [{ q, veiculo }, saldo] = await Promise.all([cotacaoMaisBarata(env, pedido, modo), saldoLalamove(env, modo)]);
     const km = q.distance ? Number(q.distance.value) / (q.distance.unit === "m" ? 1000 : 1) : null;
     const preco = Number(q.priceBreakdown.total);
     // A carteira é pré-paga: sem saldo a Lalamove recusa o pedido (402). Avisar
@@ -271,7 +297,7 @@ export async function cotarLalamove(env: Env, pedido: Pedido, modo: ModoOperacao
       // régua do motoboy sem faixa fixa, sobre a distância da rota deles.
       etaMinutos: km != null && Number.isFinite(km) ? Math.round(ETA_BASE_MIN + km * ETA_MIN_POR_KM) : null,
       detalhe: [
-        km != null && Number.isFinite(km) ? `${km.toFixed(2)} km · moto · tempo estimado` : "moto",
+        km != null && Number.isFinite(km) ? `${km.toFixed(2)} km · ${veiculo} · tempo estimado` : veiculo,
         saldo && saldo.valor < SALDO_BAIXO ? `saldo baixo: ${reais(saldo.valor)}` : null,
       ]
         .filter(Boolean)
@@ -303,15 +329,16 @@ export async function despacharLalamove(
   pedido: Pedido,
   cotacao: Cotacao,
   modo: ModoOperacao,
-  veiculo: PreferenciaVeiculo = "moto",
+  _veiculo: PreferenciaVeiculo = "moto",
   sequencia = 1
 ): Promise<ResultadoDespacho> {
   pedido = comTelefoneDeTeste(env, pedido, modo);
 
   // Recota sempre: a do card vence em 5 minutos, e o pedido precisa dos
   // stopId dela. O preço é corrigido NA cotação recebida, que é de onde o
-  // /api/despachar tira o custo gravado no histórico.
-  const q = await cotacaoLalamove(env, pedido, modo, veiculo);
+  // /api/despachar tira o custo gravado no histórico. O veículo pedido pelo
+  // painel é ignorado: vai o mais barato agora, como no card.
+  const { q, veiculo } = await cotacaoMaisBarata(env, pedido, modo);
   cotacao.preco = Number(q.priceBreakdown.total);
 
   const remarks = [
