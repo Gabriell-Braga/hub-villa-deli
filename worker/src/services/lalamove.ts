@@ -8,6 +8,7 @@ import type {
   StatusEntregaUber,
 } from "../types";
 import { credenciaisLalamove } from "../config/ambiente";
+import { ETA_BASE_MIN, ETA_MIN_POR_KM } from "../config/faixas-motoboy";
 import { assinaturaValidaLalamove, hmacSha256Hex } from "../lib/assinatura";
 import { registrarEvento } from "../lib/store";
 import { enderecoFormatado } from "../lib/geo";
@@ -222,7 +223,10 @@ export async function cotarLalamove(env: Env, pedido: Pedido, modo: ModoOperacao
       preco: Number(q.priceBreakdown.total),
       quoteId: q.quotationId,
       expiraEm: q.expiresAt ?? null,
-      detalhe: km != null && Number.isFinite(km) ? `${km.toFixed(2)} km · moto` : "moto",
+      // A Lalamove não devolve tempo na cotação. Estimativa do Hub: a mesma
+      // régua do motoboy sem faixa fixa, sobre a distância da rota deles.
+      etaMinutos: km != null && Number.isFinite(km) ? Math.round(ETA_BASE_MIN + km * ETA_MIN_POR_KM) : null,
+      detalhe: km != null && Number.isFinite(km) ? `${km.toFixed(2)} km · moto · tempo estimado` : "moto",
     };
   } catch (e) {
     return { ...base, erro: e instanceof Error ? e.message : "Falha ao cotar na Lalamove." };

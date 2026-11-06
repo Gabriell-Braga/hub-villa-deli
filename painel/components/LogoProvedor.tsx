@@ -1,6 +1,6 @@
 import type { ProviderId } from "@/lib/tipos";
 import { COR_PROVEDOR, ROTULO_PROVEDOR } from "@/lib/tipos";
-import { PATH_99, PATH_IFOOD } from "./marcas";
+import { PATH_99, PATH_IFOOD, PATH_LALAMOVE } from "./marcas";
 
 // ---------------------------------------------------------------------------
 // Marca de cada transportadora, para o atendente reconhecer o card de relance.
@@ -41,7 +41,6 @@ const NEUTRO = { fundo: "#9CA3AF", texto: "#FFFFFF" };
  */
 const MARCA: Partial<Record<ProviderId, { texto: string; tamanho: number }>> = {
   uber: { texto: "Uber", tamanho: 11 },
-  lalamove: { texto: "Lala", tamanho: 10 },
 };
 
 export default function LogoProvedor({
@@ -73,6 +72,10 @@ export default function LogoProvedor({
         // deles. O traçado tem viewBox 24; escala 0.75 + margem de 7 centraliza
         // em 18px dentro do quadrado de 32.
         <path d={PATH_IFOOD} fill={cor.texto} transform="translate(7 7) scale(0.75)" />
+      ) : provider === "lalamove" ? (
+        // Beija-flor oficial em branco sobre o laranja da marca. O traçado tem
+        // viewBox 1200 com a margem do ícone deles: escala direta, 32 / 1200.
+        <path d={PATH_LALAMOVE} fill={cor.texto} transform="scale(0.026667)" />
       ) : provider === "99" ? (
         // Os "99" do logotipo oficial. O traçado tem viewBox 500 e já inclui a
         // margem do ícone deles, então a escala é direta: 32 / 500.
