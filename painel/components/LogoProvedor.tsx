@@ -25,6 +25,7 @@ const CORES: Record<ProviderId, { fundo: string; texto: string }> = {
   ifood: { fundo: COR_PROVEDOR.ifood, texto: "#FFFFFF" },
   // Amarelo e preto do logotipo oficial, não o COR_PROVEDOR (dos gráficos).
   "99": { fundo: "#FFDD00", texto: "#212121" },
+  lalamove: { fundo: COR_PROVEDOR.lalamove, texto: "#FFFFFF" },
   motoboy: { fundo: "var(--marca-primaria)", texto: "var(--marca-contraste)" },
   // "Outra plataforma" não é marca de ninguém: cinza, e um ícone de caixa em
   // vez de wordmark.
@@ -40,6 +41,7 @@ const NEUTRO = { fundo: "#9CA3AF", texto: "#FFFFFF" };
  */
 const MARCA: Partial<Record<ProviderId, { texto: string; tamanho: number }>> = {
   uber: { texto: "Uber", tamanho: 11 },
+  lalamove: { texto: "Lala", tamanho: 10 },
 };
 
 export default function LogoProvedor({

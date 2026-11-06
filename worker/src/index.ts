@@ -76,6 +76,7 @@ import {
   despacharPedidoIfood,
 } from "./services/ifood-pedidos";
 import { cancelar99, sincronizar99, sincronizarAbertas99 } from "./services/noventa99";
+import { cancelarLalamove, sincronizarAbertasLalamove, sincronizarLalamove } from "./services/lalamove";
 import { processarWebhook99 } from "./services/noventa99-webhook";
 import {
   entregarLink,
@@ -870,9 +871,9 @@ app.post("/api/entrega/:idPedido/cancelar", async (c) => {
   const despacho = await obterDespacho(env, idPedido);
   if (!despacho) return c.json({ erro: "Este pedido não tem entrega despachada." }, 404);
 
-  if (despacho.provider !== "uber" && despacho.provider !== "ifood" && despacho.provider !== "99") {
+  if (!["uber", "ifood", "99", "lalamove"].includes(despacho.provider)) {
     return c.json(
-      { erro: "Cancelamento automático só existe no Uber, no iFood e na 99. Use a confirmação manual." },
+      { erro: "Cancelamento automático só existe no Uber, no iFood, na 99 e na Lalamove. Use a confirmação manual." },
       400
     );
   }
@@ -893,6 +894,8 @@ app.post("/api/entrega/:idPedido/cancelar", async (c) => {
     r = await cancelarIfood(env, pedido, despacho.deliveryId, modo, body?.codigoMotivo);
   } else if (despacho.provider === "99") {
     r = await cancelar99(env, idPedido, despacho.deliveryId, modo);
+  } else if (despacho.provider === "lalamove") {
+    r = await cancelarLalamove(env, despacho.deliveryId, modo);
   } else {
     r = await cancelarUber(env, despacho.deliveryId, modo);
   }
@@ -1123,13 +1126,16 @@ app.get("/api/cotacao/:idPedido", async (c) => {
     // entrega garantida (a própria 99 avisa) e em dev ele nem chega, então a
     // volta de 20 s da tela consulta o detalhe do pedido. Com teto de tempo:
     // a 99 lenta não pode travar a tela — mostra o que o banco tem.
-    if (jaDespachado.provider === "99") {
+    // A Lalamove (ainda sem webhook) segue o mesmo caminho.
+    if (jaDespachado.provider === "99" || jaDespachado.provider === "lalamove") {
       const entrega = await obterEntregaAoVivo(env, idPedido);
       if (!["delivered", "canceled", "returned"].includes(entrega?.status ?? "")) {
+        const modo = await modoAtual(env);
         await Promise.race([
-          sincronizar99(env, idPedido, await modoAtual(env)).catch((e) =>
-            console.warn(`[99-sync] ${e instanceof Error ? e.message : e}`)
-          ),
+          (jaDespachado.provider === "99"
+            ? sincronizar99(env, idPedido, modo)
+            : sincronizarLalamove(env, idPedido, modo)
+          ).catch((e) => console.warn(`[${jaDespachado.provider}-sync] ${e instanceof Error ? e.message : e}`)),
           new Promise((ok) => setTimeout(ok, 4000)),
         ]);
       }
@@ -1560,6 +1566,14 @@ export default {
         modoAtual(env)
           .then((modo) => sincronizarAbertas99(env, modo))
           .catch((e) => console.error(`[99-sync] ${e instanceof Error ? e.message : e}`))
+      );
+    }
+    // A Lalamove ainda não tem webhook: esta é a reserva da tela do pedido.
+    if (provedorAtivo(env, "lalamove")) {
+      ctx.waitUntil(
+        modoAtual(env)
+          .then((modo) => sincronizarAbertasLalamove(env, modo))
+          .catch((e) => console.error(`[lalamove-sync] ${e instanceof Error ? e.message : e}`))
       );
     }
   },

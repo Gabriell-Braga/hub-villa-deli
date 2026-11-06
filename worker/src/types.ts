@@ -111,6 +111,11 @@ export interface Env {
   NOVA99_CLIENT_ID_TESTE: string;
   NOVA99_CLIENT_SECRET_TESTE: string;
   NOVA99_WEBHOOK_SECRET_TESTE: string;
+  /** Lalamove (Partner Portal > Developers): pk_test/sk_test e pk_prod/sk_prod. */
+  LALAMOVE_API_KEY_TESTE: string;
+  LALAMOVE_API_SECRET_TESTE: string;
+  LALAMOVE_API_KEY: string;
+  LALAMOVE_API_SECRET: string;
 
   // Geocodificação (opcional). Sem chave, usa Nominatim/OpenStreetMap grátis.
   GOOGLE_MAPS_API_KEY: string;
@@ -126,7 +131,7 @@ export interface Env {
  * fora do Hub (iFood ou 99, hoje sem integração). Existe para o pedido sair da
  * fila sem sumir do histórico. Ver marcarEntregasEmLote em lib/store.ts.
  */
-export type ProviderId = "uber" | "ifood" | "99" | "motoboy" | "outra";
+export type ProviderId = "uber" | "ifood" | "99" | "lalamove" | "motoboy" | "outra";
 
 export interface Endereco {
   logradouro: string;

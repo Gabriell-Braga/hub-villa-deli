@@ -67,6 +67,13 @@ NOVA99_CLIENT_ID=
 NOVA99_CLIENT_SECRET=
 NOVA99_WEBHOOK_SECRET=
 
+# --- Lalamove ----------------------------------------------------------------
+# Partner Portal > Developers. Sandbox: pk_test/sk_test. Produção: pk_prod/sk_prod.
+LALAMOVE_API_KEY_TESTE=
+LALAMOVE_API_SECRET_TESTE=
+LALAMOVE_API_KEY=
+LALAMOVE_API_SECRET=
+
 # --- Opcional --------------------------------------------------------------
 # Vazio = geocodifica pelo Nominatim/OpenStreetMap (grátis, mais impreciso).
 GOOGLE_MAPS_API_KEY=

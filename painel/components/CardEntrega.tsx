@@ -258,7 +258,9 @@ export default function CardEntrega({
       ? "Cancelar corrida no iFood"
       : despacho.provider === "99"
         ? "Cancelar corrida na 99"
-        : "Cancelar corrida no Uber";
+        : despacho.provider === "lalamove"
+          ? "Cancelar corrida na Lalamove"
+          : "Cancelar corrida no Uber";
 
   return (
     <section
@@ -640,6 +642,9 @@ export default function CardEntrega({
             )}
             {despacho.provider === "ifood" && (
               <p className="mt-0.5">Com entregador designado, o iFood cobra parte do frete.</p>
+            )}
+            {despacho.provider === "lalamove" && (
+              <p className="mt-0.5">A Lalamove só cancela até 5 minutos depois de designar o entregador.</p>
             )}
           </div>
         )}

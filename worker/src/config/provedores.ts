@@ -10,6 +10,7 @@ import type {
 import { cotarUber, despacharUber } from "../services/uber";
 import { cotarIfood, despacharIfood } from "../services/ifood";
 import { cotar99, despachar99 } from "../services/noventa99";
+import { cotarLalamove, despacharLalamove } from "../services/lalamove";
 import { cotarMotoboy, despacharMotoboy } from "../services/motoboy";
 import { motoboyLigado } from "./motoboy";
 
@@ -83,6 +84,14 @@ export const PROVEDORES: Record<ProviderId, Provedor> = {
     ativo: false,
     cotar: cotar99,
     despachar: despachar99,
+  },
+  lalamove: {
+    id: "lalamove",
+    nome: "Lalamove",
+    // API v3 (ver services/lalamove.ts). Liga com PROVEDORES_ATIVOS.
+    ativo: false,
+    cotar: cotarLalamove,
+    despachar: despacharLalamove,
   },
   // NÃO é um parceiro: marca entregas feitas por fora do Hub. Nunca é cotado
   // nem despachado, por isso as funções recusam. Precisa existir aqui porque

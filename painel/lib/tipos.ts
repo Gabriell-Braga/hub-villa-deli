@@ -9,7 +9,7 @@
  * (iFood ou 99, ainda sem integração), para o pedido sair da fila sem sumir do
  * histórico.
  */
-export type ProviderId = "uber" | "ifood" | "99" | "motoboy" | "outra";
+export type ProviderId = "uber" | "ifood" | "99" | "lalamove" | "motoboy" | "outra";
 export type Papel = "atendente" | "admin";
 export type StatusPedido = "recebido" | "cotado" | "despachando" | "despachado";
 
@@ -262,6 +262,7 @@ export const ROTULO_PROVEDOR: Record<ProviderId, string> = {
   outra: "Outra plataforma",
   ifood: "iFood Entrega Fácil",
   "99": "99 Entregas",
+  lalamove: "Lalamove",
   motoboy: "Motoboy Próprio",
 };
 
@@ -272,5 +273,6 @@ export const COR_PROVEDOR: Record<ProviderId, string> = {
   outra: "#9CA3AF",
   ifood: "#EA1D2C",
   "99": "#FFC700",
+  lalamove: "#F16622",
   motoboy: "#6B7280", // cinza neutro: o motoboy é "da casa", sem marca de parceiro
 };

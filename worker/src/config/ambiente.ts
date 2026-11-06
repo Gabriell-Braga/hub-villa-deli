@@ -157,6 +157,25 @@ export function credenciais99(env: Env, modo: ModoOperacao): Credenciais99 {
   };
 }
 
+export interface CredenciaisLalamove {
+  apiKey: string;
+  apiSecret: string;
+  baseUrl: string;
+}
+
+/**
+ * Credenciais da Lalamove para o modo pedido. Sandbox tem host próprio e
+ * chaves pk_test/sk_test. Sem fallback do teste para produção, como na 99.
+ */
+export function credenciaisLalamove(env: Env, modo: ModoOperacao): CredenciaisLalamove {
+  const teste = modo === "teste";
+  return {
+    apiKey: ((teste ? env.LALAMOVE_API_KEY_TESTE : env.LALAMOVE_API_KEY) ?? "").trim(),
+    apiSecret: ((teste ? env.LALAMOVE_API_SECRET_TESTE : env.LALAMOVE_API_SECRET) ?? "").trim(),
+    baseUrl: teste ? "https://rest.sandbox.lalamove.com" : "https://rest.lalamove.com",
+  };
+}
+
 /** O modo teste está caindo nas credenciais de produção por falta das de teste? */
 export function testeUsandoCredencialDeProducao(env: Env): boolean {
   return (

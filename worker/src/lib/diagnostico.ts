@@ -2,12 +2,14 @@ import type { Env } from "../types";
 import {
   ambiente,
   credenciais99,
+  credenciaisLalamove,
   credenciaisIfood,
   credenciaisUber,
   testeUsandoCredencialDeProducao,
 } from "../config/ambiente";
 import { modoAtual, podeUsarProducao } from "../config/modo";
 import { nomeProvedor, provedoresLigados } from "../config/provedores";
+import { chamarLalamove } from "../services/lalamove";
 import { get99Token, getIfoodToken, getUberToken } from "../services/tokens";
 
 // ---------------------------------------------------------------------------
@@ -408,6 +410,42 @@ export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
       comoResolver:
         "No Modo de desenvolvedor da 99Entrega, cadastre a URL de webhook do Hub e envie a chave de assinatura ao suporte.",
     });
+  }
+
+  // --- Lalamove -------------------------------------------------------------
+  if (ativos.includes("lalamove")) {
+    const cl = credenciaisLalamove(env, modo);
+    if (!preenchido(cl.apiKey) || !preenchido(cl.apiSecret)) {
+      itens.push({
+        chave: "lalamove",
+        titulo: "Lalamove",
+        status: "erro",
+        detalhe: modo === "producao" ? "Sem chaves de produção." : "Sem chaves de teste.",
+        comoResolver: "No Partner Portal da Lalamove, em Developers, copie a API Key e o Secret.",
+      });
+    } else {
+      // Lista de cidades: valida a assinatura sem criar cotação nem pedido.
+      try {
+        await chamarLalamove(env, modo, "GET", "/cities");
+        itens.push({
+          chave: "lalamove",
+          titulo: "Lalamove",
+          status: "ok",
+          detalhe:
+            modo === "producao"
+              ? "Conectado à conta real da Lalamove."
+              : "Conectado ao sandbox da Lalamove. Nenhum entregador real é acionado.",
+        });
+      } catch {
+        itens.push({
+          chave: "lalamove",
+          titulo: "Lalamove",
+          status: "erro",
+          detalhe: "A Lalamove recusou as chaves cadastradas.",
+          comoResolver: "Confira a API Key e o Secret no Partner Portal da Lalamove (Developers).",
+        });
+      }
+    }
   }
 
   // --- Provedores ativos ----------------------------------------------------

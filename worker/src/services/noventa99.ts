@@ -439,7 +439,7 @@ export const STATUS_EVENTO_99: Record<string, StatusEntregaUber | null> = {
 };
 
 /** Mesma régua do iFood: o status só avança; finais empatam no topo. */
-const ETAPA: Record<string, number> = {
+export const ETAPA: Record<string, number> = {
   pending: 0,
   pickup: 1,
   at_pickup: 2,

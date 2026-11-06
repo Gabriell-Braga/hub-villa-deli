@@ -63,7 +63,7 @@ AMBIENTE = "dev"
 #   "uber,motoboy"            -> Uber + motoboy próprio   (configuração atual)
 #   "uber,ifood,99,motoboy"   -> todos
 # Vazio = usa o padrão de src/config/provedores.ts.
-PROVEDORES_ATIVOS = "uber,99,motoboy"
+PROVEDORES_ATIVOS = "uber,99,lalamove,motoboy"
 
 # Origens liberadas no CORS (separadas por vírgula).
 PAINEL_ORIGIN = "http://localhost:3000"
@@ -160,7 +160,7 @@ crons = ["* * * * *", "0 4 * * *"]
 
 [env.hml.vars]
 AMBIENTE = "hml"
-PROVEDORES_ATIVOS = "uber,ifood,99,motoboy"
+PROVEDORES_ATIVOS = "uber,ifood,99,lalamove,motoboy"
 PAINEL_ORIGIN = "https://hub-villa-deli-braga-s-team.vercel.app"
 
 RESTAURANTE_NOME = "Villa Deli"
