@@ -76,7 +76,12 @@ import {
   despacharPedidoIfood,
 } from "./services/ifood-pedidos";
 import { cancelar99, sincronizar99, sincronizarAbertas99 } from "./services/noventa99";
-import { cancelarLalamove, sincronizarAbertasLalamove, sincronizarLalamove } from "./services/lalamove";
+import {
+  cancelarLalamove,
+  processarWebhookLalamove,
+  sincronizarAbertasLalamove,
+  sincronizarLalamove,
+} from "./services/lalamove";
 import { processarWebhook99 } from "./services/noventa99-webhook";
 import {
   entregarLink,
@@ -734,6 +739,28 @@ app.post("/api/webhook/99", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// 1f) Webhook da Lalamove — eventos de entrega
+//     POST /api/webhook/lalamove
+//
+// Cadastrada pela API (PATCH /v3/webhook) com a conta de cada modo. A
+// assinatura vem no corpo e é conferida com o API secret (ver
+// services/lalamove.ts). O evento só avisa; o estado vem do detalhe.
+// ---------------------------------------------------------------------------
+app.post("/api/webhook/lalamove", async (c) => {
+  const corpoBruto = await c.req.text();
+  const tipo = corpoBruto.match(/"eventType"\s*:\s*"([^"]+)"/)?.[1] ?? "?";
+  try {
+    const r = await processarWebhookLalamove(c.env, new URL(c.req.url).pathname, corpoBruto);
+    if (r.http !== 200) console.warn(`[lalamove-webhook] ${tipo}: ${r.motivo}`);
+    else console.log(`[lalamove-webhook] ${tipo}: ${r.aplicado ? "aplicado" : r.motivo}`);
+    return c.json(r, r.http);
+  } catch (e) {
+    console.error(`[lalamove-webhook] falha ao processar: ${e instanceof Error ? e.message : e}`);
+    return c.json({ erro: "falha ao processar" }, 500);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // 2) Listagem de pedidos
 //    GET /api/pedidos?aba=abertos|historico&limite=50
 // ---------------------------------------------------------------------------
@@ -1126,7 +1153,7 @@ app.get("/api/cotacao/:idPedido", async (c) => {
     // entrega garantida (a própria 99 avisa) e em dev ele nem chega, então a
     // volta de 20 s da tela consulta o detalhe do pedido. Com teto de tempo:
     // a 99 lenta não pode travar a tela — mostra o que o banco tem.
-    // A Lalamove (ainda sem webhook) segue o mesmo caminho.
+    // A Lalamove segue o mesmo caminho: webhook sem entrega garantida.
     if (jaDespachado.provider === "99" || jaDespachado.provider === "lalamove") {
       const entrega = await obterEntregaAoVivo(env, idPedido);
       if (!["delivered", "canceled", "returned"].includes(entrega?.status ?? "")) {
@@ -1568,7 +1595,7 @@ export default {
           .catch((e) => console.error(`[99-sync] ${e instanceof Error ? e.message : e}`))
       );
     }
-    // A Lalamove ainda não tem webhook: esta é a reserva da tela do pedido.
+    // Reserva do webhook da Lalamove, pelo mesmo motivo.
     if (provedorAtivo(env, "lalamove")) {
       ctx.waitUntil(
         modoAtual(env)

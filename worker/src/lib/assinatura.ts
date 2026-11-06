@@ -84,3 +84,28 @@ export async function assinaturaValida99(
 
   return comparaSegura(base64, r) || comparaSegura(hex, r.toLowerCase());
 }
+
+/**
+ * Assinatura do webhook da Lalamove. Não está na documentação pública: foi
+ * descoberta comparando eventos reais do sandbox (06/11/2026).
+ *
+ *   HMAC-SHA256(api secret, "{timestamp}\r\nPOST\r\n{path}\r\n\r\n{data}") em hex
+ *
+ * `timestamp` e `signature` vêm DENTRO do corpo (em segundos). `path` é o da
+ * nossa rota. `data` é o trecho CRU do campo data, como chegou — re-serializar
+ * muda a ordem das chaves e o hash não bate. O campo data é sempre o último
+ * do corpo, então o trecho vai de `"data":` até a chave final.
+ */
+export async function assinaturaValidaLalamove(
+  segredo: string,
+  path: string,
+  corpoBruto: string,
+  timestamp: number | string | undefined,
+  recebida: string | undefined
+): Promise<boolean> {
+  const inicio = corpoBruto.indexOf('"data":');
+  if (!segredo || !recebida || timestamp == null || inicio < 0) return false;
+  const data = corpoBruto.slice(inicio + 7, corpoBruto.lastIndexOf("}")).trim();
+  const esperada = await hmacSha256Hex(segredo, `${timestamp}\r\nPOST\r\n${path}\r\n\r\n${data}`);
+  return comparaSegura(esperada, recebida.trim().toLowerCase());
+}

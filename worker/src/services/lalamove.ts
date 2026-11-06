@@ -8,7 +8,8 @@ import type {
   StatusEntregaUber,
 } from "../types";
 import { credenciaisLalamove } from "../config/ambiente";
-import { hmacSha256Hex } from "../lib/assinatura";
+import { assinaturaValidaLalamove, hmacSha256Hex } from "../lib/assinatura";
+import { registrarEvento } from "../lib/store";
 import { enderecoFormatado } from "../lib/geo";
 import { observacaoParaEntregador } from "../lib/observacao-entregador";
 import { ETAPA } from "./noventa99";
@@ -35,11 +36,12 @@ import { ETAPA } from "./noventa99";
 // Por isso o despacho sempre recota (e corrige o preço) em vez de confiar no
 // quotationId do card.
 //
-// Acompanhamento sem webhook por enquanto: a tela do pedido e a tarefa de 5
-// em 5 minutos consultam o detalhe, como a 99 sem chave de assinatura.
-// Validado no sandbox em 06/11/2026: cotação, pedido, detalhe e cancelamento.
-// ponytail: sem webhook nem ORDER_REPLACED; adicionar quando o atraso de até
-// 20 s (tela) / 5 min (cron) atrapalhar a operação.
+// Acompanhamento: o webhook (processarWebhookLalamove) é o gatilho; a tela
+// do pedido e a tarefa de 5 em 5 minutos são a reserva. Os três terminam em
+// sincronizarLalamove, que lê o detalhe do pedido.
+//
+// Validado no sandbox em 06/11/2026: cotação, pedido, detalhe, cancelamento
+// e webhook assinado.
 // ---------------------------------------------------------------------------
 
 /**
@@ -427,4 +429,135 @@ export async function sincronizarAbertasLalamove(env: Env, modo: ModoOperacao): 
     const s = await sincronizarLalamove(env, id_pedido, modo);
     if (!s.ok) console.warn(`[lalamove-sync] ${id_pedido}: ${s.erro}`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// WEBHOOK
+//
+// URL cadastrada pela própria API (PATCH /v3/webhook), uma por conta: a de
+// sandbox aponta para o hml. Não há chave separada: a assinatura usa o mesmo
+// API secret das chamadas (ver assinaturaValidaLalamove). Formato capturado
+// de eventos reais do sandbox:
+//
+//   { apiKey, timestamp (s), signature, eventId, eventType, eventVersion,
+//     data: { order: { orderId, status, previousStatus, driverId, shareLink,
+//             metadata? }, updatedAt } }
+//
+// O cadastro da URL manda um POST de corpo VAZIO e exige 200.
+// ---------------------------------------------------------------------------
+
+/** Eventos que mexem numa entrega. WALLET_BALANCE_CHANGED etc. são ignorados. */
+const EVENTOS_DE_PEDIDO = new Set([
+  "ORDER_STATUS_CHANGED",
+  "DRIVER_ASSIGNED",
+  "ORDER_REPLACED",
+  "ORDER_EDITED",
+  "ORDER_AMOUNT_CHANGED",
+  "DELIVERY_CODE_STATUS_CHANGED",
+]);
+
+interface EventoLalamove {
+  apiKey?: string;
+  timestamp?: number;
+  signature?: string;
+  eventId?: string;
+  eventType?: string;
+  data?: {
+    order?: {
+      orderId?: string;
+      status?: string;
+      metadata?: { idPedido?: string; sequencia?: string };
+    };
+  };
+}
+
+export type RespostaWebhookLalamove =
+  | { http: 200; aplicado: boolean; motivo?: string }
+  | { http: 400 | 401; motivo: string };
+
+export async function processarWebhookLalamove(
+  env: Env,
+  path: string,
+  corpoBruto: string
+): Promise<RespostaWebhookLalamove> {
+  if (!corpoBruto.trim()) return { http: 200, aplicado: false, motivo: "verificação da URL" };
+
+  let ev: EventoLalamove;
+  try {
+    ev = JSON.parse(corpoBruto) as EventoLalamove;
+  } catch {
+    return { http: 400, motivo: "corpo não é JSON" };
+  }
+
+  // A apiKey diz de qual conta (e modo) é o evento; o secret dela confere.
+  const modo = (["teste", "producao"] as const).find((m) => {
+    const k = credenciaisLalamove(env, m).apiKey;
+    return !!k && k === ev.apiKey;
+  });
+  if (!modo) return { http: 401, motivo: "apiKey desconhecida" };
+  const valida = await assinaturaValidaLalamove(
+    credenciaisLalamove(env, modo).apiSecret,
+    path,
+    corpoBruto,
+    ev.timestamp,
+    ev.signature
+  );
+  if (!valida) return { http: 401, motivo: "assinatura inválida" };
+
+  const tipo = ev.eventType ?? "";
+  const o = ev.data?.order;
+  if (!EVENTOS_DE_PEDIDO.has(tipo) || !o?.orderId) return { http: 200, aplicado: false, motivo: "ignorado" };
+
+  // Acha a entrega pelo orderId. Se não achar e o pedido trouxer o metadata
+  // que o Hub manda no despacho, é uma SUBSTITUIÇÃO (ORDER_REPLACED: o
+  // suporte da Lalamove troca o pedido e o orderId muda): o id guardado passa
+  // a ser o novo, senão a entrega fica órfã.
+  let l = await env.DB.prepare(
+    `SELECT id_pedido FROM deliveries
+      WHERE delivery_id_externo = ?1 AND plataforma_escolhida = 'lalamove' LIMIT 1`
+  )
+    .bind(o.orderId)
+    .first<{ id_pedido: string }>();
+
+  const meta = o.metadata;
+  if (!l && meta?.idPedido && meta.sequencia) {
+    const r = await env.DB.prepare(
+      `UPDATE deliveries SET delivery_id_externo = ?3
+        WHERE id_pedido = ?1 AND sequencia = ?2 AND plataforma_escolhida = 'lalamove'`
+    )
+      .bind(meta.idPedido, Number(meta.sequencia), o.orderId)
+      .run();
+    if (r.meta.changes > 0) {
+      console.log(`[lalamove-webhook] pedido ${meta.idPedido} substituído: novo orderId ${o.orderId}`);
+      await env.DB.prepare(
+        `UPDATE pedidos SET despacho = json_set(despacho, '$.deliveryId', ?2)
+          WHERE id = ?1 AND json_extract(despacho, '$.provider') = 'lalamove'`
+      )
+        .bind(meta.idPedido, o.orderId)
+        .run();
+      l = { id_pedido: meta.idPedido };
+    }
+  }
+  if (!l) {
+    // Sem metadata não há como ligar a entrega. O corpo vai para o log, para
+    // descobrir o formato do evento se isso acontecer.
+    console.warn(`[lalamove-webhook] ${tipo} de pedido desconhecido: ${corpoBruto.slice(0, 2000)}`);
+    return { http: 200, aplicado: false, motivo: "entrega não é deste Hub" };
+  }
+
+  const { novo } = await registrarEvento(env, {
+    id: `lalamove:${ev.eventId ?? `${tipo}:${o.orderId}:${ev.timestamp ?? ""}`}`,
+    provider: "lalamove",
+    kind: tipo,
+    status: o.status ? STATUS_LALAMOVE[o.status] ?? null : null,
+    deliveryIdExterno: o.orderId,
+    criadoEmParceiro: ev.timestamp ? new Date(ev.timestamp * 1000).toISOString() : null,
+    liveMode: modo === "producao",
+    payload: corpoBruto,
+  });
+  if (!novo) return { http: 200, aplicado: false, motivo: "duplicado" };
+
+  const s = await sincronizarLalamove(env, l.id_pedido, modo);
+  if (!s.ok) throw new Error(s.erro);
+  return { http: 200, aplicado: true };
 }
