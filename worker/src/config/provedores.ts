@@ -37,7 +37,8 @@ export interface Provedor {
   nome: string;
   /** Padrão de fábrica. Só vale quando PROVEDORES_ATIVOS está vazio. */
   ativo: boolean;
-  cotar: (env: Env, pedido: Pedido, modo: ModoOperacao) => Promise<Cotacao>;
+  /** Um card, ou um por veículo quando o provedor cota cada um à parte. */
+  cotar: (env: Env, pedido: Pedido, modo: ModoOperacao) => Promise<Cotacao | Cotacao[]>;
   despachar: (
     env: Env,
     pedido: Pedido,

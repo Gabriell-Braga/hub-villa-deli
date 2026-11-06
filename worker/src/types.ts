@@ -246,6 +246,11 @@ export type StatusPedidoIfood =
 // Resultado normalizado de cotação — todo provider devolve neste formato.
 export interface Cotacao {
   provider: ProviderId;
+  /**
+   * Só quando o mesmo provedor tem um card por veículo (Lalamove). O
+   * despacho usa provider + veiculo para achar a cotação do card clicado.
+   */
+  veiculo?: PreferenciaVeiculo;
   nome: string; // rótulo amigável para o painel
   disponivel: boolean;
   preco: number | null; // em R$ (reais), já convertido

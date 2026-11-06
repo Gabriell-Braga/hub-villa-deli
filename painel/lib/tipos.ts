@@ -15,6 +15,8 @@ export type StatusPedido = "recebido" | "cotado" | "despachando" | "despachado";
 
 export interface Cotacao {
   provider: ProviderId;
+  /** Só quando o provedor tem um card por veículo (Lalamove). */
+  veiculo?: "moto" | "carro";
   nome: string;
   disponivel: boolean;
   preco: number | null;

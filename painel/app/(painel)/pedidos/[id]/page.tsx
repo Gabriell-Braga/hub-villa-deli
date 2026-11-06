@@ -94,7 +94,8 @@ export default function PaginaCotacao({
 
   const [dados, setDados] = useState<CotacaoResponse | null>(null);
   const [carregando, setCarregando] = useState(true);
-  const [despachando, setDespachando] = useState<ProviderId | null>(null);
+  /** Card em despacho: provider, ou provider:veiculo quando há um card por veículo. */
+  const [despachando, setDespachando] = useState<string | null>(null);
   // Erro de CARREGAMENTO fica inline: some junto com o toast e a pessoa
   // ficaria sem entender por que a tela está vazia. Resultado de AÇÃO vai
   // para o toast.
@@ -179,7 +180,7 @@ export default function PaginaCotacao({
     veiculo?: Veiculo,
     prontoEmMin = 0
   ) {
-    setDespachando(provider);
+    setDespachando(veiculo ? `${provider}:${veiculo}` : provider);
     try {
       const res = await apiFetch("/api/despachar", {
         method: "POST",
@@ -730,7 +731,10 @@ export default function PaginaCotacao({
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
               {(dados?.cotacoes ?? []).map((c) => {
-                const barato = dados?.maisBarato === c.provider && !travado;
+                // Vem ordenado: o primeiro disponível é o mais barato. Por
+                // objeto, não por provider — a Lalamove tem dois cards.
+                const barato = dados?.cotacoes.find((x) => x.disponivel) === c && !travado;
+                const chave = c.veiculo ? `${c.provider}:${c.veiculo}` : c.provider;
 
                 return (
                   // flex-col + o mt-auto no rodapé mantêm o botão na mesma
@@ -738,7 +742,7 @@ export default function PaginaCotacao({
                   // linha de detalhe (o motoboy mostra a faixa de raio) empurra
                   // o próprio botão para baixo e a fileira fica desalinhada.
                   <div
-                    key={c.provider}
+                    key={chave}
                     className={`flex flex-col rounded-xl border bg-white p-5 shadow-cartao transition ${
                       barato ? "border-gray-900 ring-1 ring-gray-900" : "border-gray-200"
                     } ${!c.disponivel ? "bg-gray-50/60 shadow-none" : ""} ${travado ? "opacity-70" : ""}`}
@@ -794,12 +798,12 @@ export default function PaginaCotacao({
                               // clique e a corrida seria só atrito.
                               c.provider === "uber"
                                 ? setPedindoVeiculo({ provider: c.provider, nome: c.nome })
-                                : despachar(c.provider, c.nome)
+                                : despachar(c.provider, c.nome, c.veiculo)
                             }
                             disabled={despachando !== null || travado}
                             className="w-full rounded-lg bg-[var(--marca-primaria)] py-2.5 text-sm font-medium text-[var(--marca-contraste)] shadow-sm transition hover:bg-[var(--marca-primaria-hover)] disabled:opacity-50"
                           >
-                            {despachando === c.provider
+                            {despachando === chave
                               ? "Despachando..."
                               : travado
                               ? "Já despachado"

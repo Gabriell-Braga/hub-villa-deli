@@ -1270,7 +1270,7 @@ app.get("/api/cotacao/:idPedido", async (c) => {
     ativos.map((p) => p.cotar(env, pedido, modo))
   );
 
-  const cotacoes: Cotacao[] = resultados.map((r, i) => {
+  const cotacoes: Cotacao[] = resultados.flatMap((r, i) => {
     const p = ativos[i];
     if (r.status === "fulfilled") return r.value;
     return {
@@ -1392,7 +1392,7 @@ app.post("/api/despachar", async (c) => {
   }
 
   const cotacoes = await obterCotacoes(env, idPedido);
-  const cotacao = cotacoes?.find((x) => x.provider === provider);
+  const cotacao = cotacoes?.find((x) => x.provider === provider && (!x.veiculo || x.veiculo === veiculo));
   if (!cotacao || !cotacao.disponivel) {
     return c.json({ erro: "Cotação inexistente. Cote novamente." }, 409);
   }
