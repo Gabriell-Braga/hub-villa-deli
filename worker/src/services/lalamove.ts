@@ -153,6 +153,44 @@ function comTelefoneDeTeste(env: Env, pedido: Pedido, modo: ModoOperacao): Pedid
 }
 
 // ---------------------------------------------------------------------------
+// SALDO DA CARTEIRA
+//
+// A API não tem consulta de saldo. Quem informa é o webhook
+// WALLET_BALANCE_CHANGED, a cada débito, estorno ou recarga — o Hub guarda o
+// último valor na tabela `config`, um por modo. Antes do primeiro evento o
+// saldo é desconhecido (null) e nada é bloqueado.
+// ---------------------------------------------------------------------------
+
+/** Abaixo disto a cotação avisa "saldo baixo". */
+export const SALDO_BAIXO = 50;
+
+const chaveSaldo = (modo: ModoOperacao) => `lalamove_saldo_${modo}`;
+
+export const reais = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+export async function saldoLalamove(
+  env: Env,
+  modo: ModoOperacao
+): Promise<{ valor: number; em: string } | null> {
+  const l = await env.DB.prepare(`SELECT valor, atualizado_em FROM config WHERE chave = ?1`)
+    .bind(chaveSaldo(modo))
+    .first<{ valor: string; atualizado_em: string }>()
+    .catch(() => null);
+  const valor = Number(l?.valor);
+  return l && Number.isFinite(valor) ? { valor, em: l.atualizado_em } : null;
+}
+
+async function gravarSaldo(env: Env, modo: ModoOperacao, valor: number): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO config (chave, valor, atualizado_em, atualizado_por)
+     VALUES (?1, ?2, ?3, 'lalamove')
+     ON CONFLICT(chave) DO UPDATE SET valor = ?2, atualizado_em = ?3, atualizado_por = 'lalamove'`
+  )
+    .bind(chaveSaldo(modo), String(valor), new Date().toISOString())
+    .run();
+}
+
+// ---------------------------------------------------------------------------
 // COTAÇÃO
 // ---------------------------------------------------------------------------
 
@@ -215,18 +253,29 @@ export async function cotarLalamove(env: Env, pedido: Pedido, modo: ModoOperacao
   }
 
   try {
-    const q = await cotacaoLalamove(env, pedido, modo, "moto");
+    const [q, saldo] = await Promise.all([cotacaoLalamove(env, pedido, modo, "moto"), saldoLalamove(env, modo)]);
     const km = q.distance ? Number(q.distance.value) / (q.distance.unit === "m" ? 1000 : 1) : null;
+    const preco = Number(q.priceBreakdown.total);
+    // A carteira é pré-paga: sem saldo a Lalamove recusa o pedido (402). Avisar
+    // na cotação poupa o clique em Despachar que ia falhar.
+    if (saldo && saldo.valor < preco) {
+      return { ...base, preco, erro: `Saldo insuficiente na carteira da Lalamove (${reais(saldo.valor)}). Recarregue no Partner Portal.` };
+    }
     return {
       ...base,
       disponivel: true,
-      preco: Number(q.priceBreakdown.total),
+      preco,
       quoteId: q.quotationId,
       expiraEm: q.expiresAt ?? null,
       // A Lalamove não devolve tempo na cotação. Estimativa do Hub: a mesma
       // régua do motoboy sem faixa fixa, sobre a distância da rota deles.
       etaMinutos: km != null && Number.isFinite(km) ? Math.round(ETA_BASE_MIN + km * ETA_MIN_POR_KM) : null,
-      detalhe: km != null && Number.isFinite(km) ? `${km.toFixed(2)} km · moto · tempo estimado` : "moto",
+      detalhe: [
+        km != null && Number.isFinite(km) ? `${km.toFixed(2)} km · moto · tempo estimado` : "moto",
+        saldo && saldo.valor < SALDO_BAIXO ? `saldo baixo: ${reais(saldo.valor)}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
     };
   } catch (e) {
     return { ...base, erro: e instanceof Error ? e.message : "Falha ao cotar na Lalamove." };
@@ -472,6 +521,7 @@ interface EventoLalamove {
       status?: string;
       metadata?: { idPedido?: string; sequencia?: string };
     };
+    balance?: { amount?: string; currency?: string };
   };
 }
 
@@ -509,6 +559,14 @@ export async function processarWebhookLalamove(
   if (!valida) return { http: 401, motivo: "assinatura inválida" };
 
   const tipo = ev.eventType ?? "";
+  if (tipo === "WALLET_BALANCE_CHANGED") {
+    const valor = Number(ev.data?.balance?.amount);
+    if (!Number.isFinite(valor)) return { http: 200, aplicado: false, motivo: "saldo sem valor" };
+    // Eventos fora de ordem: o mais recente vence pela hora de chegada. A
+    // Lalamove manda um por movimento, segundos entre eles.
+    await gravarSaldo(env, modo, valor);
+    return { http: 200, aplicado: true };
+  }
   const o = ev.data?.order;
   if (!EVENTOS_DE_PEDIDO.has(tipo) || !o?.orderId) return { http: 200, aplicado: false, motivo: "ignorado" };
 

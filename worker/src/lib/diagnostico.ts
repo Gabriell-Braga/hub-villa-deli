@@ -9,7 +9,7 @@ import {
 } from "../config/ambiente";
 import { modoAtual, podeUsarProducao } from "../config/modo";
 import { nomeProvedor, provedoresLigados } from "../config/provedores";
-import { chamarLalamove } from "../services/lalamove";
+import { chamarLalamove, reais, SALDO_BAIXO, saldoLalamove } from "../services/lalamove";
 import { get99Token, getIfoodToken, getUberToken } from "../services/tokens";
 
 // ---------------------------------------------------------------------------
@@ -446,6 +446,21 @@ export async function rodarDiagnostico(env: Env): Promise<Diagnostico> {
         });
       }
     }
+
+    // Carteira pré-paga: sem saldo, a Lalamove recusa o pedido.
+    const saldo = await saldoLalamove(env, modo);
+    const hora = saldo
+      ? new Date(saldo.em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })
+      : "";
+    itens.push({
+      chave: "lalamove_saldo",
+      titulo: "Saldo da carteira (Lalamove)",
+      status: !saldo ? "aviso" : saldo.valor < SALDO_BAIXO ? "aviso" : "ok",
+      detalhe: saldo
+        ? `${reais(saldo.valor)}, atualizado em ${hora}.`
+        : "Ainda desconhecido. A Lalamove informa o saldo a cada movimento da carteira; aparece aqui após a primeira corrida ou recarga.",
+      comoResolver: "Recarregue a carteira no Partner Portal da Lalamove (Wallet).",
+    });
   }
 
   // --- Provedores ativos ----------------------------------------------------
