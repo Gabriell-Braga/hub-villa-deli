@@ -130,6 +130,10 @@ export default function PaginaCotacao({
   // é o único parceiro em que declarar o volume muda quem vem buscar.
   // Cards marcados para pedir em vários apps ao mesmo tempo (chave do card).
   const [selecionadas, setSelecionadas] = useState<string[]>([]);
+  // Modo "vários apps": os cards viram seleção e a ação fica na barra de baixo.
+  // Separado do modo normal de propósito — os dois juntos no mesmo card
+  // (Despachar + marcar) confundiam qual botão fazia o quê.
+  const [modoVarios, setModoVarios] = useState(false);
   const [pedindoVeiculo, setPedindoVeiculo] = useState<{
     provider: ProviderId;
     nome: string;
@@ -238,6 +242,7 @@ export default function PaginaCotacao({
         return;
       }
       setSelecionadas([]);
+      setModoVarios(false);
       if (json.jaDespachado) {
         toast.sucesso("Este pedido já havia sido despachado. Nenhuma corrida nova foi criada.");
       } else if (json.falhas?.length) {
@@ -833,28 +838,39 @@ export default function PaginaCotacao({
         <section>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-gray-900">Cotações</h2>
-            {!travado && selecionadas.length > 0 && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setSelecionadas([])}
-                  className="text-xs font-medium text-gray-500 hover:text-gray-900"
-                >
-                  Limpar
-                </button>
-                <button
-                  onClick={despacharVarios}
-                  disabled={selecionadas.length < 2 || despachando !== null}
-                  className="rounded-lg bg-[var(--marca-primaria)] px-3.5 py-2 text-sm font-semibold text-[var(--marca-contraste)] shadow-sm transition hover:bg-[var(--marca-primaria-hover)] disabled:opacity-50"
-                >
-                  {despachando === "varios"
-                    ? "Pedindo..."
-                    : selecionadas.length < 2
-                    ? "Marque mais um app"
-                    : `Pedir nos ${selecionadas.length} apps ao mesmo tempo`}
-                </button>
+            {!travado && (dados?.cotacoes ?? []).length > 0 && (
+              <div role="group" aria-label="Como pedir" className="inline-flex rounded-lg bg-gray-100 p-0.5 text-sm">
+                {[
+                  { varios: false, rotulo: "Um app" },
+                  { varios: true, rotulo: "Vários apps" },
+                ].map((o) => (
+                  <button
+                    key={o.rotulo}
+                    type="button"
+                    aria-pressed={modoVarios === o.varios}
+                    onClick={() => {
+                      setModoVarios(o.varios);
+                      setSelecionadas([]);
+                    }}
+                    className={`rounded-md px-3 py-1.5 font-medium transition ${
+                      modoVarios === o.varios
+                        ? "bg-white text-gray-900 shadow-sm"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    {o.rotulo}
+                  </button>
+                ))}
               </div>
             )}
           </div>
+
+          {modoVarios && !travado && (
+            <p className="mb-3 text-sm text-gray-500">
+              Escolha os apps. O primeiro que achar motorista fica com a entrega, e os outros são
+              cancelados sozinhos.
+            </p>
+          )}
 
           {carregando ? (
             <SkeletonCartoesCotacao />
@@ -865,6 +881,10 @@ export default function PaginaCotacao({
                 // objeto, não por provider — a Lalamove tem dois cards.
                 const barato = dados?.cotacoes.find((x) => x.disponivel) === c && !travado;
                 const chave = c.veiculo ? `${c.provider}:${c.veiculo}` : c.provider;
+                const selecionada = modoVarios && selecionadas.includes(chave);
+                // O motoboy não entra: não dá para cancelá-lo sozinho quando
+                // outro app achar motorista.
+                const foraDoModo = modoVarios && c.provider === "motoboy";
 
                 return (
                   // flex-col + o mt-auto no rodapé mantêm o botão na mesma
@@ -874,8 +894,12 @@ export default function PaginaCotacao({
                   <div
                     key={chave}
                     className={`flex flex-col rounded-xl border bg-white p-5 shadow-cartao transition ${
-                      barato ? "border-gray-900 ring-1 ring-gray-900" : "border-gray-200"
-                    } ${!c.disponivel ? "bg-gray-50/60 shadow-none" : ""} ${travado ? "opacity-70" : ""}`}
+                      selecionada
+                        ? "border-[var(--marca-primaria)] ring-2 ring-[var(--marca-primaria)]"
+                        : barato && !modoVarios
+                        ? "border-gray-900 ring-1 ring-gray-900"
+                        : "border-gray-200"
+                    } ${!c.disponivel ? "bg-gray-50/60 shadow-none" : ""} ${travado || foraDoModo ? "opacity-60" : ""}`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex min-w-0 items-center gap-2.5">
@@ -921,43 +945,59 @@ export default function PaginaCotacao({
                         />
 
                         <div className="mt-auto pt-4">
-                          <button
-                            onClick={() =>
-                              // Só o Uber pergunta o veículo. Nos outros a
-                              // escolha não existe, e um modal a mais entre o
-                              // clique e a corrida seria só atrito.
-                              c.provider === "uber"
-                                ? setPedindoVeiculo({ provider: c.provider, nome: c.nome })
-                                : despachar(c.provider, c.nome, c.veiculo)
-                            }
-                            disabled={despachando !== null || travado}
-                            className="w-full rounded-lg bg-[var(--marca-primaria)] py-2.5 text-sm font-medium text-[var(--marca-contraste)] shadow-sm transition hover:bg-[var(--marca-primaria-hover)] disabled:opacity-50"
-                          >
-                            {despachando === chave
-                              ? "Despachando..."
-                              : travado
-                              ? "Já despachado"
-                              : "Despachar"}
-                          </button>
-                          {/* Pedir em vários apps: o motoboy não entra, porque
-                              não dá para cancelá-lo sozinho quando outro app
-                              achar motorista. Um card por app: marcar o carro
-                              da Lalamove desmarca a moto. */}
-                          {!travado && c.provider !== "motoboy" && (
-                            <label className="mt-2.5 flex cursor-pointer items-center gap-2 text-xs text-gray-600">
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 rounded border-gray-300"
-                                checked={selecionadas.includes(chave)}
-                                onChange={(e) =>
-                                  setSelecionadas((atual) => {
-                                    const sem = atual.filter((k) => k.split(":")[0] !== c.provider);
-                                    return e.target.checked ? [...sem, chave] : sem;
-                                  })
-                                }
-                              />
-                              Pedir junto com outros apps
-                            </label>
+                          {modoVarios && !travado ? (
+                            // Mesmo lugar e mesmo tamanho do Despachar: o card
+                            // não muda de forma, só o que o botão faz.
+                            <button
+                              type="button"
+                              aria-pressed={selecionada}
+                              disabled={foraDoModo || despachando !== null}
+                              onClick={() =>
+                                // Um card por app: marcar o carro da Lalamove
+                                // desmarca a moto.
+                                setSelecionadas((atual) => {
+                                  const sem = atual.filter((k) => k.split(":")[0] !== c.provider);
+                                  return selecionada ? sem : [...sem, chave];
+                                })
+                              }
+                              className={`flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition disabled:cursor-not-allowed ${
+                                selecionada
+                                  ? "bg-[var(--marca-primaria)] text-[var(--marca-contraste)] shadow-sm hover:bg-[var(--marca-primaria-hover)]"
+                                  : "border border-gray-300 bg-white text-gray-800 hover:border-gray-900"
+                              }`}
+                            >
+                              {foraDoModo ? (
+                                "Não entra em vários apps"
+                              ) : selecionada ? (
+                                <>
+                                  <svg aria-hidden viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor">
+                                    <path fillRule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-8 8a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4L8 12.6l7.3-7.3a1 1 0 0 1 1.4 0Z" clipRule="evenodd" />
+                                  </svg>
+                                  Incluído
+                                </>
+                              ) : (
+                                "Incluir"
+                              )}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() =>
+                                // Só o Uber pergunta o veículo. Nos outros a
+                                // escolha não existe, e um modal a mais entre o
+                                // clique e a corrida seria só atrito.
+                                c.provider === "uber"
+                                  ? setPedindoVeiculo({ provider: c.provider, nome: c.nome })
+                                  : despachar(c.provider, c.nome, c.veiculo)
+                              }
+                              disabled={despachando !== null || travado}
+                              className="w-full rounded-lg bg-[var(--marca-primaria)] py-2.5 text-sm font-medium text-[var(--marca-contraste)] shadow-sm transition hover:bg-[var(--marca-primaria-hover)] disabled:opacity-50"
+                            >
+                              {despachando === chave
+                                ? "Despachando..."
+                                : travado
+                                ? "Já despachado"
+                                : "Despachar"}
+                            </button>
                           )}
                         </div>
                       </>
@@ -976,6 +1016,42 @@ export default function PaginaCotacao({
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Ação do modo "vários apps": presa no rodapé da tela, para estar à
+              mão em qualquer ponto da lista, e dizendo o que vai acontecer. */}
+          {modoVarios && !travado && !carregando && (
+            <div className="sticky bottom-4 z-10 mt-4 flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-lg sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
+                {selecionadas.length > 0 && (
+                  <div className="flex shrink-0 -space-x-1.5">
+                    {selecionadas.map((k) => (
+                      <span key={k} className="rounded-md ring-2 ring-white">
+                        <LogoProvedor provider={k.split(":")[0] as ProviderId} tamanho={24} />
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <p className="text-sm text-gray-700">
+                  {selecionadas.length === 0
+                    ? "Nenhum app escolhido."
+                    : selecionadas.length === 1
+                    ? "Escolha mais um app."
+                    : `${selecionadas.length} apps vão procurar motorista ao mesmo tempo.`}
+                </p>
+              </div>
+              <button
+                onClick={despacharVarios}
+                disabled={selecionadas.length < 2 || despachando !== null}
+                className="shrink-0 rounded-lg bg-[var(--marca-primaria)] px-4 py-2.5 text-sm font-semibold text-[var(--marca-contraste)] shadow-sm transition hover:bg-[var(--marca-primaria-hover)] disabled:opacity-50"
+              >
+                {despachando === "varios"
+                  ? "Pedindo..."
+                  : selecionadas.length < 2
+                  ? "Pedir em vários apps"
+                  : `Pedir nos ${selecionadas.length} apps`}
+              </button>
             </div>
           )}
 
