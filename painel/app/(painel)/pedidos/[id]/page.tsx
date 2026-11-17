@@ -1022,36 +1022,34 @@ export default function PaginaCotacao({
           {/* Ação do modo "vários apps": presa no rodapé da tela, para estar à
               mão em qualquer ponto da lista, e dizendo o que vai acontecer. */}
           {modoVarios && !travado && !carregando && (
-            <div className="sticky bottom-4 z-10 mt-4 flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-lg sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex min-w-0 items-center gap-3">
-                {selecionadas.length > 0 && (
-                  <div className="flex shrink-0 -space-x-1.5">
+            // Pílula escura e centralizada, mais estreita que a grade: lê como
+            // controle flutuante, não como mais um card desalinhado.
+            <div className="sticky bottom-5 z-10 mt-5 flex justify-center">
+              <div className="flex max-w-full items-center gap-3 rounded-full bg-[var(--marca-primaria)] py-1.5 pl-2 pr-1.5 text-[var(--marca-contraste)] shadow-xl">
+                {selecionadas.length > 0 ? (
+                  <div className="flex shrink-0 -space-x-1.5 pl-1">
                     {selecionadas.map((k) => (
-                      <span key={k} className="rounded-md ring-2 ring-white">
-                        <LogoProvedor provider={k.split(":")[0] as ProviderId} tamanho={24} />
+                      <span key={k} className="rounded-md ring-2 ring-[var(--marca-primaria)]">
+                        <LogoProvedor provider={k.split(":")[0] as ProviderId} tamanho={22} />
                       </span>
                     ))}
                   </div>
-                )}
-                <p className="text-sm text-gray-700">
+                ) : null}
+                <span className="whitespace-nowrap pl-2 text-sm">
                   {selecionadas.length === 0
-                    ? "Nenhum app escolhido."
+                    ? "Escolha 2 ou mais apps"
                     : selecionadas.length === 1
-                    ? "Escolha mais um app."
-                    : `${selecionadas.length} apps vão procurar motorista ao mesmo tempo.`}
-                </p>
+                    ? "Escolha mais um app"
+                    : `${selecionadas.length} apps selecionados`}
+                </span>
+                <button
+                  onClick={despacharVarios}
+                  disabled={selecionadas.length < 2 || despachando !== null}
+                  className="shrink-0 rounded-full bg-[var(--marca-contraste)] px-4 py-2 text-sm font-semibold text-[var(--marca-primaria)] transition hover:opacity-90 disabled:opacity-40"
+                >
+                  {despachando === "varios" ? "Pedindo..." : "Pedir agora"}
+                </button>
               </div>
-              <button
-                onClick={despacharVarios}
-                disabled={selecionadas.length < 2 || despachando !== null}
-                className="shrink-0 rounded-lg bg-[var(--marca-primaria)] px-4 py-2.5 text-sm font-semibold text-[var(--marca-contraste)] shadow-sm transition hover:bg-[var(--marca-primaria-hover)] disabled:opacity-50"
-              >
-                {despachando === "varios"
-                  ? "Pedindo..."
-                  : selecionadas.length < 2
-                  ? "Pedir em vários apps"
-                  : `Pedir nos ${selecionadas.length} apps`}
-              </button>
             </div>
           )}
 
