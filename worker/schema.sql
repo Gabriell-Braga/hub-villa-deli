@@ -97,6 +97,10 @@ CREATE TABLE IF NOT EXISTS deliveries (
   -- false = evento de teste (credenciais de sandbox)
   live_mode             INTEGER,
   teste                 INTEGER NOT NULL DEFAULT 0,
+  -- 1 = corrida cancelada pelo Hub antes de ter entregador (outro app achou
+  -- motorista primeiro, ou o pedido saiu por fora). Fora do histórico e dos
+  -- relatórios: não custou nada. Ver migrations/009-disputa.sql.
+  descartada            INTEGER NOT NULL DEFAULT 0,
   UNIQUE(id_pedido, sequencia)
 );
 

@@ -290,6 +290,13 @@ export interface ResultadoDespacho {
   codigoEntrega?: string | null;
   /** Instruções enviadas ao entregador (motoboy próprio, sem API externa). */
   observacaoEntregador?: string;
+  /**
+   * Pedido em VÁRIOS aplicativos ao mesmo tempo: todas as corridas abertas.
+   * Presente só enquanto ninguém achou motorista. O primeiro que achar vira o
+   * despacho do pedido (sem este campo) e os outros são cancelados — ver
+   * services/disputa.ts.
+   */
+  disputa?: ResultadoDespacho[];
 }
 
 // ---------------------------------------------------------------------------

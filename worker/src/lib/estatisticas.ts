@@ -89,6 +89,9 @@ export async function calcularEstatisticas(
   const filtroTeste = [
     soReais ? "teste = 0" : null,
     "plataforma_escolhida <> 'outra'",
+    // Corrida que perdeu a disputa entre apps foi cancelada sem entregador:
+    // não custou nada, e contá-la dobraria o gasto do pedido.
+    "descartada = 0",
   ]
     .filter(Boolean)
     .join(" AND ");

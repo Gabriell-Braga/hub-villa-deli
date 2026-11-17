@@ -43,8 +43,16 @@ import {
   prepararReenvio,
   enfileirarEventoCardapio,
   eventosCardapioPendentes,
+  corridasDoPedido,
+  descartarCorrida,
+  fecharDisputa,
 } from "./lib/store";
-import { cancelarUber } from "./services/uber";
+import {
+  cancelarNoParceiro,
+  PROVEDORES_CANCELAVEIS,
+  reconciliarAbertos,
+  reconciliarPedido,
+} from "./services/disputa";
 import {
   cancelado,
   processarEventoCardapio,
@@ -54,7 +62,6 @@ import { historicoCsv, listarHistorico, nomeArquivoCsv } from "./lib/historico";
 import { assinaturaValida, assinaturaValida99 } from "./lib/assinatura";
 import { processarWebhookUber } from "./services/uber-webhook";
 import {
-  cancelarIfood,
   codigoColetaIfood,
   motivosCancelamentoIfood,
   responderMudancaEnderecoIfood,
@@ -75,9 +82,8 @@ import {
   pedidoCanceladoNoIfood,
   despacharPedidoIfood,
 } from "./services/ifood-pedidos";
-import { cancelar99, sincronizar99, sincronizarAbertas99 } from "./services/noventa99";
+import { sincronizar99, sincronizarAbertas99 } from "./services/noventa99";
 import {
-  cancelarLalamove,
   processarWebhookLalamove,
   sincronizarAbertasLalamove,
   sincronizarLalamove,
@@ -487,7 +493,11 @@ app.post("/api/webhook/cardapio-web", async (c) => {
   const novo = await enfileirarEventoCardapio(env, evento);
 
   if (novo) {
-    c.executionCtx.waitUntil(processarEventoCardapio(env, evento));
+    // Depois de processar: se o pedido saiu para entrega por fora, cancela a
+    // corrida daqui que ainda procura motorista (services/disputa.ts).
+    c.executionCtx.waitUntil(
+      processarEventoCardapio(env, evento).then(() => reconciliarAbertos(env))
+    );
   }
 
   return c.json({ ok: true, recebido: true });
@@ -620,6 +630,7 @@ app.post("/api/webhook/uber", async (c) => {
 
   try {
     const r = await processarWebhookUber(c.env, corpoBruto);
+    c.executionCtx.waitUntil(reconciliarAbertos(c.env));
     if (!r.ok) {
       // Payload malformado: registrar e aceitar. Reenviar não vai consertar.
       console.warn(`[uber-webhook] ${r.motivo}`);
@@ -676,6 +687,7 @@ app.post("/api/webhook/ifood", async (c) => {
 
   try {
     const r = await processarWebhookIfood(c.env, corpoBruto);
+    c.executionCtx.waitUntil(reconciliarAbertos(c.env));
     if ("erro" in r) {
       console.warn(`[ifood-webhook] ${r.erro}`);
       return c.json({ ok: true, ignorado: r.erro }, 202);
@@ -727,6 +739,7 @@ app.post("/api/webhook/99", async (c) => {
 
   try {
     const r = await processarWebhook99(c.env, corpoBruto);
+    c.executionCtx.waitUntil(reconciliarAbertos(c.env));
     // Uma linha por evento: é o que mostra, no log, que a 99 está chamando.
     const nome = corpoBruto.match(/"event"\s*:\s*"([^"]+)"/)?.[1] ?? "?";
     if (!r.ok) console.warn(`[99-webhook] ${nome}: ${r.motivo}`);
@@ -751,6 +764,7 @@ app.post("/api/webhook/lalamove", async (c) => {
   const tipo = corpoBruto.match(/"eventType"\s*:\s*"([^"]+)"/)?.[1] ?? "?";
   try {
     const r = await processarWebhookLalamove(c.env, new URL(c.req.url).pathname, corpoBruto);
+    c.executionCtx.waitUntil(reconciliarAbertos(c.env));
     if (r.http !== 200) console.warn(`[lalamove-webhook] ${tipo}: ${r.motivo}`);
     else console.log(`[lalamove-webhook] ${tipo}: ${r.aplicado ? "aplicado" : r.motivo}`);
     return c.json(r, r.http);
@@ -912,21 +926,34 @@ app.post("/api/entrega/:idPedido/cancelar", async (c) => {
   }
 
   const modo = await modoAtual(env);
-  let r: { ok: boolean; erro?: string };
-  if (despacho.provider === "ifood") {
-    const pedido = await obterPedido(env, idPedido);
-    if (!pedido) return c.json({ erro: "pedido não encontrado" }, 404);
+  const pedido = await obterPedido(env, idPedido);
+  if (!pedido) return c.json({ erro: "pedido não encontrado" }, 404);
+
+  // Pedido em vários apps ainda sem motorista: cancela todos. A principal é
+  // marcada como cancelada (é a que aparece no pedido); as outras somem como
+  // descartadas, que é o que são — nenhuma chegou a ter entregador.
+  if (despacho.disputa) {
+    const ids = new Set(despacho.disputa.map((d) => d.deliveryId));
+    const abertas = (await corridasDoPedido(env, idPedido)).filter(
+      (x) => ids.has(x.deliveryId) && !["delivered", "canceled", "returned"].includes(x.status)
+    );
+    const falhas: string[] = [];
+    for (const x of abertas) {
+      const r = await cancelarNoParceiro(env, pedido, x.provider, x.deliveryId, modo);
+      if (!r.ok) falhas.push(`${nomeProvedor(x.provider)}: ${r.erro}`);
+      else if (x.deliveryId !== despacho.deliveryId) {
+        await descartarCorrida(env, idPedido, x.provider, x.deliveryId, "cancelada pelo atendente");
+      }
+    }
+    if (falhas.length) return c.json({ erro: falhas.join(" · ") }, 409);
+    const { disputa: _d, ...principal } = despacho;
+    await fecharDisputa(env, idPedido, principal, [...ids]);
+  } else {
     // Motivo escolhido pelo atendente na lista do iFood (GET .../ifood/motivos).
     const body = await c.req.json<{ codigoMotivo?: string }>().catch(() => null);
-    r = await cancelarIfood(env, pedido, despacho.deliveryId, modo, body?.codigoMotivo);
-  } else if (despacho.provider === "99") {
-    r = await cancelar99(env, idPedido, despacho.deliveryId, modo);
-  } else if (despacho.provider === "lalamove") {
-    r = await cancelarLalamove(env, despacho.deliveryId, modo);
-  } else {
-    r = await cancelarUber(env, despacho.deliveryId, modo);
+    const r = await cancelarNoParceiro(env, pedido, despacho.provider, despacho.deliveryId, modo, body?.codigoMotivo ?? "");
+    if (!r.ok) return c.json({ erro: r.erro }, 409);
   }
-  if (!r.ok) return c.json({ erro: r.erro }, 409);
 
   // O webhook de cancelamento chega logo depois, mas pode demorar. Gravar já
   // evita a tela mostrar "a caminho" para uma corrida que acabou de morrer.
@@ -1147,26 +1174,49 @@ app.get("/api/cotacao/:idPedido", async (c) => {
   //
   // Sai antes de tudo: sem chamada a parceiro, a tela de acompanhamento
   // responde no tempo do banco.
-  const jaDespachado = await obterDespacho(env, idPedido);
+  let jaDespachado = await obterDespacho(env, idPedido);
   if (jaDespachado) {
     // 99: a tela de acompanhamento é quem puxa o status. O webhook não tem
     // entrega garantida (a própria 99 avisa) e em dev ele nem chega, então a
     // volta de 20 s da tela consulta o detalhe do pedido. Com teto de tempo:
     // a 99 lenta não pode travar a tela — mostra o que o banco tem.
     // A Lalamove segue o mesmo caminho: webhook sem entrega garantida.
-    if (jaDespachado.provider === "99" || jaDespachado.provider === "lalamove") {
+    // Em disputa entre apps, consulta cada corrida da 99/Lalamove que houver.
+    const provedores = new Set((jaDespachado.disputa ?? [jaDespachado]).map((d) => d.provider));
+    if (provedores.has("99") || provedores.has("lalamove")) {
       const entrega = await obterEntregaAoVivo(env, idPedido);
-      if (!["delivered", "canceled", "returned"].includes(entrega?.status ?? "")) {
+      if (jaDespachado.disputa || !["delivered", "canceled", "returned"].includes(entrega?.status ?? "")) {
         const modo = await modoAtual(env);
+        const syncs = [
+          provedores.has("99") ? sincronizar99(env, idPedido, modo) : null,
+          provedores.has("lalamove") ? sincronizarLalamove(env, idPedido, modo) : null,
+        ].map((p) => p?.catch((e) => console.warn(`[sync] ${e instanceof Error ? e.message : e}`)));
         await Promise.race([
-          (jaDespachado.provider === "99"
-            ? sincronizar99(env, idPedido, modo)
-            : sincronizarLalamove(env, idPedido, modo)
-          ).catch((e) => console.warn(`[${jaDespachado.provider}-sync] ${e instanceof Error ? e.message : e}`)),
+          Promise.all(syncs),
           new Promise((ok) => setTimeout(ok, 4000)),
         ]);
       }
     }
+    // Disputa resolvida ou pedido que saiu por fora: aplica já, sem esperar
+    // o próximo webhook ou o cron.
+    // Relê sempre: o cron ou um webhook podem ter resolvido no mesmo instante.
+    await reconciliarPedido(env, idPedido).catch(() => null);
+    jaDespachado = await obterDespacho(env, idPedido);
+  }
+  // Fechado como "outra plataforma" (em lote, ou porque saiu para entrega pelo
+  // Cardápio Web): não há o que cotar.
+  if (!jaDespachado && pedido.status === "despachado") {
+    return c.json({
+      idPedido,
+      pedido: (await obterPedido(env, idPedido)) ?? pedido,
+      maisBarato: null,
+      cotacoes: [],
+      despacho: null,
+      entrega: await obterEntregaAoVivo(env, idPedido),
+      entregaAnterior: null,
+    });
+  }
+  if (jaDespachado) {
     return c.json({
       idPedido,
       pedido,
@@ -1174,6 +1224,12 @@ app.get("/api/cotacao/:idPedido", async (c) => {
       cotacoes: (await obterCotacoes(env, idPedido)) ?? [],
       despacho: jaDespachado,
       entrega: await obterEntregaAoVivo(env, idPedido),
+      // Pedido em vários apps: cada corrida e o status dela.
+      disputa: jaDespachado.disputa
+        ? (await corridasDoPedido(env, idPedido)).filter((x) =>
+            jaDespachado!.disputa!.some((d) => d.deliveryId === x.deliveryId)
+          )
+        : null,
       entregaAnterior: null,
       // Mudança de endereço pendente e códigos de coleta/entrega do iFood.
       pendenciasIfood:
@@ -1328,16 +1384,25 @@ app.post("/api/despachar", async (c) => {
       provider?: ProviderId;
       veiculo?: string;
       prontoEmMin?: number;
+      /**
+       * Pedir em VÁRIOS aplicativos ao mesmo tempo. O primeiro que achar
+       * motorista fica; os outros são cancelados (services/disputa.ts).
+       * Sem isto vale o par provider/veiculo, que é o despacho de sempre.
+       */
+      opcoes?: Array<{ provider?: ProviderId; veiculo?: string }>;
     }>()
     .catch(() => null);
 
   const idPedido = body?.idPedido;
-  const provider = body?.provider;
 
   // Valor desconhecido cai em "moto" em vez de recusar o despacho: a
   // preferência é uma dica para a transportadora, não uma trava — travar a
   // corrida por causa dela seria trocar um problema pequeno por um grande.
-  const veiculo: PreferenciaVeiculo = body?.veiculo === "carro" ? "carro" : "moto";
+  const veiculoDe = (v?: string): PreferenciaVeiculo => (v === "carro" ? "carro" : "moto");
+
+  const opcoes = (body?.opcoes?.length ? body.opcoes : [{ provider: body?.provider, veiculo: body?.veiculo }])
+    .filter((o): o is { provider: ProviderId; veiculo?: string } => !!o?.provider)
+    .map((o) => ({ provider: o.provider, veiculo: veiculoDe(o.veiculo) }));
 
   // Minutos até a comida ficar pronta. Zero, ausente ou lixo = ASAP, que é o
   // comportamento de sempre. O teto de 120 existe porque isto vem da tela: um
@@ -1347,17 +1412,34 @@ app.post("/api/despachar", async (c) => {
     120,
     Math.max(0, Math.trunc(Number(body?.prontoEmMin) || 0))
   );
-  if (!idPedido || !provider) {
+  if (!idPedido || opcoes.length === 0) {
     return c.json({ erro: "idPedido e provider são obrigatórios" }, 400);
   }
 
+  const multi = opcoes.length > 1;
+  if (multi) {
+    // Um app por vez na disputa: duas corridas no mesmo app só dobram a conta.
+    if (new Set(opcoes.map((o) => o.provider)).size !== opcoes.length) {
+      return c.json({ erro: "Escolha cada aplicativo uma vez só." }, 400);
+    }
+    // O motoboy não tem como ser cancelado sozinho quando outro app achar
+    // motorista — ele ficaria acionado à toa.
+    if (opcoes.some((o) => !PROVEDORES_CANCELAVEIS.includes(o.provider))) {
+      return c.json({ erro: "O motoboy próprio não entra no pedido em vários apps." }, 400);
+    }
+  }
+
   // Trava 1 — provedor desligado não despacha, nem via chamada direta na API.
-  const prov = await provedorLigado(env, provider);
-  if (!prov) {
-    return c.json(
-      { erro: `provedor "${nomeProvedor(provider as ProviderId)}" está desativado` },
-      403
-    );
+  const provs: NonNullable<Awaited<ReturnType<typeof provedorLigado>>>[] = [];
+  for (const o of opcoes) {
+    const prov = await provedorLigado(env, o.provider);
+    if (!prov) {
+      return c.json(
+        { erro: `provedor "${nomeProvedor(o.provider)}" está desativado` },
+        403
+      );
+    }
+    provs.push(prov);
   }
 
   const pedido = await obterPedido(env, idPedido);
@@ -1392,15 +1474,20 @@ app.post("/api/despachar", async (c) => {
   }
 
   const cotacoes = await obterCotacoes(env, idPedido);
-  const cotacao = cotacoes?.find((x) => x.provider === provider && (!x.veiculo || x.veiculo === veiculo));
-  if (!cotacao || !cotacao.disponivel) {
-    return c.json({ erro: "Cotação inexistente. Cote novamente." }, 409);
-  }
-
-  // Trava 3 — cotação vencida. Uber/iFood expiram em minutos; sem esta checagem
-  // o erro só aparecia depois de bater no parceiro.
-  if (cotacao.expiraEm && Date.parse(cotacao.expiraEm) <= Date.now()) {
-    return c.json({ erro: "Cotação expirada. Clique em Recotar." }, 409);
+  const escolhidas: Cotacao[] = [];
+  for (const o of opcoes) {
+    const cotacao = cotacoes?.find(
+      (x) => x.provider === o.provider && (!x.veiculo || x.veiculo === o.veiculo)
+    );
+    if (!cotacao || !cotacao.disponivel) {
+      return c.json({ erro: `Cotação ${nomeProvedor(o.provider)} inexistente. Cote novamente.` }, 409);
+    }
+    // Trava 3 — cotação vencida. Uber/iFood expiram em minutos; sem esta
+    // checagem o erro só aparecia depois de bater no parceiro.
+    if (cotacao.expiraEm && Date.parse(cotacao.expiraEm) <= Date.now()) {
+      return c.json({ erro: "Cotação expirada. Clique em Recotar." }, 409);
+    }
+    escolhidas.push(cotacao);
   }
 
   // Trava 4 — reserva atômica. Dois cliques simultâneos: só um passa daqui.
@@ -1410,34 +1497,51 @@ app.post("/api/despachar", async (c) => {
     return c.json({ erro: "despacho já em andamento para este pedido" }, 409);
   }
 
-  try {
-    const modo = await modoAtual(env);
-    const sequencia = await proximaSequenciaEntrega(env, idPedido);
-    const resultado: ResultadoDespacho = await prov.despachar(
-      env,
-      pedido,
-      cotacao,
-      modo,
-      veiculo,
-      sequencia,
-      prontoEmMin
-    );
+  const modo = await modoAtual(env);
+  // Sequência distinta por corrida: compõe o id externo (99, motoboy), que
+  // não pode repetir entre corridas do mesmo pedido.
+  const base = await proximaSequenciaEntrega(env, idPedido);
 
-    await concluirDespacho(env, idPedido, resultado);
-    // Histórico para o relatório. Guarda quem clicou e se foi teste.
-    await registrarDelivery(env, pedido, cotacao, resultado, atendente.email, modo);
-    // Pedido direto do iFood: avisa que saiu (DISPATCHED). Falha só vai pro log,
-    // a corrida já foi pedida.
-    await despacharPedidoIfood(env, pedido, modo).catch((e) =>
-      console.error(`[ifood-pedido] dispatch: ${e instanceof Error ? e.message : e}`)
-    );
+  // Em paralelo: a disputa existe para ganhar tempo.
+  const tentativas = await Promise.allSettled(
+    opcoes.map((o, i) =>
+      provs[i].despachar(env, pedido, escolhidas[i], modo, o.veiculo, base + i, prontoEmMin)
+    )
+  );
 
-    return c.json({ ok: true, ...resultado });
-  } catch (e) {
+  const feitos: { resultado: ResultadoDespacho; cotacao: Cotacao }[] = [];
+  const falhas: string[] = [];
+  tentativas.forEach((t, i) => {
+    if (t.status === "fulfilled") feitos.push({ resultado: t.value, cotacao: escolhidas[i] });
+    else falhas.push(`${nomeProvedor(opcoes[i].provider)}: ${t.reason instanceof Error ? t.reason.message : "falha ao despachar"}`);
+  });
+
+  if (feitos.length === 0) {
     // Parceiro recusou: solta a trava para o atendente poder tentar de novo.
     await liberarDespacho(env, idPedido);
-    return c.json({ erro: e instanceof Error ? e.message : "falha ao despachar" }, 502);
+    return c.json({ erro: falhas.join(" · ") || "falha ao despachar" }, 502);
   }
+
+  // Disputa só com duas ou mais corridas de pé; se só uma passou, é um
+  // despacho comum.
+  const principal: ResultadoDespacho =
+    feitos.length > 1
+      ? { ...feitos[0].resultado, disputa: feitos.map((f) => f.resultado) }
+      : feitos[0].resultado;
+
+  await concluirDespacho(env, idPedido, principal);
+  // Histórico para o relatório. Guarda quem clicou e se foi teste.
+  for (const f of feitos) {
+    await registrarDelivery(env, pedido, f.cotacao, f.resultado, atendente.email, modo);
+  }
+  // Pedido direto do iFood: avisa que saiu (DISPATCHED). Falha só vai pro log,
+  // a corrida já foi pedida.
+  await despacharPedidoIfood(env, pedido, modo).catch((e) =>
+    console.error(`[ifood-pedido] dispatch: ${e instanceof Error ? e.message : e}`)
+  );
+
+  if (multi) console.log(`[disputa] pedido ${idPedido}: pedido em ${feitos.map((f) => f.resultado.provider).join(", ")}`);
+  return c.json({ ok: true, ...principal, falhas });
 });
 
 // ---------------------------------------------------------------------------
@@ -1578,6 +1682,11 @@ export default {
         buscar().then(() => new Promise((ok) => setTimeout(ok, 30_000))).then(buscar)
       );
     }
+
+    // Disputa entre apps e pedido que saiu por fora: de minuto em minuto. É a
+    // rede de segurança dos webhooks — só lê o banco, a não ser que haja o
+    // que cancelar.
+    ctx.waitUntil(reconciliarAbertos(env));
 
     // O resto continua de 5 em 5 minutos, como era antes do cron de 1 minuto.
     // Varrer a fila do Cardápio Web e consultar a 99 a cada minuto seria

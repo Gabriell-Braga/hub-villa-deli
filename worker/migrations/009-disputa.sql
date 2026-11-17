@@ -1,0 +1,12 @@
+-- ---------------------------------------------------------------------------
+-- MIGRAÇÃO 009 — pedir em vários aplicativos ao mesmo tempo
+--
+--   npx wrangler d1 execute hub-logistico-hml --remote --env hml       --file=./migrations/009-disputa.sql
+--   npx wrangler d1 execute hub-logistico     --remote --env producao  --file=./migrations/009-disputa.sql
+--
+-- descartada = 1: corrida que o Hub cancelou ANTES de ter entregador, porque
+-- outro aplicativo achou motorista primeiro ou porque o pedido saiu por fora
+-- (Cardápio Web marcou "saiu para entrega"). Não custou nada à loja, então
+-- fica fora do Histórico e dos Relatórios. A trilha fica em eventos_entrega.
+-- ---------------------------------------------------------------------------
+ALTER TABLE deliveries ADD COLUMN descartada INTEGER NOT NULL DEFAULT 0;

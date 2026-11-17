@@ -81,6 +81,14 @@ function Resultado({
   );
 }
 
+const NOMES_APP: Partial<Record<ProviderId, string>> = {
+  uber: "Uber",
+  ifood: "iFood",
+  "99": "99",
+  lalamove: "Lalamove",
+};
+const nomeApp = (p: ProviderId) => NOMES_APP[p] ?? p;
+
 export default function PaginaCotacao({
   params,
   searchParams,
@@ -120,6 +128,8 @@ export default function PaginaCotacao({
   const [motivosPedido, setMotivosPedido] = useState<MotivoCancelamentoIfood[] | null>(null);
   // Cotação que está esperando a escolha de veículo no modal. Só o Uber usa:
   // é o único parceiro em que declarar o volume muda quem vem buscar.
+  // Cards marcados para pedir em vários apps ao mesmo tempo (chave do card).
+  const [selecionadas, setSelecionadas] = useState<string[]>([]);
   const [pedindoVeiculo, setPedindoVeiculo] = useState<{
     provider: ProviderId;
     nome: string;
@@ -208,6 +218,41 @@ export default function PaginaCotacao({
     }
   }
 
+  // Pede em todos os apps marcados de uma vez. O primeiro que achar motorista
+  // fica; o servidor cancela os outros sozinho.
+  async function despacharVarios() {
+    const opcoes = (dados?.cotacoes ?? [])
+      .filter((c) => selecionadas.includes(c.veiculo ? `${c.provider}:${c.veiculo}` : c.provider))
+      .map((c) => ({ provider: c.provider, veiculo: c.veiculo }));
+    if (opcoes.length < 2) return;
+    setDespachando("varios");
+    try {
+      const res = await apiFetch("/api/despachar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idPedido, opcoes }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        toast.erro(json.erro ?? `Falha ao despachar (${res.status}).`);
+        return;
+      }
+      setSelecionadas([]);
+      if (json.jaDespachado) {
+        toast.sucesso("Este pedido já havia sido despachado. Nenhuma corrida nova foi criada.");
+      } else if (json.falhas?.length) {
+        toast.erro(`Pedido nos outros apps. Não deu em: ${json.falhas.join(" · ")}`);
+      } else {
+        toast.sucesso(`Procurando motorista em ${opcoes.length} apps ao mesmo tempo.`);
+      }
+      await cotar();
+    } catch {
+      toast.erro("Erro de rede ao despachar.");
+    } finally {
+      setDespachando(null);
+    }
+  }
+
   async function cancelarCorrida(codigoMotivo?: string) {
     setCancelando(true);
     try {
@@ -232,7 +277,9 @@ export default function PaginaCotacao({
 
       setMotivosIfood(null);
       toast.sucesso(
-        `Corrida cancelada ${despacho?.provider === "ifood" ? "no iFood" : despacho?.provider === "99" ? "na 99" : despacho?.provider === "lalamove" ? "na Lalamove" : "no Uber"}.`
+        despacho?.disputa
+          ? "Corridas canceladas em todos os apps."
+          : `Corrida cancelada ${despacho?.provider === "ifood" ? "no iFood" : despacho?.provider === "99" ? "na 99" : despacho?.provider === "lalamove" ? "na Lalamove" : "no Uber"}.`
       );
       await cotar();
     } catch {
@@ -245,7 +292,8 @@ export default function PaginaCotacao({
   // No iFood o cancelamento pede motivo, e a lista vem do iFood na hora. Os
   // outros parceiros cancelam direto.
   async function pedirCancelamento() {
-    if (despacho?.provider !== "ifood") return cancelarCorrida();
+    // Em vários apps o servidor cancela todas, com motivo automático no iFood.
+    if (despacho?.disputa || despacho?.provider !== "ifood") return cancelarCorrida();
 
     setCancelando(true);
     let json: { erro?: string; precisaMotivo?: boolean; motivos?: MotivoCancelamentoIfood[] };
@@ -509,7 +557,9 @@ export default function PaginaCotacao({
     bloqueio === "cancelado" ||
     /cancel/i.test(pedido?.statusCardapio ?? "") ||
     pedido?.statusIfood === "CANCELLED";
-  const travado = despacho !== null || bloqueio !== null || cancelado;
+  // Fechado como "outra plataforma": saiu por fora do Hub.
+  const porFora = !despacho && entrega?.provider === "outra";
+  const travado = despacho !== null || bloqueio !== null || cancelado || porFora;
   const aguardandoConfirmacao =
     !!pedido?.daApiIfood && (pedido.statusIfood ?? "PLACED") === "PLACED";
 
@@ -683,7 +733,66 @@ export default function PaginaCotacao({
         </div>
       )}
 
-      {despacho && (
+      {porFora && (
+        <div
+          role="status"
+          className="mb-4 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700"
+        >
+          <strong className="font-semibold">Entregue por fora do Hub.</strong> O pedido saiu para
+          entrega por outra plataforma (ex.: pedido de entregador pelo Cardápio Web). Corrida
+          que estivesse procurando motorista aqui foi cancelada.
+        </div>
+      )}
+
+      {despacho?.disputa && (
+        <div className="mb-4 rounded-xl border border-gray-200 bg-white p-5 shadow-cartao">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">
+                Procurando motorista em {despacho.disputa.length} apps
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                O primeiro que achar motorista fica com a entrega; os outros são cancelados
+                sozinhos. Se o pedido sair para entrega pelo Cardápio Web, todos são cancelados.
+              </p>
+            </div>
+            <button
+              onClick={pedirCancelamento}
+              disabled={cancelando}
+              className="rounded-lg border border-red-200 bg-white px-3.5 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-50"
+            >
+              {cancelando ? "Cancelando..." : "Cancelar todas"}
+            </button>
+          </div>
+          <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+            {despacho.disputa.map((d) => {
+              const st = dados?.disputa?.find((x) => x.deliveryId === d.deliveryId)?.status ?? d.status;
+              const rotulo =
+                st === "pending"
+                  ? "Procurando motorista..."
+                  : st === "canceled"
+                  ? "Cancelada pelo app"
+                  : st === "returned"
+                  ? "Devolvida"
+                  : "Motorista encontrado";
+              return (
+                <li
+                  key={d.deliveryId}
+                  className="flex items-center gap-2.5 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 text-sm"
+                >
+                  <LogoProvedor provider={d.provider} tamanho={24} />
+                  <span className="font-medium text-gray-900">{nomeApp(d.provider)}</span>
+                  <span className={`ml-auto text-xs ${st === "pending" ? "animate-pulse text-amber-700" : "text-gray-500"}`}>
+                    {rotulo}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {despacho && !despacho.disputa && (
         <CardEntrega
           despacho={despacho}
           entrega={entrega}
@@ -722,9 +831,30 @@ export default function PaginaCotacao({
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
         {/* Cotações */}
         <section>
-          <h2 className="mb-3 text-sm font-semibold text-gray-900">
-            Cotações
-          </h2>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-gray-900">Cotações</h2>
+            {!travado && selecionadas.length > 0 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setSelecionadas([])}
+                  className="text-xs font-medium text-gray-500 hover:text-gray-900"
+                >
+                  Limpar
+                </button>
+                <button
+                  onClick={despacharVarios}
+                  disabled={selecionadas.length < 2 || despachando !== null}
+                  className="rounded-lg bg-[var(--marca-primaria)] px-3.5 py-2 text-sm font-semibold text-[var(--marca-contraste)] shadow-sm transition hover:bg-[var(--marca-primaria-hover)] disabled:opacity-50"
+                >
+                  {despachando === "varios"
+                    ? "Pedindo..."
+                    : selecionadas.length < 2
+                    ? "Marque mais um app"
+                    : `Pedir nos ${selecionadas.length} apps ao mesmo tempo`}
+                </button>
+              </div>
+            )}
+          </div>
 
           {carregando ? (
             <SkeletonCartoesCotacao />
@@ -809,6 +939,26 @@ export default function PaginaCotacao({
                               ? "Já despachado"
                               : "Despachar"}
                           </button>
+                          {/* Pedir em vários apps: o motoboy não entra, porque
+                              não dá para cancelá-lo sozinho quando outro app
+                              achar motorista. Um card por app: marcar o carro
+                              da Lalamove desmarca a moto. */}
+                          {!travado && c.provider !== "motoboy" && (
+                            <label className="mt-2.5 flex cursor-pointer items-center gap-2 text-xs text-gray-600">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-gray-300"
+                                checked={selecionadas.includes(chave)}
+                                onChange={(e) =>
+                                  setSelecionadas((atual) => {
+                                    const sem = atual.filter((k) => k.split(":")[0] !== c.provider);
+                                    return e.target.checked ? [...sem, chave] : sem;
+                                  })
+                                }
+                              />
+                              Pedir junto com outros apps
+                            </label>
+                          )}
                         </div>
                       </>
                     ) : (

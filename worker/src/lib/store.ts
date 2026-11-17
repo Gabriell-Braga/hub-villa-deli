@@ -655,7 +655,7 @@ export async function obterEntregaAnterior(
             despachado_por
        FROM deliveries
       WHERE id_pedido = ?1
-      ORDER BY sequencia DESC
+      ORDER BY descartada, sequencia DESC
       LIMIT 1`
   )
     .bind(idPedido)
@@ -746,32 +746,176 @@ export async function marcarEntregasEmLote(
       continue;
     }
 
-    await env.DB.prepare(
-      `INSERT OR IGNORE INTO deliveries (
-         id_pedido, sequencia, plataforma_escolhida, valor_pago, frete_cobrado,
-         eta_minutos, status, data_criacao, cliente_nome, bairro, valor_pedido,
-         despachado_por, status_ao_vivo, status_atualizado_em, teste
-       ) VALUES (
-         ?1,
-         (SELECT COALESCE(MAX(sequencia), 0) + 1 FROM deliveries WHERE id_pedido = ?1),
-         'outra', 0, 0, NULL, 'delivered', ?2, ?3, ?4, ?5, ?6, 'delivered', ?2, ?7
-       )`
-    )
-      .bind(
-        idPedido,
-        agora,
-        pedido.cliente?.nome ?? null,
-        pedido.endereco?.bairro ?? null,
-        pedido.total ?? 0,
-        quem,
-        pedido.teste ? 1 : 0
-      )
-      .run();
-
+    await inserirEntregaOutra(env, pedido, quem, agora);
     processados += 1;
   }
 
   return { ok: true, processados, ignorados };
+}
+
+/** Linha "entregue por outra plataforma": sem valores, ver marcarEntregasEmLote. */
+async function inserirEntregaOutra(env: Env, pedido: Pedido, quem: string, agora: string): Promise<void> {
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO deliveries (
+       id_pedido, sequencia, plataforma_escolhida, valor_pago, frete_cobrado,
+       eta_minutos, status, data_criacao, cliente_nome, bairro, valor_pedido,
+       despachado_por, status_ao_vivo, status_atualizado_em, teste
+     ) VALUES (
+       ?1,
+       (SELECT COALESCE(MAX(sequencia), 0) + 1 FROM deliveries WHERE id_pedido = ?1),
+       'outra', 0, 0, NULL, 'delivered', ?2, ?3, ?4, ?5, ?6, 'delivered', ?2, ?7
+     )`
+  )
+    .bind(
+      pedido.id,
+      agora,
+      pedido.cliente?.nome ?? null,
+      pedido.endereco?.bairro ?? null,
+      pedido.total ?? 0,
+      quem,
+      pedido.teste ? 1 : 0
+    )
+    .run();
+}
+
+// ---------------------------------------------------------------------------
+// DISPUTA ENTRE APLICATIVOS — ver services/disputa.ts
+// ---------------------------------------------------------------------------
+
+export interface CorridaAberta {
+  provider: ProviderId;
+  deliveryId: string;
+  status: string;
+  atualizadoEm: string | null;
+}
+
+/** Corridas do pedido que o Hub ainda considera (não descartadas). */
+export async function corridasDoPedido(env: Env, idPedido: string): Promise<CorridaAberta[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT plataforma_escolhida, delivery_id_externo,
+            COALESCE(status_ao_vivo, status) AS st, status_atualizado_em
+       FROM deliveries
+      WHERE id_pedido = ?1 AND descartada = 0 AND delivery_id_externo IS NOT NULL
+      ORDER BY sequencia`
+  )
+    .bind(idPedido)
+    .all<{ plataforma_escolhida: string; delivery_id_externo: string; st: string; status_atualizado_em: string | null }>();
+
+  return (results ?? []).map((l) => ({
+    provider: l.plataforma_escolhida as ProviderId,
+    deliveryId: l.delivery_id_externo,
+    status: l.st,
+    atualizadoEm: l.status_atualizado_em,
+  }));
+}
+
+/**
+ * Corrida cancelada pelo Hub antes de ter entregador. Some do histórico e do
+ * relatório (não custou nada); o motivo fica na trilha de eventos.
+ */
+export async function descartarCorrida(
+  env: Env,
+  idPedido: string,
+  provider: ProviderId,
+  deliveryId: string,
+  motivo: string
+): Promise<void> {
+  const agora = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE deliveries
+          SET descartada = 1, status = 'canceled', status_ao_vivo = 'canceled', status_atualizado_em = ?3
+        WHERE id_pedido = ?1 AND delivery_id_externo = ?2`
+    ).bind(idPedido, deliveryId, agora),
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO eventos_entrega
+         (id, provider, kind, status, delivery_id_externo, id_pedido,
+          criado_em_parceiro, recebido_em, live_mode, payload)
+       VALUES (?1, ?2, 'hub.descartada', 'canceled', ?3, ?4, ?5, ?5, NULL, ?6)`
+    ).bind(`descartada:${deliveryId}:${agora}`, provider, deliveryId, idPedido, agora, JSON.stringify({ motivo })),
+  ]);
+}
+
+/**
+ * Encerra a disputa elegendo a corrida vencedora como despacho do pedido.
+ * Atômico: com dois webhooks chegando juntos, só um recebe true e cancela as
+ * outras.
+ */
+export async function fecharDisputa(
+  env: Env,
+  idPedido: string,
+  vencedora: ResultadoDespacho,
+  /** deliveryIds de todas as corridas da disputa. */
+  todas: string[]
+): Promise<boolean> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { disputa: _d, ...semDisputa } = vencedora;
+  const r = await env.DB.prepare(
+    `UPDATE pedidos SET despacho = ?2
+      WHERE id = ?1 AND json_extract(despacho, '$.disputa') IS NOT NULL`
+  )
+    .bind(idPedido, JSON.stringify(semDisputa))
+    .run();
+  if ((r.meta.changes ?? 0) === 0) return false;
+
+  // O frete do cliente foi gravado só na PRIMEIRA corrida da disputa (ver
+  // registrarDelivery). Passa para a vencedora: se a primeira for descartada,
+  // a receita sumiria do relatório junto com ela.
+  const ids = JSON.stringify(todas);
+  const l = await env.DB.prepare(
+    `SELECT MAX(frete_cobrado) AS f FROM deliveries
+      WHERE id_pedido = ?1 AND delivery_id_externo IN (SELECT value FROM json_each(?2))`
+  )
+    .bind(idPedido, ids)
+    .first<{ f: number | null }>();
+  await env.DB.prepare(
+    `UPDATE deliveries SET frete_cobrado = CASE WHEN delivery_id_externo = ?3 THEN ?4 ELSE 0 END
+      WHERE id_pedido = ?1 AND delivery_id_externo IN (SELECT value FROM json_each(?2))`
+  )
+    .bind(idPedido, ids, vencedora.deliveryId, l?.f ?? 0)
+    .run();
+  return true;
+}
+
+/**
+ * Pedido que saiu por fora do Hub (Cardápio Web "saiu para entrega") depois
+ * que as corridas daqui já foram canceladas: fecha como "outra plataforma".
+ * Atômico pelo `despacho IS NOT NULL`, para não gravar duas linhas.
+ */
+export async function encerrarComoOutra(env: Env, pedido: Pedido, quem: string): Promise<boolean> {
+  const agora = new Date().toISOString();
+  const r = await env.DB.prepare(
+    `UPDATE pedidos SET despacho = NULL, despachado_em = ?2
+      WHERE id = ?1 AND status = 'despachado' AND despacho IS NOT NULL`
+  )
+    .bind(pedido.id, agora)
+    .run();
+  if ((r.meta.changes ?? 0) === 0) return false;
+  await inserirEntregaOutra(env, pedido, quem, agora);
+  return true;
+}
+
+/**
+ * Pedidos com corrida que ainda pode ser cancelada pelo Hub: em disputa, ou
+ * procurando motorista. Só as últimas 24 h — corrida mais velha que isso já
+ * se resolveu de um jeito ou de outro.
+ */
+export async function pedidosParaReconciliar(env: Env): Promise<string[]> {
+  const desde = new Date(Date.now() - 86400_000).toISOString();
+  const { results } = await env.DB.prepare(
+    `SELECT DISTINCT d.id_pedido
+       FROM deliveries d
+       JOIN pedidos p ON p.id = d.id_pedido
+      WHERE p.status = 'despachado' AND p.despacho IS NOT NULL
+        AND d.descartada = 0 AND d.data_criacao >= ?1
+        AND COALESCE(d.status_ao_vivo, d.status) NOT IN ('delivered', 'canceled', 'returned')
+        AND (json_extract(p.despacho, '$.disputa') IS NOT NULL
+             OR COALESCE(d.status_ao_vivo, d.status) = 'pending')
+      LIMIT 50`
+  )
+    .bind(desde)
+    .all<{ id_pedido: string }>();
+  return (results ?? []).map((l) => l.id_pedido);
 }
 
 /**
@@ -806,7 +950,7 @@ export async function marcarEntregaManual(
     `SELECT plataforma_escolhida, COALESCE(status_ao_vivo, status) AS atual
        FROM deliveries
       WHERE id_pedido = ?1
-      ORDER BY sequencia DESC
+      ORDER BY descartada, sequencia DESC
       LIMIT 1`
   )
     .bind(idPedido)
@@ -830,7 +974,8 @@ export async function marcarEntregaManual(
       `UPDATE deliveries
           SET status_ao_vivo = ?2, status = ?2, status_atualizado_em = ?3
         WHERE id_pedido = ?1
-          AND sequencia = (SELECT MAX(sequencia) FROM deliveries WHERE id_pedido = ?1)`
+          AND sequencia = (SELECT sequencia FROM deliveries WHERE id_pedido = ?1
+                            ORDER BY descartada, sequencia DESC LIMIT 1)`
     ).bind(idPedido, status, agora),
 
     // Fica na trilha de eventos igual aos do parceiro, com quem confirmou.
@@ -866,7 +1011,7 @@ export async function obterEntregaAoVivo(
             live_mode
        FROM deliveries
       WHERE id_pedido = ?1
-      ORDER BY sequencia DESC
+      ORDER BY descartada, sequencia DESC
       LIMIT 1`
   )
     .bind(idPedido)
@@ -953,7 +1098,9 @@ export async function listarPedidos(
        LEFT JOIN deliveries d
          ON d.id_pedido = p.id
         AND d.sequencia = (
-          SELECT MAX(sequencia) FROM deliveries WHERE id_pedido = p.id
+          -- Corrida descartada (perdeu a disputa entre apps) não é a do pedido.
+          SELECT sequencia FROM deliveries WHERE id_pedido = p.id
+           ORDER BY descartada, sequencia DESC LIMIT 1
         )
       WHERE ${filtro}
       ORDER BY p.criado_em DESC

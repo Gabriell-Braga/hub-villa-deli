@@ -37,6 +37,16 @@ export interface Despacho {
   codigoEntrega?: string | null;
   /** Instruções para o motoboy (inclui Bag/Pizza Box). */
   observacaoEntregador?: string;
+  /** Pedido em vários apps ao mesmo tempo, enquanto ninguém achou motorista. */
+  disputa?: Despacho[];
+}
+
+/** Uma corrida da disputa entre apps, com o status atual. */
+export interface CorridaDisputa {
+  provider: ProviderId;
+  deliveryId: string;
+  status: string;
+  atualizadoEm: string | null;
 }
 
 export interface PedidoDetalhe {
@@ -169,6 +179,8 @@ export interface CotacaoResponse {
   entregaAnterior: EntregaAnterior | null;
   /** Só em entrega do iFood já despachada. */
   pendenciasIfood?: PendenciasIfood | null;
+  /** Pedido em vários apps: cada corrida e o status dela. */
+  disputa?: CorridaDisputa[] | null;
 }
 
 /** O que o iFood pediu e o atendente precisa ver, além do status. */

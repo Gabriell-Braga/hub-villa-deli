@@ -42,7 +42,9 @@ const PLATAFORMAS: ProviderId[] = ["uber", "ifood", "99", "lalamove", "motoboy",
  * usuário no SQL.
  */
 function montarFiltro(f: FiltroHistorico): { where: string; valores: unknown[] } {
-  const cond: string[] = [];
+  // Corrida descartada (perdeu a disputa entre apps, cancelada sem
+  // entregador) não é entrega: fica só na trilha de eventos.
+  const cond: string[] = ["descartada = 0"];
   const valores: unknown[] = [];
   const p = () => `?${valores.length + 1}`;
 
